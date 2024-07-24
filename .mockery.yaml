@@ -1,0 +1,12 @@
+filename: "zz_generated.{{ .InterfaceName }}.go"
+with-expecter: true
+
+packages:
+  # controller-runtime/
+  sigs.k8s.io/controller-runtime/pkg/client:
+    config:
+      dir: internal/util/mocks/mockclient
+      outpkg: mockclient
+    interfaces:
+      Client:
+      SubResourceWriter:

@@ -1,0 +1,33 @@
+oapiCodegenHelper:
+  defaults:
+    # -- sourceDir is the default directory locating the open api specifications.
+    sourceDir: ./api
+    # -- destinationDir is the default local directory where the generated packages will be written to.
+    destinationDir: ./pkg/generated
+
+  specs:
+     # Simple Example:
+     # - The configuration below will read oapi spec from "${.defaults.sourceDir}/simple-example.yaml"
+     # - The generated client code will be written to "${.defaults.destinationDir}/exampleclient/zz_generated.oapi-codegen.go"
+     # - The generated client code will be written to "${.defaults.destinationDir}/exampleserver/zz_generated.oapi-codegen.go"
+     - name: example
+       versions:
+         - v1
+       client:
+         enabled: true
+         packageName: exampleclient
+       server:
+         enabled: true
+         packageName: exampleserver
+
+     - name: example-from-remote-http-server
+       source: https://example.com/api/example.yaml
+       destinationDir: ./pkg/generated
+       versions:
+         - v1
+       client:
+         enabled: true
+         packageName: anotherclient
+       server:
+         enabled: true
+         packageName: anotherserver

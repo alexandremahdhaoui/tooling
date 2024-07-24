@@ -1,0 +1,35 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:base",
+    ":separateMultipleMajorReleases",
+    ":separatePatchReleases",
+    ":renovatePrefix",
+    ":semanticPrefixChore",
+    ":prHourlyLimitNone",
+    ":prConcurrentLimit10"
+  ],
+  "assigneesFromCodeOwners": true,
+  "automergeType": "pr",
+  "automergeStrategy": "rebase",
+  "dependencyDashboard": true,
+  "internalChecksFilter": "strict",
+  "separateMinorPatch": true,
+  "stabilityDays": 3,
+  "rebaseWhen": "behind-base-branch",
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths",
+    "helmUpdateSubChartArchives"
+  ],
+  "labels": ["renovate"],
+  "regexManagers": [
+    {
+      "fileMatch": ["^Makefile$"],
+      "matchStrings": [
+        "#\\s*renovate:\\s*datasource=(?<datasource>.*?)\\s*depName=(?<depName>.*?)\\s*(?:versioning=(?<versioning>.*?))?\\s*.*_VERSION=['\"]?(?<currentValue>[\\w\\d\\-\\._]*)['\"]?"
+      ],
+      "versioningTemplate": "{{#if versioning}}{{versioning}}{{else}}semver{{/if}}"
+    }
+  ]
+}

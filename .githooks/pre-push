@@ -1,0 +1,31 @@
+#!/bin/sh
+
+set -e
+
+make generate fmt
+
+# ensure generated files are up-to-date
+if ! make lint; then
+    echo "Linting errors found!"
+    exit 1
+fi
+
+# ensure code builds
+if ! make build; then
+    echo "Build failed!"
+    exit 1
+fi
+
+# ensure code is tested
+if ! make test; then
+    echo "Test failed!"
+    exit 1
+fi
+
+CHART_GEN_REGEX="^charts/.*?/gen"
+CRDS_REGEX="^charts/.*?-crds/templates"
+GENERATED_FILES_REGEX=".*/zz_generated.*?\.go"
+if git diff --name-only HEAD | grep -qE "($CHART_GEN_REGEX)|($CRDS_REGEX)|($GENERATED_FILES_REGEX)"; then
+    echo "Please commit generated files"
+    exit 1
+fi
