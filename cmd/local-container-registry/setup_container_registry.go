@@ -136,22 +136,9 @@ func (r *ContainerRegistry) ServiceFQDN() string {
 
 const containerRegistryConfigTemplate = `
 auth:
-  silly:
-     realm: silly-realm
-     service: silly-service
-    token:
-      autoredirect: true
-      realm: token-realm
-      service: token-service
-      issuer: registry-token-issuer
-      rootcertbundle: /root/certs/bundle
-      jwks: /path/to/jwks
-      signingalgorithms:
-        - EdDSA
-        - HS256
-    htpasswd:
-      realm: basic-realm
-      path: /path/to/htpasswd
+  htpasswd:
+    realm: basic-realm
+    path: /path/to/htpasswd
 
 http:
   addr: localhost:{{ .port }}
@@ -162,3 +149,10 @@ http:
     clientcas:
       - {{ .caCert }}
 `
+
+// 1.a. TODO: `CONTAINER_ENGINE run --rm -i -t --entrypoint htpasswd --name test docker.io/httpd:2 -Bbn USERNAME_HERE PASSWORD_HERE`
+// 1.b. TODO: Create a variable storing the result of stdout.
+// 2. TODO: write the output to a secret.
+// 3. TODO: mount the secret volume as a file in the registry pod. + mount the certs as well.
+// 4. TODO: template the registry config with certificate path and caCert.
+// we should be well advanced then.
