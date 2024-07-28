@@ -1,17 +1,13 @@
 # local-container-registry
 
-## What are we trying to achieve?
+Let pods in kindenv access container images (and/or helm charts).
 
-- Let pods in kubernetes test environment access container images (and/or helm charts).
+## Left to be done
 
-## What has to be done?
+- Support for mirror images declaratively.
+- Support for mirroring helm charts declaratively.
 
-- Create a local registry in kubernetes.
-- Add TLS cert support.
-- Add Basic auth support.
-- Think about helm chart support.
-
-## Curl manually after set up
+## Test the registry
 
 ### Pre-requisites
 
@@ -27,7 +23,7 @@ kubectl port-forward -nlocal-container-registry svc/local-container-registry 500
 kubectl logs -f -nlocal-container-registry deploy/local-container-registry
 ```
 
-### Login to the registry and push image
+### Login to the registry, push and pull image
 
 ```bash
 LCR_ENDPOINT="local-container-registry.local-container-registry.svc.cluster.local:5000"
@@ -38,16 +34,32 @@ read -rp "container engine? (docker, podman) " CONTAINER_ENGINE
 curl -k -u"$(yq '"\(.username):\(.password)"' "${LCR_CONFIG}")" \
     "https://${LCR_ENDPOINT}/v2/"
 
+ADDITIONAL_FLAGS=""
+
+if [ "${CONTAINER_ENGINE}" == "podman" ]; then
+  ADDITIONAL_FLAGS="--tls-verify=false"
+fi
+
 yq '.password' "${LCR_CONFIG}" \
     | ${CONTAINER_ENGINE} login \
         "${LCR_ENDPOINT}" \
         -u="$(yq '.username' "${LCR_CONFIG}")" \
         --password-stdin \
-        --tls-verify=false
+        ${ADDITIONAL_FLAGS}
 
 NEW_IMAGE="${LCR_ENDPOINT}/registry"
 
 ${CONTAINER_ENGINE} tag registry:2 "${NEW_IMAGE}"
-${CONTAINER_ENGINE} push "${NEW_IMAGE}" --tls-verify=false
-${CONTAINER_ENGINE} pull "${NEW_IMAGE}" --tls-verify=false
+${CONTAINER_ENGINE} push "${NEW_IMAGE}" ${ADDITIONAL_FLAGS}
+${CONTAINER_ENGINE} pull "${NEW_IMAGE}" ${ADDITIONAL_FLAGS}
+```
+
+### Simply curl the registry
+
+```bash
+LCR_ENDPOINT="local-container-registry.local-container-registry.svc.cluster.local:5000"
+LCR_CONFIG=".ignore.local-container-registry.yaml"
+
+curl -k -u"$(yq '"\(.username):\(.password)"' "${LCR_CONFIG}")" \
+    "https://${LCR_ENDPOINT}/v2/"
 ```

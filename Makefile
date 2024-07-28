@@ -125,7 +125,7 @@ test-functional:
 
 .PHONY: test-e2e
 test-e2e:
-	echo TODO: test-e2e
+	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./hack/e2e/local-container-registry.sh
 
 .PHONY: test-setup
 test-setup:

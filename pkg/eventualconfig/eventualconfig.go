@@ -3,9 +3,10 @@ package eventualconfig
 import (
 	"errors"
 	"fmt"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	"reflect"
 	"sync"
+
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 )
 
 type Key string

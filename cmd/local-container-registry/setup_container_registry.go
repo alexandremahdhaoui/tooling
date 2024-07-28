@@ -5,10 +5,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	"io"
 	"text/template"
+	"time"
+
+	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -62,6 +66,11 @@ func (r *ContainerRegistry) Setup(ctx context.Context) error {
 		return flaterrors.Join(err, errSettingUpContainerRegistry)
 	}
 
+	// IV. Await Deployment readiness.
+	if err := r.awaitDeployment(ctx); err != nil {
+		return flaterrors.Join(err, errSettingUpContainerRegistry)
+	}
+
 	return nil
 }
 
@@ -105,7 +114,7 @@ func (r *ContainerRegistry) createDeployment(ctx context.Context, labels map[str
 		SecretName: tlsSecretName,
 	}}
 
-	// II. Deployment.
+	// III. Deployment.
 	deployment := &appsv1.Deployment{}
 	deployment.Name = Name
 	deployment.Namespace = r.namespace
@@ -157,13 +166,34 @@ func (r *ContainerRegistry) createDeployment(ctx context.Context, labels map[str
 		},
 	}
 
-	// III. Create.
+	// IV. Create.
 	if err := r.client.Create(ctx, deployment); err != nil {
 		return flaterrors.Join(err, errCreatingDeployment)
 	}
 
-	// IV. Await readiness.
-	// TODO
+	return nil
+}
+
+var errAwaitingDeploymentReadiness = errors.New("awaiting deployment readiness")
+
+func (r *ContainerRegistry) awaitDeployment(ctx context.Context) error {
+	for {
+		deploy := &appsv1.Deployment{} //nolint:exhaustruct
+		nsName := types.NamespacedName{
+			Namespace: r.namespace,
+			Name:      Name,
+		}
+
+		if err := r.client.Get(ctx, nsName, deploy); err != nil {
+			return flaterrors.Join(err, errAwaitingDeploymentReadiness)
+		}
+
+		if deploy.Status.ReadyReplicas > 0 {
+			break
+		}
+
+		time.Sleep(1 * time.Second)
+	}
 
 	return nil
 }
@@ -171,7 +201,7 @@ func (r *ContainerRegistry) createDeployment(ctx context.Context, labels map[str
 var errCreatingService = errors.New("creating service")
 
 func (r *ContainerRegistry) createService(ctx context.Context, labels map[string]string) error {
-	service := &corev1.Service{}
+	service := &corev1.Service{} //nolint:exhaustruct
 
 	service.Name = Name
 	service.Namespace = r.namespace
@@ -242,9 +272,7 @@ storage:
     rootdirectory: /var/lib/registry
 `
 
-var (
-	errCreatingConfigMap = errors.New("creating configmap")
-)
+var errCreatingConfigMap = errors.New("creating configmap")
 
 // createConfigMap will template the registry config and create a config map in k8s. This ConfigMap will be later
 // mounted to the local-container-registry pod.

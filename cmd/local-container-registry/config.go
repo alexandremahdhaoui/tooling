@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
 	"path/filepath"
+
+	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
 )
 
 const (

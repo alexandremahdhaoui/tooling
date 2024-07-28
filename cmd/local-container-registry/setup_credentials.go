@@ -3,13 +3,15 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	"math/rand"
 	"os"
 	"os/exec"
-	"sigs.k8s.io/yaml"
 	"time"
+
+	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+
+	"sigs.k8s.io/yaml"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -59,9 +61,7 @@ func NewCredential(
 	}
 }
 
-var (
-	errSettingUpCredentials = errors.New("failed to set up credentials")
-)
+var errSettingUpCredentials = errors.New("failed to set up credentials")
 
 func (c *Credential) Setup(ctx context.Context) error {
 	// 1. write credentials.

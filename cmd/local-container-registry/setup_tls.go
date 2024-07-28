@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"os/exec"
+	"strings"
+
 	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	certmanagermetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
-	"os/exec"
-	"strings"
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -66,8 +67,6 @@ func (t *TLS) Setup(ctx context.Context) error {
 	if err := util.RunCmdWithStdPipes(helmInstall); err != nil {
 		return flaterrors.Join(err, errSettingUpTLS)
 	}
-
-	// TODO: await cert-manager pods are running
 
 	// 2. Create self signed issuer.
 	issuer := &certmanagerv1.Issuer{}

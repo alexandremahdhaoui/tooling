@@ -5,7 +5,7 @@ kindenv:
 
 # -- localContainerRegistry will create if enabled a container registry in the kindenv using the kubeconfig which path
 #    is defined by {.kindenv.kubeconfigPath}.
-localContainerRegistry: # TODO
+localContainerRegistry:
   # -- enabled defines whether the local container registry must be created or not.
   enabled: true
   # -- creadentialPath defines the output file containing the container registry credentials.

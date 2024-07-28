@@ -2,8 +2,10 @@ package project
 
 import (
 	"errors"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	"os"
+
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+
 	"sigs.k8s.io/yaml"
 )
 
