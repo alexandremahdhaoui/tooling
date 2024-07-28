@@ -1,9 +1,10 @@
 package project
 
 import (
+	"errors"
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	"os"
-
-	"gopkg.in/yaml.v3"
+	"sigs.k8s.io/yaml"
 )
 
 const (
@@ -20,21 +21,18 @@ type Config struct {
 	OAPICodegenHelper      OAPICodegenHelper      `json:"oapiCodegenHelper"`
 }
 
+var errReadingProjectConfig = errors.New("error reading project config")
+
 func ReadConfig() (Config, error) {
 	b, err := os.ReadFile(ConfigPath) //nolint:varnamelen
 	if err != nil {
-		return Config{}, err // TODO: wrap err
+		return Config{}, flaterrors.Join(err, errReadingProjectConfig)
 	}
 
 	out := Config{} //nolint:exhaustruct // unmarshal
 
 	if err := yaml.Unmarshal(b, &out); err != nil {
-		return Config{}, err // TODO: wrap err
-	}
-
-	err = nil // ensures err is nil
-	if err != nil {
-		return Config{}, err // TODO: wrap error.
+		return Config{}, flaterrors.Join(err, errReadingProjectConfig)
 	}
 
 	return out, nil

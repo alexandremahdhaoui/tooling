@@ -2,11 +2,13 @@ package eventualconfig
 
 import (
 	"errors"
+	"fmt"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"reflect"
 	"sync"
 )
 
-type Key int
+type Key string
 
 type EventualConfig interface {
 	GetValue(key Key) (<-chan any, error)
@@ -41,22 +43,20 @@ func (ec *eventualConfig) GetValue(key Key) (<-chan any, error) {
 	defer ec.mu.RUnlock()
 
 	if ec.m[key] == nil {
-		return nil, flaterrors.Join(ErrValueMustBeDeclared, ErrCannotGetValue)
+		return nil, flaterrors.Join(errWithKey(key), ErrValueMustBeDeclared, ErrCannotGetValue)
 	}
 
 	return ec.m[key], nil
 }
 
-var (
-	ErrCannotSetValue = errors.New("cannot set value")
-)
+var ErrCannotSetValue = errors.New("cannot set value")
 
 func (ec *eventualConfig) SetValue(key Key, value any) error {
 	ec.mu.Lock()
 	defer ec.mu.Unlock()
 
 	if ec.m[key] == nil {
-		return flaterrors.Join(ErrValueMustBeDeclared, ErrCannotSetValue)
+		return flaterrors.Join(errWithKey(key), ErrValueMustBeDeclared, ErrCannotSetValue)
 	}
 
 	go func() {
@@ -75,7 +75,7 @@ var (
 	ErrCannotAssertTypeForValue = errors.New("cannot assert type for value")
 )
 
-func AwaitValue[T any](ec EventualConfig, key Key) (T, error) {
+func AwaitValue[T any](ec EventualConfig, key Key) (T, error) { //nolint:ireturn
 	ch, err := ec.GetValue(key)
 	if err != nil {
 		return *new(T), flaterrors.Join(err, ErrCannotAwaitValue)
@@ -83,13 +83,28 @@ func AwaitValue[T any](ec EventualConfig, key Key) (T, error) {
 
 	v, ok := <-ch
 	if !ok {
-		return *new(T), flaterrors.Join(ErrClosedChannel, ErrCannotAwaitValue)
+		return *new(T), flaterrors.Join(errWithKey(key), ErrClosedChannel, ErrCannotAwaitValue)
 	}
 
 	out, ok := v.(T)
 	if !ok {
-		return *new(T), flaterrors.Join(ErrCannotAssertTypeForValue, ErrCannotAwaitValue)
+		return *new(T), flaterrors.Join(
+			errWithKeyAndValueOfType(key, v),
+			ErrCannotAssertTypeForValue,
+			ErrCannotAwaitValue)
 	}
 
 	return out, nil
+}
+
+func errWithKey(key Key) error {
+	return fmt.Errorf("with key: %q", key) //nolint:err113
+}
+
+func errWithKeyAndValueOfType(key Key, v any) error {
+	return flaterrors.Join(
+		errWithKey(key),
+		fmt.Errorf("with value: %#v", v),                      //nolint:err113
+		fmt.Errorf("of type: %q", reflect.TypeOf(v).String()), //nolint:err113
+	)
 }

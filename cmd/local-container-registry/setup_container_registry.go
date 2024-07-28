@@ -1,8 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"io"
+	"text/template"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -15,44 +21,88 @@ import (
 const (
 	containerRegistryImage = "docker.io/registry:2"
 	containerRegistryPort  = 5000
+
+	registryConfigConfigMapName = Name + "-config"
+	registryConfigFilename      = "config.yml"
+	registryConfigMountDir      = "/etc/docker/registry"
 )
 
 type ContainerRegistry struct {
 	client    client.Client
 	namespace string
+
+	ec eventualconfig.EventualConfig
 }
 
-func NewContainerRegistry(cl client.Client, namespace string) *ContainerRegistry {
+func NewContainerRegistry(cl client.Client, namespace string, ec eventualconfig.EventualConfig) *ContainerRegistry {
 	return &ContainerRegistry{
 		client:    cl,
 		namespace: namespace,
+		ec:        ec,
 	}
 }
 
-func (r *ContainerRegistry) Setup(ctx context.Context) error {
-	podLabels := map[string]string{"app": Name}
+var errSettingUpContainerRegistry = errors.New("setting up container registry")
 
-	// I. Create Service.
-	if err := r.createService(ctx, podLabels); err != nil {
-		return err // TODO: wrap err
+func (r *ContainerRegistry) Setup(ctx context.Context) error {
+	labels := map[string]string{"app": Name}
+
+	// I. Create ConfigMap
+	if err := r.createConfigMap(ctx, labels); err != nil {
+		return flaterrors.Join(err, errSettingUpContainerRegistry)
 	}
 
-	// II. Create Deployment.
-	if err := r.createDeployment(ctx, podLabels); err != nil {
-		return err // TODO: wrap err
+	// II. Create Service.
+	if err := r.createService(ctx, labels); err != nil {
+		return flaterrors.Join(err, errSettingUpContainerRegistry)
+	}
+
+	// III. Create Deployment.
+	if err := r.createDeployment(ctx, labels); err != nil {
+		return flaterrors.Join(err, errSettingUpContainerRegistry)
 	}
 
 	return nil
 }
 
-func (r *ContainerRegistry) createDeployment(ctx context.Context, podLabels map[string]string) error {
-	// I. Secret volume sources
-	tlsSecretVolumeSource := corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
-		SecretName: "TODO", // TODO
+var errCreatingDeployment = errors.New("creating deployment")
+
+//nolint:funlen // long deployment struct.
+func (r *ContainerRegistry) createDeployment(ctx context.Context, labels map[string]string) error {
+	// I. Read EventualConfig.
+	var errs error
+
+	credName, err := eventualconfig.AwaitValue[string](r.ec, CredentialSecretName)
+	errs = flaterrors.Join(errs, err)
+
+	tlsSecretName, err := eventualconfig.AwaitValue[string](r.ec, TLSSecretName)
+	errs = flaterrors.Join(errs, err)
+
+	credMount, err := eventualconfig.AwaitValue[Mount](r.ec, CredentialMount)
+	errs = flaterrors.Join(errs, err)
+
+	tlsMount, err := eventualconfig.AwaitValue[Mount](r.ec, TLSKey)
+	errs = flaterrors.Join(errs, err)
+
+	if errs != nil {
+		return flaterrors.Join(err, errCreatingDeployment)
+	}
+
+	// II. Secret volume sources.
+	credVol := "credentials"
+	regVol := "registry-config"
+	tlsVol := "tls"
+
+	credVolSrc := corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+		SecretName: credName,
 	}}
 
-	credentialsVolumeSource := corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
-		SecretName: credentialsSecretName,
+	regVolSrc := corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+		LocalObjectReference: corev1.LocalObjectReference{Name: r.ConfigMapName()},
+	}}
+
+	tlsVolSrc := corev1.VolumeSource{Secret: &corev1.SecretVolumeSource{
+		SecretName: tlsSecretName,
 	}}
 
 	// II. Deployment.
@@ -60,38 +110,48 @@ func (r *ContainerRegistry) createDeployment(ctx context.Context, podLabels map[
 	deployment.Name = Name
 	deployment.Namespace = r.namespace
 
-	deployment.Spec = appsv1.DeploymentSpec{
+	deployment.Spec = appsv1.DeploymentSpec{ //nolint:exhaustruct
 		Replicas: ptr.To[int32](1),
-		Selector: &metav1.LabelSelector{MatchLabels: podLabels},
+		Selector: &metav1.LabelSelector{MatchLabels: labels}, //nolint:exhaustruct
 		Template: corev1.PodTemplateSpec{
-			ObjectMeta: metav1.ObjectMeta{Labels: podLabels},
-			Spec: corev1.PodSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: labels}, //nolint:exhaustruct
+			Spec: corev1.PodSpec{ //nolint:exhaustruct
 				Containers: []corev1.Container{{
 					Name:  Name,
 					Image: containerRegistryImage,
+
 					VolumeMounts: []corev1.VolumeMount{{
-						MountPath: "/tls",
-						Name:      "tls",
+						MountPath: credMount.Dir,
+						Name:      credVol,
 						ReadOnly:  true,
 					}, {
-						MountPath: "/credentials",
-						Name:      "credentials",
+						MountPath: r.Mount().Dir,
+						Name:      regVol,
+						ReadOnly:  true,
+					}, {
+						MountPath: tlsMount.Dir,
+						Name:      tlsVol,
 						ReadOnly:  true,
 					}},
+
 					Ports: []corev1.ContainerPort{{
 						Name:          "https",
 						ContainerPort: containerRegistryPort,
 						Protocol:      corev1.ProtocolTCP,
 					}},
-					Env: []corev1.EnvVar{{Name: "TODO"}}, // TODO
 				}},
+
 				Volumes: []corev1.Volume{{
-					Name:         "tls",
-					VolumeSource: tlsSecretVolumeSource,
+					Name:         credVol,
+					VolumeSource: credVolSrc,
 				}, {
-					Name:         "credentials",
-					VolumeSource: credentialsVolumeSource,
+					Name:         regVol,
+					VolumeSource: regVolSrc,
+				}, {
+					Name:         tlsVol,
+					VolumeSource: tlsVolSrc,
 				}},
+
 				RestartPolicy: corev1.RestartPolicyAlways,
 			},
 		},
@@ -99,7 +159,7 @@ func (r *ContainerRegistry) createDeployment(ctx context.Context, podLabels map[
 
 	// III. Create.
 	if err := r.client.Create(ctx, deployment); err != nil {
-		return err // TODO: wrap err
+		return flaterrors.Join(err, errCreatingDeployment)
 	}
 
 	// IV. Await readiness.
@@ -108,51 +168,146 @@ func (r *ContainerRegistry) createDeployment(ctx context.Context, podLabels map[
 	return nil
 }
 
-func (r *ContainerRegistry) createService(ctx context.Context, podLabels map[string]string) error {
+var errCreatingService = errors.New("creating service")
+
+func (r *ContainerRegistry) createService(ctx context.Context, labels map[string]string) error {
 	service := &corev1.Service{}
 
 	service.Name = Name
 	service.Namespace = r.namespace
+	service.Labels = labels
 
-	service.Spec.Selector = podLabels
+	service.Spec.Selector = labels
 	service.Spec.Ports = []corev1.ServicePort{{
 		Name: "https",
-		Port: containerRegistryPort,
+		Port: r.Port(),
 	}}
-	// TODO: Service "local-container-registry" is invalid: spec.ports: Required value
 
 	if err := r.client.Create(ctx, service); err != nil {
-		return err // TODO: wrap err
+		return flaterrors.Join(err, errCreatingService)
 	}
 
 	return nil
 }
 
-func (r *ContainerRegistry) ServiceFQDN() string {
+func (r *ContainerRegistry) FQDN() string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", Name, r.namespace)
+}
+
+func (r *ContainerRegistry) Port() int32 {
+	return containerRegistryPort
+}
+
+func (r *ContainerRegistry) ConfigMapName() string {
+	return registryConfigConfigMapName
+}
+
+func (r *ContainerRegistry) Mount() Mount {
+	return Mount{
+		Dir:      registryConfigMountDir,
+		Filename: registryConfigFilename,
+	}
 }
 
 // -- Container registry config
 
-const containerRegistryConfigTemplate = `
+type registryConfig struct {
+	FQDN string
+	Port int32
+
+	CredentialPath string
+
+	CACertPath     string
+	ServerCertPath string
+	ServerKeyPath  string
+}
+
+const registryConfigTemplate = `version: 0.1
 auth:
   htpasswd:
     realm: basic-realm
-    path: /path/to/htpasswd
+    path: {{ .CredentialPath }}
 
 http:
-  addr: localhost:{{ .port }}
-  host: https://{{ .fqdn }}:{{ .port }}
+  addr: 0.0.0.0:{{ .Port }}
+  host: https://{{ .FQDN }}:{{ .Port }}
   tls:
-    certificate: {{ .serverCert }}
-    key: {{ .serverKey }}
-    clientcas:
-      - {{ .caCert }}
+    certificate: {{ .ServerCertPath }}
+    key: {{ .ServerKeyPath }}
+#    clientcas: # This fields enables mTLS.
+#      - {{ .CACertPath }}
+
+storage:
+  filesystem:
+    rootdirectory: /var/lib/registry
 `
 
-// 1.a. TODO: `CONTAINER_ENGINE run --rm -i -t --entrypoint htpasswd --name test docker.io/httpd:2 -Bbn USERNAME_HERE PASSWORD_HERE`
-// 1.b. TODO: Create a variable storing the result of stdout.
-// 2. TODO: write the output to a secret.
-// 3. TODO: mount the secret volume as a file in the registry pod. + mount the certs as well.
-// 4. TODO: template the registry config with certificate path and caCert.
-// we should be well advanced then.
+var (
+	errCreatingConfigMap = errors.New("creating configmap")
+)
+
+// createConfigMap will template the registry config and create a config map in k8s. This ConfigMap will be later
+// mounted to the local-container-registry pod.
+func (r *ContainerRegistry) createConfigMap(ctx context.Context, labels map[string]string) error {
+	// I. get registry config
+	var errs error
+
+	credMount, err := eventualconfig.AwaitValue[Mount](r.ec, CredentialMount)
+	errs = flaterrors.Join(errs, err)
+
+	caCert, err := eventualconfig.AwaitValue[Mount](r.ec, TLSCACert)
+	errs = flaterrors.Join(errs, err)
+
+	tlsCert, err := eventualconfig.AwaitValue[Mount](r.ec, TLSCert)
+	errs = flaterrors.Join(errs, err)
+
+	tlsKey, err := eventualconfig.AwaitValue[Mount](r.ec, TLSKey)
+	errs = flaterrors.Join(errs, err)
+
+	if errs != nil {
+		return flaterrors.Join(err, errCreatingConfigMap)
+	}
+
+	config := registryConfig{
+		FQDN:           r.FQDN(),
+		Port:           r.Port(),
+		CredentialPath: credMount.Path(),
+		CACertPath:     caCert.Path(),
+		ServerCertPath: tlsCert.Path(),
+		ServerKeyPath:  tlsKey.Path(),
+	}
+
+	// II. Template file.
+	buf := bytes.NewBuffer(make([]byte, 0))
+
+	tmpl, err := template.New("").Parse(registryConfigTemplate)
+	if err != nil {
+		return flaterrors.Join(err, errCreatingConfigMap)
+	}
+
+	if err := tmpl.Execute(buf, config); err != nil {
+		return flaterrors.Join(err, errCreatingConfigMap)
+	}
+
+	// III. Create config map
+	cm := &corev1.ConfigMap{} //nolint:exhaustruct
+
+	cm.Name = registryConfigConfigMapName
+	cm.Namespace = r.namespace
+	cm.Labels = labels
+
+	templatedConfig, err := io.ReadAll(buf)
+	if err != nil {
+		return flaterrors.Join(err, errCreatingConfigMap)
+	}
+
+	cm.Data = map[string]string{
+		r.Mount().Filename: string(templatedConfig),
+	}
+
+	if err := r.client.Create(ctx, cm); err != nil {
+		return flaterrors.Join(err, errCreatingConfigMap)
+	}
+
+	return nil
+}
