@@ -1,10 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	"github.com/alexandremahdhaoui/tooling/pkg/project"
@@ -66,7 +67,7 @@ func setup() error {
 
 	// 3. Do
 	if err := doSetup(config, envs); err != nil {
-		return errors.Join(err, doTeardown(config, envs))
+		return flaterrors.Join(err, doTeardown(config, envs))
 	}
 
 	_, _ = fmt.Fprintf(os.Stdout, "✅ kindenv %q set up successfully\n", config.Name)
