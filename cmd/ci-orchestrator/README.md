@@ -19,42 +19,51 @@ Below will be listed advantages of this approach:
 ## Brainstorm
 
 ### Why do we want a new solution?
+
 - ACCESSABILITY
   - Allow anyone to run their CI anywhere. 
   - No need for a subscription or anything. 
-  - You own a computer, you can install kind and you start running your CI jobs.
-  - It must be simple.
+  - If you own one computer, you can already start running your CI jobs.
+  - It must be simple: what matters is to address complex problems with simple solutions.
   - It must be reproducible. What runs in the CI (except special end-to-end tests)
     should be reproducible in your local environment.
-- SIMPLICITY
-  - What matters to you and your business is to solve complex problems fast and in the simplest
-    manner.
-  - Don't waste hours learning a complex CI system.
+
 - SECURITY
   - You control everything end-to-end.
+  - Best practices built-in.
 
 ### What are the goals we want to achieve?
+
 - ARTIFACTS
   - Build.
   - Making them available where you need them. (push)
   - Ensure all security aspects of these artifacts. (sign, SBOM...)
   - Test them.
+
 - CODE QUALITY
   - All tiers of tests (unit, integration, end-to-end...).
   - Static analysis, linting...
   - Vulnerability scanning.
+
 - OBSERVABILITY
   - Metrics.
   - Dashboards.
   - Reports
+
 - PERFORMANCES & SUSTAINABILITY
   - Caching.
   - Speed: parallelism, etc...
   - Resource efficiency.
+
 - REPRODUCIBILITY
 
 ## How ?
+
 - OPINIONATED
+  - One paradigm to rule them all.
+  - No need to solve problems in thousands of different ways.
+  - Get started easily by following common recipes
+
 - OPEN SOURCE
   - Most of the problems you want to solve, might already have been solved by someone else. Instead
     of reinventing the wheel checkout others contributions. And if you find a new way to solve the
