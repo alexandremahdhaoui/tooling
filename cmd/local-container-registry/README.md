@@ -59,7 +59,7 @@ ${CONTAINER_ENGINE} pull "${NEW_IMAGE}" ${ADDITIONAL_FLAGS}
 ```bash
 LCR_ENDPOINT="local-container-registry.local-container-registry.svc.cluster.local:5000"
 LCR_CONFIG=".ignore.local-container-registry.yaml"
+CREDENTIALS="$(yq '"\(.username):\(.password)"' "${LCR_CONFIG}")"
 
-curl -k -u"$(yq '"\(.username):\(.password)"' "${LCR_CONFIG}")" \
-    "https://${LCR_ENDPOINT}/v2/"
+curl -k -u"${CREDENTIALS}" "https://${LCR_ENDPOINT}/v2/"
 ```
