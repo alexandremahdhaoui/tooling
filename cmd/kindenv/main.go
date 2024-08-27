@@ -41,7 +41,9 @@ func main() {
 
 	// 1. Print usageTemplate or
 
-	if len(os.Args) < 2 { //nolint:gomnd // if no specified subcommand then print usageTemplate and exit.
+	if len(
+		os.Args,
+	) < 2 { //nolint:gomnd // if no specified subcommand then print usageTemplate and exit.
 		_ = usage()
 
 		os.Exit(1)

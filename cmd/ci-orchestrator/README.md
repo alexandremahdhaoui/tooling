@@ -38,6 +38,8 @@ Below will be listed advantages of this approach:
   - One paradigm to rule them all.
   - No need to solve problems in thousands of different ways.
   - Get started easily by following common recipes
+  - Mono-repo enabled.
+  - No defaults, no side-effects.
 
 - OPEN SOURCE
   - Most of the problems you want to solve, might already have been solved by someone else. Instead
@@ -75,22 +77,64 @@ Below will be listed advantages of this approach:
 ### Quality
 
 | Feature | Description |
-|--|--|
+|---------|-------------|
 | Static analysis | |
 | Vulnerability scanning | |
 | Linting | |
 | Unit tests | |
 | Integration tests | |
 | Functional tests | |
-| Unit tests | |
+| End-to-end tests | |
 
+Approval? -> Once quality gate has been satisfied, the system should report back that the changes pass the tests.
 
 ### Artifacts
 
 | Feature | Description |
-|--|--|
+|---------|-------------|
 | Build | |
 | Push | |
-| | |
+| Sign | |
+| SBOM | |
 
+### Observability
+
+| Feature | Description |
+|---------|-------------|
+| Metrics | Provide metrics: success/failure of jobs, etc... Must be identified: job id, commit sha, who triggered the job/how the job was triggered, etc... |
+| Dashboards | Grafana dashboards for each feature, for each project, etc... |
+| Reports | When a job/pipeline was triggered, always report back the results. Endpoint to return the result? Specify a callback or something? |
+
+### Performance & sustainability
+
+| Feature | Description |
+|---------|-------------|
+|         |             |
+
+### Reproducibility
+
+| Feature | Description |
+|---------|-------------|
+|         |             |
+
+## Architecture
+
+### Input, output and side-effects
+
+The goal of this section is to identify inputs, outputs and side-effects. When these have
+been identified, we can proceed.
+
+### Adapters
+
+We want to adapt to different concrete implementations. Let's identify the interfaces
+that will need adapters.
+
+- Review process. (PR, MR, local API call to trigger tests or artifact build, etc...)
+- Language (let's start only with Go and C).
+- Container engine (Docker, Podman, etc...).
+- Git servers?
+- Observability stack.
+- SBOM system.
+
+### Core services
 
