@@ -6,17 +6,16 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	"github.com/caarlos0/env/v11"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	appsv1 "k8s.io/api/apps/v1"
-
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/clientcmd"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/tooling/pkg/project"
 )
 
 const (
@@ -96,7 +95,11 @@ func setup() error {
 	}
 
 	/// III. Initialize adapters
-	containerRegistry := NewContainerRegistry(cl, config.LocalContainerRegistry.Namespace, eventualConfig)
+	containerRegistry := NewContainerRegistry(
+		cl,
+		config.LocalContainerRegistry.Namespace,
+		eventualConfig,
+	)
 	k8s := NewK8s(cl, config.Kindenv.KubeconfigPath, config.LocalContainerRegistry.Namespace)
 
 	cred := NewCredential(

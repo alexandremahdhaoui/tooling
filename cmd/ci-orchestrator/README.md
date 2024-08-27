@@ -32,6 +32,18 @@ Below will be listed advantages of this approach:
   - You control everything end-to-end.
   - Best practices built-in.
 
+## How do we want to achieve these goals ?
+
+- OPINIONATED
+  - One paradigm to rule them all.
+  - No need to solve problems in thousands of different ways.
+  - Get started easily by following common recipes
+
+- OPEN SOURCE
+  - Most of the problems you want to solve, might already have been solved by someone else. Instead
+    of reinventing the wheel checkout others contributions. And if you find a new way to solve the
+    problem, feel free to share it with others.
+
 ### What are the goals we want to achieve?
 
 - ARTIFACTS
@@ -56,16 +68,29 @@ Below will be listed advantages of this approach:
   - Resource efficiency.
 
 - REPRODUCIBILITY
+  - What runs in the CI must run locally.
 
-## How ?
+## Exhaustive list of features per category
 
-- OPINIONATED
-  - One paradigm to rule them all.
-  - No need to solve problems in thousands of different ways.
-  - Get started easily by following common recipes
+### Quality
 
-- OPEN SOURCE
-  - Most of the problems you want to solve, might already have been solved by someone else. Instead
-    of reinventing the wheel checkout others contributions. And if you find a new way to solve the
-    problem, feel free to share it with others.
+| Feature | Description |
+|--|--|
+| Static analysis | |
+| Vulnerability scanning | |
+| Linting | |
+| Unit tests | |
+| Integration tests | |
+| Functional tests | |
+| Unit tests | |
+
+
+### Artifacts
+
+| Feature | Description |
+|--|--|
+| Build | |
+| Push | |
+| | |
+
 
