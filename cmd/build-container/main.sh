@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# TODO: Migrate to kaniko
+
 set -o errexit
 set -o nounset
 

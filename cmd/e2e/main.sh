@@ -46,12 +46,12 @@ if [ "${CONTAINER_ENGINE}" == "podman" ]; then
   ADDITIONAL_FLAGS="--tls-verify=false"
 fi
 
-yq '.password' "${LCR_CONFIG}" \
-    | ${CONTAINER_ENGINE} login \
-        "${LCR_ENDPOINT}" \
-        -u="$(yq '.username' "${LCR_CONFIG}")" \
-        --password-stdin \
-        ${ADDITIONAL_FLAGS}
+yq '.password' "${LCR_CONFIG}" |
+  ${CONTAINER_ENGINE} login \
+    "${LCR_ENDPOINT}" \
+    -u="$(yq '.username' "${LCR_CONFIG}")" \
+    --password-stdin \
+    ${ADDITIONAL_FLAGS}
 
 NEW_IMAGE="${LCR_ENDPOINT}/registry"
 

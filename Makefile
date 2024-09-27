@@ -6,9 +6,9 @@ COMMIT_SHA := $(shell git rev-parse --short HEAD)
 TIMESTAMP  := $(shell date --utc --iso-8601=seconds)
 VERSION    ?= $(shell git describe --tags --always --dirty)
 
-CHARTS     := $(shell ./hack/list-subprojects.sh charts)
-CONTAINERS := $(shell ./hack/list-subprojects.sh containers)
-CMDS       := $(shell ./hack/list-subprojects.sh cmd)
+CHARTS     := $(shell ./cmd/list-subprojects/main.sh charts)
+CONTAINERS := $(shell ./cmd/list-subprojects/main.sh containers)
+CMDS       := $(shell ./cmd/list-subprojects/main.sh cmd)
 
 GO_BUILD_LDFLAGS ?= "-X main.BuildTimestamp=$(TIMESTAMP) -X main.CommitSHA=$(COMMIT_SHA) -X main.Version=$(VERSION)"
 
@@ -33,7 +33,7 @@ CONTAINER_ENGINE ?= podman
 KIND_BINARY ?= kind
 
 CONTROLLER_GEN      := go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
-KINDENV				:= KIND_BINARY="$(KIND_BINARY)" go run ./cmd/kindenv
+KINDENV				      := KIND_BINARY="$(KIND_BINARY)" go run ./cmd/kindenv
 GO_GEN              := go generate
 GOFUMPT             := go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
 GOLANGCI_LINT       := go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
@@ -70,20 +70,20 @@ generate: ## Generate REST API server/client code, CRDs and other go generators.
 
 .PHONY: build-binary
 build-binary: generate
-	GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) ./hack/build-binary.sh "${BINARY_NAME}"
+	GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) ./cmd/build-binary/main.sh "${BINARY_NAME}"
 
 .PHONY: build-binaries
 build-binaries: generate ## Build the binaries.
 	echo $(CMDS) | \
 		GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) \
-		xargs -n1 ./hack/build-binary.sh
+		xargs -n1 ./cmd/build-binary/main.sh
 
 # ------------------------------------------------------- BUILD CONTAINERS -------------------------------------------- #
 
 .PHONY: build-container
 build-container: generate
 	CONTAINER_ENGINE=$(CONTAINER_ENGINE) GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) VERSION=$(VERSION) \
-		./hack/build-container.sh "${CONTAINER_NAME}"
+		./cmd/build-container/main.sh "${CONTAINER_NAME}"
 
 .PHONY: build-containers
 build-containers: generate
@@ -91,7 +91,7 @@ build-containers: generate
 		CONTAINER_ENGINE=$(CONTAINER_ENGINE) \
 		GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) \
 		VERSION=$(VERSION) \
-		xargs -n1 ./hack/build-container.sh
+		xargs -n1 ./cmd/build-container/main.sh
 
 # ------------------------------------------------------- FMT -------------------------------------------------------- #
 
@@ -113,19 +113,19 @@ test-chart:
 
 .PHONY: test-unit
 test-unit:
-	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=unit ./hack/test-go.sh
+	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=unit ./cmd/test-go/main.sh
 
 .PHONY: test-integration
 test-integration:
-	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=integration ./hack/test-go.sh
+	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=integration ./cmd/test-go/main.sh
 
 .PHONY: test-functional
 test-functional:
-	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=functional ./hack/test-go.sh
+	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=functional ./cmd/test-go/main.sh
 
 .PHONY: test-e2e
 test-e2e:
-	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./hack/e2e/local-container-registry.sh
+	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./cmd/e2e/main.sh
 
 .PHONY: test-setup
 test-setup:
