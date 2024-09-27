@@ -1,0 +1,28 @@
+FROM docker.io/golang:1.23 as downloader
+
+WORKDIR /workdir
+COPY ./go.* ./
+RUN go mod download
+
+FROM downloader as builder
+
+ARG GO_BUILD_LDFLAGS
+ARG NAME=build-container
+ARG INPUT_CMD="./cmd/${NAME}"
+ARG OUTPUT_BIN="/bin/${NAME}"
+WORKDIR /workdir
+COPY . ./
+RUN CG0_ENABLED=0 \
+    GOOS=linux \
+    go build \
+      -ldflags "${GO_BUILD_LDFLAGS}" \
+      -o "${OUTPUT_BIN}" \
+      "${INPUT_CMD}"
+
+FROM docker.io/alpine:3.20.1
+
+ARG NAME=build-container
+ARG OUTPUT_BIN="/bin/${NAME}"
+COPY --from=builder ${OUTPUT_BIN} ${OUTPUT_BIN}
+CMD [ "build-container" ]
+

@@ -6,11 +6,7 @@ COMMIT_SHA := $(shell git rev-parse --short HEAD)
 TIMESTAMP  := $(shell date --utc --iso-8601=seconds)
 VERSION    ?= $(shell git describe --tags --always --dirty)
 
-CHARTS     := $(shell ./cmd/list-subprojects/main.sh charts)
-CONTAINERS := $(shell ./cmd/list-subprojects/main.sh containers)
-CMDS       := $(shell ./cmd/list-subprojects/main.sh cmd)
-
-GO_BUILD_LDFLAGS ?= "-X main.BuildTimestamp=$(TIMESTAMP) -X main.CommitSHA=$(COMMIT_SHA) -X main.Version=$(VERSION)"
+GO_BUILD_LDFLAGS ?= -X main.BuildTimestamp=$(TIMESTAMP) -X main.CommitSHA=$(COMMIT_SHA) -X main.Version=$(VERSION)
 
 # ------------------------------------------------------- VERSIONS --------------------------------------------------- #
 
@@ -25,22 +21,26 @@ GOTESTSUM_VERSION      := v1.12.0
 # renovate: datasource=github-release depName=vektra/mockery
 MOCKERY_VERSION        := v2.42.0
 # renovate: datasource=github-release depName=oapi-codegen/oapi-codegen
-OAPI_CODEGEN_VERSION          := v2.3.0
+OAPI_CODEGEN_VERSION   := v2.3.0
 
 # ------------------------------------------------------- TOOLS ------------------------------------------------------ #
 
 CONTAINER_ENGINE ?= podman
-KIND_BINARY ?= kind
+KIND_BINARY      ?= kind
 
-CONTROLLER_GEN      := go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
-KINDENV				      := KIND_BINARY="$(KIND_BINARY)" go run ./cmd/kindenv
-GO_GEN              := go generate
-GOFUMPT             := go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
-GOLANGCI_LINT       := go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-GOTESTSUM           := go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION) --format pkgname
-MOCKERY             := go run github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
-OAPI_CODEGEN        := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
+CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
+GO_GEN         := go generate
+GOFUMPT        := go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
+GOLANGCI_LINT  := go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
+GOTESTSUM      := go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION) --format pkgname
+MOCKERY        := go run github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
+OAPI_CODEGEN   := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
+
+BUILD_BINARY        := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" go run ./cmd/build-binary
+BUILD_CONTAINER     := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" BUILD_ARGS="GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS)" go run ./cmd/build-container
+KINDENV             := KIND_BINARY="$(KIND_BINARY)" go run ./cmd/kindenv
 OAPI_CODEGEN_HELPER := OAPI_CODEGEN="$(OAPI_CODEGEN)" go run ./cmd/oapi-codegen-helper
+TEST_GO             := GOTESTSUM="$(GOTESTSUM)" go run ./cmd/test-go
 
 CLEAN_MOCKS := rm -rf ./internal/util/mocks
 
@@ -69,29 +69,14 @@ generate: ## Generate REST API server/client code, CRDs and other go generators.
 # ------------------------------------------------------- BUILD BINARIES --------------------------------------------- #
 
 .PHONY: build-binary
-build-binary: generate
-	GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) ./cmd/build-binary/main.sh "${BINARY_NAME}"
-
-.PHONY: build-binaries
-build-binaries: generate ## Build the binaries.
-	echo $(CMDS) | \
-		GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) \
-		xargs -n1 ./cmd/build-binary/main.sh
+build-binary:
+	$(BUILD_BINARY)
 
 # ------------------------------------------------------- BUILD CONTAINERS -------------------------------------------- #
 
 .PHONY: build-container
-build-container: generate
-	CONTAINER_ENGINE=$(CONTAINER_ENGINE) GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) VERSION=$(VERSION) \
-		./cmd/build-container/main.sh "${CONTAINER_NAME}"
-
-.PHONY: build-containers
-build-containers: generate
-	echo $(CONTAINERS) | \
-		CONTAINER_ENGINE=$(CONTAINER_ENGINE) \
-		GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS) \
-		VERSION=$(VERSION) \
-		xargs -n1 ./cmd/build-container/main.sh
+build-container:
+	$(BUILD_CONTAINER)
 
 # ------------------------------------------------------- FMT -------------------------------------------------------- #
 
@@ -113,18 +98,19 @@ test-chart:
 
 .PHONY: test-unit
 test-unit:
-	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=unit ./cmd/test-go/main.sh
+	TEST_TAG=unit $(TEST_GO)
 
 .PHONY: test-integration
 test-integration:
-	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=integration ./cmd/test-go/main.sh
+	TEST_TAG=integration $(TEST_GO)
 
 .PHONY: test-functional
 test-functional:
-	GOTESTSUM="$(GOTESTSUM)" TEST_TAG=functional ./cmd/test-go/main.sh
+	TEST_TAG=functional $(TEST_GO)
 
 .PHONY: test-e2e
 test-e2e:
+	echo "DISCLAIMER: this is still a work in progress"
 	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./cmd/e2e/main.sh
 
 .PHONY: test-setup

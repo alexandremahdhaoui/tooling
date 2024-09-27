@@ -3,6 +3,7 @@ module github.com/alexandremahdhaoui/tooling
 go 1.22.5
 
 require (
+	github.com/caarlos0/env v3.5.0+incompatible
 	github.com/caarlos0/env/v11 v11.1.0
 	github.com/cert-manager/cert-manager v1.15.1
 	github.com/stretchr/testify v1.9.0
