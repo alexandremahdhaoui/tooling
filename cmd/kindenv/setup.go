@@ -30,7 +30,8 @@ func formatSetupUsage() string {
 // ----------------------------------------------------- CONFIG ----------------------------------------------------- //
 
 type Envs struct {
-	KindBinary string `env:"KIND_BINARY,required"`
+	KindBinary       string `env:"KIND_BINARY,required"`
+	KindBinaryPrefix string `env:"KIND_BINARY_PREFIX"`
 
 	// TODO: make use of the below variables.
 	ContainerRegistryBaseURL string `env:"CONTAINER_REGISTRY_BASE_URL"`
@@ -76,25 +77,33 @@ func setup() error {
 }
 
 func doSetup(pCfg project.Config, envs Envs) error {
-	// 1. kind create cluster and wait.
-	cmd := exec.Command(
-		envs.KindBinary,
+	// 1. Allow prefixing kind binary with "sudo".
+	cmdName := envs.KindBinary
+	args := []string{
 		"create",
 		"cluster",
 		"--name", pCfg.Name,
 		"--kubeconfig", pCfg.Kindenv.KubeconfigPath,
 		"--wait", "5m",
-	)
+	}
+
+	if envs.KindBinaryPrefix != "" {
+		cmdName = envs.KindBinaryPrefix
+		args = append([]string{envs.KindBinary}, args...)
+	}
+
+	// 2. kind create cluster and wait.
+	cmd := exec.Command(cmdName, args...)
 
 	if err := util.RunCmdWithStdPipes(cmd); err != nil {
 		return err // TODO: wrap error
 	}
 
-	// 2. TODO: setup communication towards local-registry.
+	// 3. TODO: setup communication towards local-registry.
 
-	// 3. TODO: setup communication towards any provided registry (e.g. required if users wants to install some apps into their kind cluster). It can be any OCI registry. (to support helm chart)
+	// 4. TODO: setup communication towards any provided registry (e.g. required if users wants to install some apps into their kind cluster). It can be any OCI registry. (to support helm chart)
 
-	// 4. TODO: setup communication CONTAINER_ENGINE login & HELM login.
+	// 5. TODO: setup communication CONTAINER_ENGINE login & HELM login.
 
 	return nil
 }

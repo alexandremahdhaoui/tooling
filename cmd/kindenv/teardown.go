@@ -39,13 +39,19 @@ func teardown() error {
 }
 
 func doTeardown(config project.Config, envs Envs) error {
-	// 1. kind create cluster and wait.
-	cmd := exec.Command(
-		envs.KindBinary,
+	cmdName := envs.KindBinary
+	args := []string{
 		"delete",
 		"cluster",
 		"--name", config.Name,
-	)
+	}
+
+	if envs.KindBinaryPrefix != "" {
+		cmdName = envs.KindBinaryPrefix
+		args = append([]string{envs.KindBinary}, args...)
+	}
+
+	cmd := exec.Command(cmdName, args...)
 
 	if err := util.RunCmdWithStdPipes(cmd); err != nil {
 		return err // TODO: wrap error
