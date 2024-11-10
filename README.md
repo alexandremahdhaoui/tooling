@@ -85,12 +85,15 @@ MOCKERY_VERSION        := v2.42.0
 # renovate: datasource=github-release depName=oapi-codegen/oapi-codegen
 OAPI_CODEGEN_VERSION   := v2.3.0
 # renovate: datasource=github-release depName=alexandremahdhaoui/tooling
-TOOLING_VERSION        := v0.1.2
+TOOLING_VERSION        := v0.1.3
 
 # ------------------------------------------------------- TOOLS ------------------------------------------------------ #
 
-CONTAINER_ENGINE ?= podman
-KIND_BINARY      ?= kind
+CONTAINER_ENGINE   ?= docker
+KIND_BINARY        ?= kind
+KIND_BINARY_PREFIX ?= sudo
+
+KINDENV_ENVS := KIND_BINARY_PREFIX="$(KIND_BINARY_PREFIX)" KIND_BINARY="$(KIND_BINARY)"
 
 CONTROLLER_GEN      := go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
 KINDENV             := KIND_BINARY="$(KIND_BINARY)" $(TOOLING)/kindenv@$(TOOLING_VERSION)
@@ -105,7 +108,7 @@ TOOLING := go run github.com/alexandremahdhaoui/tooling/cmd
 
 BUILD_BINARY        := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" $(TOOLING)/build-binary@$(TOOLING_VERSION)
 BUILD_CONTAINER     := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" BUILD_ARGS="GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS)" $(TOOLING)/build-container@$(TOOLING_VERSION)
-KINDENV             := KIND_BINARY="$(KIND_BINARY)" $(TOOLING)/kindenv@$(TOOLING_VERSION)
+KINDENV             := KINDENV_ENVS="$(KINDENV_ENVS)" $(TOOLING)/kindenv@$(TOOLING_VERSION)
 LOCAL_CONTAINER_REG := $(TOOLING)/local-container-registry@$(TOOLING_VERSION)
 OAPI_CODEGEN_HELPER := OAPI_CODEGEN="$(OAPI_CODEGEN)" $(TOOLING)/oapi-codegen-helper@$(TOOLING_VERSION)
 TEST_GO             := GOTESTSUM="$(GOTESTSUM)" $(TOOLING)/test-go@$(TOOLING_VERSION)
