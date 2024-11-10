@@ -25,8 +25,11 @@ OAPI_CODEGEN_VERSION   := v2.3.0
 
 # ------------------------------------------------------- TOOLS ------------------------------------------------------ #
 
-CONTAINER_ENGINE ?= podman
-KIND_BINARY      ?= kind
+CONTAINER_ENGINE   ?= docker
+KIND_BINARY        ?= kind
+KIND_BINARY_PREFIX ?= sudo
+
+KINDENV_ENVS := KIND_BINARY_PREFIX="$(KIND_BINARY_PREFIX)" KIND_BINARY="$(KIND_BINARY)"
 
 CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
 GO_GEN         := go generate
@@ -38,7 +41,7 @@ OAPI_CODEGEN   := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codege
 
 BUILD_BINARY        := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" go run ./cmd/build-binary
 BUILD_CONTAINER     := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" BUILD_ARGS="GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS)" go run ./cmd/build-container
-KINDENV             := KIND_BINARY="$(KIND_BINARY)" go run ./cmd/kindenv
+KINDENV             := $(KINDENV_ENVS) go run ./cmd/kindenv
 OAPI_CODEGEN_HELPER := OAPI_CODEGEN="$(OAPI_CODEGEN)" go run ./cmd/oapi-codegen-helper
 TEST_GO             := GOTESTSUM="$(GOTESTSUM)" go run ./cmd/test-go
 

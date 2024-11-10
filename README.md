@@ -85,7 +85,7 @@ MOCKERY_VERSION        := v2.42.0
 # renovate: datasource=github-release depName=oapi-codegen/oapi-codegen
 OAPI_CODEGEN_VERSION   := v2.3.0
 # renovate: datasource=github-release depName=alexandremahdhaoui/tooling
-TOOLING_VERSION        := v0.1.3
+TOOLING_VERSION        := v0.1.4
 
 # ------------------------------------------------------- TOOLS ------------------------------------------------------ #
 

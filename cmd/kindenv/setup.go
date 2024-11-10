@@ -99,6 +99,20 @@ func doSetup(pCfg project.Config, envs Envs) error {
 		return err // TODO: wrap error
 	}
 
+	// 3. chown kubeconfig
+	if envs.KindBinaryPrefix == "sudo" { // TODO: Make this a bit more robust (e.g. use which or something)
+		chownCmd := exec.Command(
+			envs.KindBinaryPrefix,
+			"chown",
+			fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
+			pCfg.Kindenv.KubeconfigPath,
+		)
+
+		if err := util.RunCmdWithStdPipes(chownCmd); err != nil {
+			return err // TODO: wrap err
+		}
+	}
+
 	// 3. TODO: setup communication towards local-registry.
 
 	// 4. TODO: setup communication towards any provided registry (e.g. required if users wants to install some apps into their kind cluster). It can be any OCI registry. (to support helm chart)
