@@ -76,7 +76,6 @@ func do(executable string, config project.OAPICodegenHelper) error {
 		i := i
 		for _, version := range config.Specs[i].Versions { // for each version
 			version := version
-			wg.Add(1)
 
 			// for each spec and each version in that spec:
 
@@ -95,6 +94,7 @@ func do(executable string, config project.OAPICodegenHelper) error {
 					template: serverTemplate,
 				},
 			} {
+    wg.Add(1)
 				go func() {
 					defer wg.Done()
 					if !pkg.opts.Enabled {
