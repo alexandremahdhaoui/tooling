@@ -121,8 +121,20 @@ CLEAN_MOCKS := rm -rf ./internal/util/mocks
 sync-tooling: ## Synchronize tooling scripts into this repository.
 	echo TODO: implement 'make `sync-tooling`'
 
+PROTO_FILES := $(shell find . ! -path '.*/\.*' -name "*.proto")
+PROTOC_GEN_GO_OUT=--go_out=. --go_opt=paths=source_relative
+PROTOC_GEN_GO_GRPC_OUT=--go-grpc_out=. --go-grpc_opt=paths=source_relative
+COMPILE_PROTO_CMD = protoc $(PROTOC_GEN_GO_OUT) $(PROTOC_GEN_GO_GRPC_OUT) $<
+
+FORCE_REBUILD:
+	@:
+
+# Rule to compile .proto files
+%.pb.go: %.proto FORCE_REBUILD
+	$(COMPILE_PROTO_CMD)
+
 .PHONY: generate
-generate: ## Generate REST API server/client code, CRDs and other go generators.
+generate: $(PROTO_FILES:.proto=.pb.go) ## Generate REST API server/client code, CRDs and other go generators.
 	$(OAPI_CODEGEN_HELPER)
 	$(GO_GEN) "./..."
 
