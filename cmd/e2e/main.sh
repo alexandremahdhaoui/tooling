@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# This script runs the end-to-end tests for the local-container-registry tool.
+# It sets up a local container registry, pushes and pulls an image, and then tears down the registry.
+
 set -o errexit
 set -o nounset
 

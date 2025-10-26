@@ -11,7 +11,7 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
-// ----------------------------------------------------- ENVS ------------------------------------------------------- //
+// ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
 	if err := run(); err != nil {
@@ -24,8 +24,10 @@ func main() {
 	os.Exit(0)
 }
 
-// ----------------------------------------------------- ENVS ------------------------------------------------------- //
+// ----------------------------------------------------- RUN -------------------------------------------------------- //
 
+// run executes the main logic of the build-binary tool.
+// It reads environment variables, sets up the build environment, and runs the `go build` command.
 func run() error {
 	envs := Envs{} //nolint:exhaustruct // unmarshal
 
@@ -55,8 +57,11 @@ func run() error {
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
 
+// Envs holds the environment variables required by the build-binary tool.
 type Envs struct {
-	BinaryName     string `env:"BINARY_NAME,required"`
+	// BinaryName is the name of the binary to build.
+	BinaryName string `env:"BINARY_NAME,required"`
+	// GoBuildLDFlags are the linker flags to pass to the `go build` command.
 	GoBuildLDFlags string `env:"GO_BUILD_LDFLAGS,required"`
 }
 

@@ -10,21 +10,30 @@ import (
 )
 
 const (
+	// ConfigPath is the default path to the project configuration file.
 	ConfigPath = ".project.yaml"
 )
 
 // ----------------------------------------------------- PROJECT CONFIG --------------------------------------------- //
 
+// Config represents the project configuration.
+// It is read from the .project.yaml file.
 type Config struct {
+	// Name is the name of the project.
 	Name string `json:"name"`
 
-	Kindenv                Kindenv                `json:"kindenv"`
+	// Kindenv holds the configuration for the kindenv tool.
+	Kindenv Kindenv `json:"kindenv"`
+	// LocalContainerRegistry holds the configuration for the local-container-registry tool.
 	LocalContainerRegistry LocalContainerRegistry `json:"localContainerRegistry"`
-	OAPICodegenHelper      OAPICodegenHelper      `json:"oapiCodegenHelper"`
+	// OAPICodegenHelper holds the configuration for the oapi-codegen-helper tool.
+	OAPICodegenHelper OAPICodegenHelper `json:"oapiCodegenHelper"`
 }
 
 var errReadingProjectConfig = errors.New("error reading project config")
 
+// ReadConfig reads the project configuration from the .project.yaml file.
+// It returns a Config struct and an error if the file cannot be read or parsed.
 func ReadConfig() (Config, error) {
 	b, err := os.ReadFile(ConfigPath) //nolint:varnamelen
 	if err != nil {

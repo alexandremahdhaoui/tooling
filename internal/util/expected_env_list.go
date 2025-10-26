@@ -8,6 +8,9 @@ import (
 
 // ----------------------------------------------------- FormatExpectedEnvList -------------------------------------- //
 
+// FormatExpectedEnvList formats a list of expected environment variables from a struct.
+// It uses reflection to read the `env` tag of the struct fields.
+// The output is a formatted string with the environment variable name, and whether it is required or optional.
 func FormatExpectedEnvList[T any]() string {
 	optionalEnvs := make([]string, 0)
 	requiredEnvs := make([]string, 0)

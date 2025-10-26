@@ -45,6 +45,8 @@ output-options:
 `
 )
 
+// main is the entrypoint for the oapi-codegen-helper tool.
+// It reads the project configuration and generates code from OpenAPI specifications.
 func main() {
 	executable := os.Getenv(OAPICodegenEnvKey)
 	if executable == "" {

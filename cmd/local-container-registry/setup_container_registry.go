@@ -31,6 +31,7 @@ const (
 	registryConfigMountDir      = "/etc/docker/registry"
 )
 
+// ContainerRegistry is a struct that manages the setup of the local container registry.
 type ContainerRegistry struct {
 	client    client.Client
 	namespace string
@@ -38,6 +39,7 @@ type ContainerRegistry struct {
 	ec eventualconfig.EventualConfig
 }
 
+// NewContainerRegistry creates a new ContainerRegistry struct.
 func NewContainerRegistry(cl client.Client, namespace string, ec eventualconfig.EventualConfig) *ContainerRegistry {
 	return &ContainerRegistry{
 		client:    cl,
@@ -48,6 +50,8 @@ func NewContainerRegistry(cl client.Client, namespace string, ec eventualconfig.
 
 var errSettingUpContainerRegistry = errors.New("setting up container registry")
 
+// Setup sets up the local container registry.
+// It creates a ConfigMap, a Service, a Deployment, and awaits the Deployment's readiness.
 func (r *ContainerRegistry) Setup(ctx context.Context) error {
 	labels := map[string]string{"app": Name}
 
@@ -220,18 +224,22 @@ func (r *ContainerRegistry) createService(ctx context.Context, labels map[string
 	return nil
 }
 
+// FQDN returns the fully qualified domain name of the container registry service.
 func (r *ContainerRegistry) FQDN() string {
 	return fmt.Sprintf("%s.%s.svc.cluster.local", Name, r.namespace)
 }
 
+// Port returns the port of the container registry service.
 func (r *ContainerRegistry) Port() int32 {
 	return containerRegistryPort
 }
 
+// ConfigMapName returns the name of the ConfigMap for the container registry.
 func (r *ContainerRegistry) ConfigMapName() string {
 	return registryConfigConfigMapName
 }
 
+// Mount returns the Mount struct for the container registry configuration.
 func (r *ContainerRegistry) Mount() Mount {
 	return Mount{
 		Dir:      registryConfigMountDir,
