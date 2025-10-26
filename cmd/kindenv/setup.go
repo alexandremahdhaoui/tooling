@@ -29,8 +29,11 @@ func formatSetupUsage() string {
 
 // ----------------------------------------------------- CONFIG ----------------------------------------------------- //
 
+// Envs holds the environment variables required by the kindenv tool.
 type Envs struct {
-	KindBinary       string `env:"KIND_BINARY,required"`
+	// KindBinary is the path to the kind binary.
+	KindBinary string `env:"KIND_BINARY,required"`
+	// KindBinaryPrefix is a prefix to add to the kind binary command (e.g., sudo).
 	KindBinaryPrefix string `env:"KIND_BINARY_PREFIX"`
 
 	// TODO: make use of the below variables.
@@ -39,6 +42,7 @@ type Envs struct {
 	HelmBinary               string `env:"HELM_BINARY"`
 }
 
+// readEnvs reads the environment variables required by the kindenv tool.
 func readEnvs() (Envs, error) {
 	out := Envs{} //nolint:exhaustruct // unmarshal
 
@@ -51,6 +55,8 @@ func readEnvs() (Envs, error) {
 
 // ----------------------------------------------------- SETUP ------------------------------------------------------ //
 
+// setup executes the main logic of the `kindenv setup` command.
+// It reads the project and kindenv configuration, and then creates a kind cluster.
 func setup() error {
 	// 1. read project Envs.
 	config, err := project.ReadConfig()

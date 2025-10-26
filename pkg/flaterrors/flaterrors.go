@@ -4,6 +4,7 @@ import (
 	"unsafe"
 )
 
+// Unwrapper is an interface that provides a way to unwrap an error into a slice of errors.
 type Unwrapper interface {
 	Unwrap() []error
 }

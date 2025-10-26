@@ -20,15 +20,20 @@ const (
 	CredentialSecretName = "credential-secret-name"
 )
 
+// Mount represents a file mount with a directory and filename.
 type Mount struct {
-	Dir      string
+	// Dir is the directory where the file is mounted.
+	Dir string
+	// Filename is the name of the mounted file.
 	Filename string
 }
 
+// Path returns the full path of the mounted file.
 func (m Mount) Path() string {
 	return filepath.Join(m.Dir, m.Filename)
 }
 
+// NewEventualConfig creates a new EventualConfig for the local-container-registry tool.
 func NewEventualConfig() eventualconfig.EventualConfig { //nolint:ireturn
 	return eventualconfig.NewEventualConfig(
 		// TLS

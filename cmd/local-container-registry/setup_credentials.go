@@ -27,11 +27,15 @@ const (
 	credMountDir  = "/etc/credentials"
 )
 
+// Credentials holds the username and password for the local container registry.
 type Credentials struct {
+	// Username is the username for the local container registry.
 	Username string `json:"username"`
+	// Password is the password for the local container registry.
 	Password string `json:"password"`
 }
 
+// Credential is a struct that manages the setup of credentials for the local container registry.
 type Credential struct {
 	client                    client.Client
 	containerEngineExecutable string
@@ -42,6 +46,7 @@ type Credential struct {
 	ec eventualconfig.EventualConfig
 }
 
+// NewCredential creates a new Credential struct.
 func NewCredential(
 	cl client.Client,
 	containerEngineExecutable, credentialsPath, namespace string,
@@ -63,6 +68,8 @@ func NewCredential(
 
 var errSettingUpCredentials = errors.New("failed to set up credentials")
 
+// Setup sets up the credentials for the local container registry.
+// It writes the credentials to a file, creates a htpasswd hash, creates a Kubernetes secret, and declares the shared values.
 func (c *Credential) Setup(ctx context.Context) error {
 	// 1. write credentials.
 	if err := c.writeCredentials(); err != nil {

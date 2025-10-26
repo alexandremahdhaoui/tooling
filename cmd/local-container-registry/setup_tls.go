@@ -22,6 +22,7 @@ const (
 	tlsMountDir     = "/etc/tls"
 )
 
+// TLS is a struct that manages the setup of TLS for the local container registry.
 type TLS struct {
 	client client.Client
 
@@ -32,6 +33,7 @@ type TLS struct {
 	ec eventualconfig.EventualConfig
 }
 
+// NewTLS creates a new TLS struct.
 func NewTLS(
 	cl client.Client,
 	caCrtPath, registryNamespace, registryServiceFQDN string,
@@ -50,6 +52,8 @@ func NewTLS(
 
 var errSettingUpTLS = errors.New("error setting up TLS")
 
+// Setup sets up TLS for the local container registry.
+// It installs cert-manager, creates a self-signed issuer, creates a certificate, and passes the TLS secret name to EventualConfig.
 func (t *TLS) Setup(ctx context.Context) error {
 	// 1. Install cert-manager.
 	helmRepoAdd := exec.Command("helm", strings.Split(
@@ -106,12 +110,15 @@ func (t *TLS) Setup(ctx context.Context) error {
 	return nil
 }
 
+// ResourceName returns the name of the TLS resources.
 func (t *TLS) ResourceName() string {
 	return tlsResourceName
 }
 
 var errTearingDownTLS = errors.New("tearing down TLS")
 
+// Teardown tears down TLS for the local container registry.
+// It deletes the cert-manager manifests.
 func (t *TLS) Teardown() error {
 	cmd := exec.Command("kubectl", "delete", "-f", certManagerManifests)
 

@@ -12,7 +12,7 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
-// ----------------------------------------------------- ENVS ------------------------------------------------------- //
+// ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
 	if err := run(); err != nil {
@@ -25,8 +25,10 @@ func main() {
 	os.Exit(0)
 }
 
-// ----------------------------------------------------- ENVS ------------------------------------------------------- //
+// ----------------------------------------------------- RUN -------------------------------------------------------- //
 
+// run executes the main logic of the test-go tool.
+// It reads environment variables and runs the gotestsum command.
 func run() error {
 	envs := Envs{} //nolint:exhaustruct // unmarshal
 
@@ -59,8 +61,11 @@ func run() error {
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
 
+// Envs holds the environment variables required by the test-go tool.
 type Envs struct {
-	TestTag   string `env:"TEST_TAG,required"`
+	// TestTag is the tag to target the test, i.e.: "unit", "integration", "functional", or "e2e".
+	TestTag string `env:"TEST_TAG,required"`
+	// Gotestsum is the path to the gotestsum binary or a `go run` command.
 	Gotestsum string `env:"GOTESTSUM,required"`
 }
 
