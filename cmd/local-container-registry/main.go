@@ -24,12 +24,15 @@ const (
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
 
+// Envs holds the environment variables required by the local-container-registry tool.
 type Envs struct {
+	// ContainerEngineExecutable is the path to the container engine executable (e.g., docker, podman).
 	ContainerEngineExecutable string `env:"CONTAINER_ENGINE"`
 }
 
 var errReadingEnvVars = errors.New("reading environment variables")
 
+// readEnvs reads the environment variables required by the local-container-registry tool.
 func readEnvs() (Envs, error) {
 	out := Envs{} //nolint:exhaustruct // unmarshal
 
@@ -66,6 +69,8 @@ func main() {
 
 var errSettingLocalContainerRegistry = errors.New("error received while setting up " + Name)
 
+// setup executes the main logic of the `local-container-registry setup` command.
+// It reads the project configuration, creates a Kubernetes client, and sets up the local container registry.
 func setup() error {
 	_, _ = fmt.Fprintln(os.Stdout, "⏳ Setting up "+Name)
 	ctx := context.Background()
@@ -145,6 +150,8 @@ func setup() error {
 
 var errTearingDownLocalContainerRegistry = errors.New("error received while tearing down " + Name)
 
+// teardown executes the main logic of the `local-container-registry teardown` command.
+// It reads the project configuration, creates a Kubernetes client, and tears down the local container registry.
 func teardown() error {
 	_, _ = fmt.Fprintln(os.Stdout, "⏳ Tearing down "+Name)
 
@@ -189,6 +196,7 @@ func teardown() error {
 
 var errCreatingKubernetesClient = errors.New("creating kubernetes client")
 
+// createKubeClient creates a new Kubernetes client from the kubeconfig file specified in the project configuration.
 func createKubeClient(config project.Config) (client.Client, error) { //nolint:ireturn
 	b, err := os.ReadFile(config.Kindenv.KubeconfigPath)
 	if err != nil {

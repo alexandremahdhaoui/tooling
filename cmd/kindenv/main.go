@@ -27,6 +27,7 @@ Available commands:
 `
 )
 
+// usage prints the usage instructions for the kindenv tool.
 func usage() error {
 	arg0 := fmt.Sprintf("go run \"%s/hack/kindenv\"", os.Getenv("PWD"))
 	_, _ = fmt.Fprintf(os.Stdout, usageTemplate, arg0, setupCommand, teardownCommand)

@@ -11,7 +11,7 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
-// ----------------------------------------------------- ENVS ------------------------------------------------------- //
+// ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
 	if err := run(); err != nil {
@@ -24,8 +24,10 @@ func main() {
 	os.Exit(0)
 }
 
-// ----------------------------------------------------- ENVS ------------------------------------------------------- //
+// ----------------------------------------------------- RUN -------------------------------------------------------- //
 
+// run executes the main logic of the build-container tool.
+// It reads environment variables, sets up the build environment, and runs the container build command.
 func run() error {
 	envs := Envs{} //nolint:exhaustruct // unmarshal
 
@@ -69,11 +71,16 @@ func run() error {
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
 
+// Envs holds the environment variables required by the build-container tool.
 type Envs struct {
-	ContainerEngine string   `env:"CONTAINER_ENGINE,required"`
-	ContainerName   string   `env:"CONTAINER_NAME,required"`
-	BuildArgs       []string `env:"BUILD_ARGS,required"`
-	Destinations    []string `env:"DESTINATIONS"`
+	// ContainerEngine is the container engine to use for building the container (e.g., docker, podman).
+	ContainerEngine string `env:"CONTAINER_ENGINE,required"`
+	// ContainerName is the name of the container to build.
+	ContainerName string `env:"CONTAINER_NAME,required"`
+	// BuildArgs is a list of build arguments to pass to the container build command.
+	BuildArgs []string `env:"BUILD_ARGS,required"`
+	// Destinations is a list of destinations to push the container image to.
+	Destinations []string `env:"DESTINATIONS"`
 }
 
 // ----------------------------------------------------- PRINT HELPERS ----------------------------------------------- //

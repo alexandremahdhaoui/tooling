@@ -11,6 +11,8 @@ import (
 
 // ----------------------------------------------------- TEARDOWN --------------------------------------------------- //
 
+// teardown executes the main logic of the `kindenv teardown` command.
+// It reads the project and kindenv configuration, and then deletes the kind cluster.
 func teardown() error {
 	// 1. read project Envs.
 	config, err := project.ReadConfig()

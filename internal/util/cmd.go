@@ -7,6 +7,8 @@ import (
 	"os/exec"
 )
 
+// RunCmdWithStdPipes runs a command and pipes its stdout and stderr to the current process's stdout and stderr.
+// It waits for the command to complete and returns an error if the command fails or if there is an error copying the output.
 func RunCmdWithStdPipes(cmd *exec.Cmd) error {
 	errChan := make(chan error)
 

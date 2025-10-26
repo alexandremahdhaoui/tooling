@@ -1,25 +1,170 @@
-# tooling
+# Go Development Tooling
 
-This repository contains tooling and utilities to simplify development.
+This repository provides a collection of tools and utilities designed to streamline Go development workflows, particularly for projects involving containers and Kubernetes. These tools are configured via a central `.project.yaml` file, allowing for consistent and reproducible builds, tests, and deployments.
 
-## Available tools
+## Table of Contents
+
+- [Go Development Tooling](#go-development-tooling)
+  - [Available Tools](#available-tools)
+  - [Project Configuration (`.project.yaml`)](#project-configuration-projectyaml)
+    - [Example `.project.yaml`](#example-projectyaml)
+  - [Usage](#usage)
+    - [`build-binary`](#build-binary)
+    - [`build-container`](#build-container)
+    - [`kindenv`](#kindenv)
+    - [`local-container-registry`](#local-container-registry)
+    - [`oapi-codegen-helper`](#oapi-codegen-helper)
+    - [`test-go`](#test-go)
+  - [Examples](#examples)
+    - [Containerfile](#containerfile)
+      - [Go](#go)
+    - [Makefile](#makefile)
+
+## Available Tools
 
 | Name                       | Description                                                                                                                                                                                                     |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `build-binary` | Wrapper script around `go build` to build go binaries. |
-| `build-container` | Wrapper script arounce `kaniko` to build container images. |
-| `chart-prereq` | Helper to install necessary helm charts in k8s cluster dedicated for tests. |
+| `build-binary` | A wrapper around `go build` that simplifies building Go binaries. It uses environment variables for configuration. |
+| `build-container` | A wrapper script around `kaniko` to build container images from a `Containerfile`. It is configured using environment variables. |
+| `chart-prereq` | A helper tool to install necessary Helm charts in a Kubernetes cluster dedicated for tests. |
 | `ci-orchestrator` | The `ci-orchestrator` is a tool responsible for orchestrating CI jobs. |
-| `e2e` | Script to execute e2e tests. |
-| `kindenv`                  | It wraps `kind` to create a k8s cluster and output the kubeconfig to a local path specified by the `.project.yaml` file.                                                                                        |
-| `local-container-registry` | It creates a container registry in the kind cluster created by `kindenv`. It reads it's configuration from `.project.yaml`.                                                                                     | 
-| `oapi-codegen-helper`      | It wraps `oapi-codegen` to conveniently generate server and/or client code from a local or remote OpenAPI Specification. It reads its configuration from `.oapi-codegen.yaml`. Code generation is parallelized. | 
-| `test-go` | Wrapper script around `gotestsum` to execute scoped tests. |
+| `e2e` | A script to execute end-to-end tests for the `local-container-registry`. |
+| `kindenv`                  | This tool wraps `kind` to create a Kubernetes cluster for local development and testing. It outputs the kubeconfig to a local path specified in the `.project.yaml` file.                                                                                        |
+| `local-container-registry` | This tool creates a container registry within the kind cluster created by `kindenv`. It reads its configuration from the `.project.yaml` file.                                                                                     |
+| `oapi-codegen-helper`      | A wrapper for `oapi-codegen` that simplifies the generation of server and client code from OpenAPI specifications. It reads its configuration from the `.project.yaml` file and parallelizes code generation. |
+| `test-go` | A wrapper around `gotestsum` for executing scoped tests. It uses environment variables for configuration and supports test tags. |
 
-## Project Config
+## Project Configuration (`.project.yaml`)
 
-The project config or `.project.yaml` file is a single configuration file that declares intent about the project and is
-used by the tools and utilities defined in this project.
+The `.project.yaml` file is the central configuration file for all the tools in this repository. It allows you to declare the intent of your project and configure the behavior of the tools.
+
+### Example `.project.yaml`
+
+```yaml
+name: my-project
+
+kindenv:
+  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+
+localContainerRegistry:
+  enabled: true
+  credentialPath: .ignore.local-container-registry.yaml
+  caCrtPath: .ignore.ca.crt
+  namespace: local-container-registry
+
+oapiCodegenHelper:
+  defaults:
+    sourceDir: "api"
+    destinationDir: "pkg/api"
+  specs:
+    - name: "my-api"
+      versions: ["v1"]
+      client:
+        enabled: true
+        packageName: "myapiv1"
+      server:
+        enabled: true
+        packageName: "myapiv1"
+```
+
+## Usage
+
+### `build-binary`
+
+This tool builds a Go binary.
+
+**Environment Variables:**
+
+* `BINARY_NAME`: The name of the binary to build.
+* `GO_BUILD_LDFLAGS`: The linker flags to pass to the `go build` command.
+
+**Example:**
+
+```sh
+BINARY_NAME="my-app" GO_BUILD_LDFLAGS="-X main.Version=1.0.0" go run github.com/alexandremahdhaoui/tooling/cmd/build-binary
+```
+
+### `build-container`
+
+This tool builds a container image using Kaniko.
+
+**Environment Variables:**
+
+* `CONTAINER_ENGINE`: The container engine to use (e.g., `docker`, `podman`).
+* `CONTAINER_NAME`: The name of the container to build.
+* `BUILD_ARGS`: A list of build arguments to pass to the container build command.
+* `DESTINATIONS`: A list of destinations to push the container image to.
+
+**Example:**
+
+```sh
+CONTAINER_ENGINE="docker" \
+CONTAINER_NAME="my-app" \
+BUILD_ARGS="VERSION=1.0.0" \
+DESTINATIONS="docker.io/my-user/my-app:latest" \
+go run github.com/alexandremahdhaoui/tooling/cmd/build-container
+```
+
+### `kindenv`
+
+This tool manages a local Kubernetes cluster using Kind.
+
+**Commands:**
+
+* `setup`: Creates a Kind cluster.
+* `teardown`: Deletes the Kind cluster.
+
+**Example:**
+
+```sh
+go run github.com/alexandremahdhaoui/tooling/cmd/kindenv setup
+go run github.com/alexandremahdhaoui/tooling/cmd/kindenv teardown
+```
+
+### `local-container-registry`
+
+This tool sets up a local container registry in the Kind cluster.
+
+**Commands:**
+
+* `setup`: Sets up the local container registry.
+* `teardown`: Tears down the local container registry.
+
+**Example:**
+
+```sh
+go run github.com/alexandremahdhaoui/tooling/cmd/local-container-registry setup
+go run github.com/alexandremahdhaoui/tooling/cmd/local-container-registry teardown
+```
+
+### `oapi-codegen-helper`
+
+This tool generates Go code from OpenAPI specifications.
+
+**Environment Variables:**
+
+* `OAPI_CODEGEN`: The `oapi-codegen` command to use (e.g., `go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen`).
+
+**Example:**
+
+```sh
+OAPI_CODEGEN="go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen" go run github.com/alexandremahdhaoui/tooling/cmd/oapi-codegen-helper
+```
+
+### `test-go`
+
+This tool runs Go tests using `gotestsum`.
+
+**Environment Variables:**
+
+* `TEST_TAG`: The build tag to use for the tests (e.g., `unit`, `integration`).
+* `GOTESTSUM`: The `gotestsum` command to use (e.g., `go run gotest.tools/gotestsum`).
+
+**Example:**
+
+```sh
+TEST_TAG="unit" GOTESTSUM="go run gotest.tools/gotestsum" go run github.com/alexandremahdhaoui/tooling/cmd/test-go
+```
 
 ## Examples
 

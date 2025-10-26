@@ -13,12 +13,14 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// K8s is a struct that manages the setup of the Kubernetes cluster for the local container registry.
 type K8s struct {
 	client         client.Client
 	kubeconfigPath string
 	namespace      string
 }
 
+// NewK8s creates a new K8s struct.
 func NewK8s(cl client.Client, kubeconfigPath, namespace string) *K8s {
 	return &K8s{
 		client:         cl,
@@ -29,6 +31,8 @@ func NewK8s(cl client.Client, kubeconfigPath, namespace string) *K8s {
 
 var errSettingUpK8sCluster = errors.New("setting up k8s cluster")
 
+// Setup sets up the Kubernetes cluster for the local container registry.
+// It creates the namespace and sets the KUBECONFIG environment variable.
 func (k *K8s) Setup(ctx context.Context) error {
 	// 1. create the local-container-registry namespace
 	ns := corev1.Namespace{}
@@ -48,6 +52,8 @@ func (k *K8s) Setup(ctx context.Context) error {
 
 var errTearingDownK8sCluster = errors.New("tearing down k8s cluster")
 
+// Teardown tears down the Kubernetes cluster for the local container registry.
+// It deletes the namespace and sets the KUBECONFIG environment variable.
 func (k *K8s) Teardown(ctx context.Context) error {
 	ns := &corev1.Namespace{}
 	ns.Name = k.namespace
