@@ -66,6 +66,11 @@ func run() error {
 
 	// V. Build each container spec
 	for _, spec := range config.Build.Specs {
+		// Skip specs that don't have a container defined
+		if spec.Container.Name == "" {
+			continue
+		}
+
 		if err := buildContainer(envs, spec.Container, version, timestamp, &store); err != nil {
 			return flaterrors.Join(err, errBuildingContainers)
 		}
@@ -113,6 +118,14 @@ func buildContainer(
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
+	// Expand cache directory path (handle ~ for home directory)
+	cacheDir := expandPath(envs.KanikoCacheDir)
+
+	// Create cache directory if it doesn't exist
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
 	// Build image tags
 	imageBase := containerSpec.Name
 	imageWithVersion := fmt.Sprintf("%s:%s", imageBase, version)
@@ -123,10 +136,14 @@ func buildContainer(
 	args := []string{
 		"run", "-i",
 		"-v", fmt.Sprintf("%s:/workspace", wd),
+		"-v", fmt.Sprintf("%s:/cache", cacheDir),
 		"gcr.io/kaniko-project/executor:latest",
 		"-f", containerSpec.File,
 		"--context", "/workspace",
 		"--no-push",
+		"--cache=true",
+		"--cache-dir=/cache",
+		"--cache-repo=oci:/cache/repo",
 		"--tarPath", fmt.Sprintf("/workspace/.ignore.%s.tar", containerSpec.Name),
 	}
 
@@ -187,6 +204,16 @@ func buildContainer(
 	return nil
 }
 
+// expandPath expands a path with ~ to the user's home directory.
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			return strings.Replace(path, "~", homeDir, 1)
+		}
+	}
+	return path
+}
+
 var errGettingImageID = errors.New("getting image ID from tar")
 
 // getImageIDFromTar loads a tar and extracts the image ID.
@@ -227,6 +254,9 @@ type Envs struct {
 	ContainerEngine string `env:"CONTAINER_ENGINE,required"`
 	// BuildArgs is a list of build arguments to pass to the container build command.
 	BuildArgs []string `env:"BUILD_ARGS"`
+	// KanikoCacheDir is the local directory to use for kaniko layer caching.
+	// Defaults to ~/.kaniko-cache
+	KanikoCacheDir string `env:"KANIKO_CACHE_DIR" envDefault:"~/.kaniko-cache"`
 }
 
 // ----------------------------------------------------- PRINT HELPERS ----------------------------------------------- //
@@ -240,6 +270,7 @@ Required environment variables:
 
 Optional environment variables:
     BUILD_ARGS          []string  List of build args (e.g. "GO_BUILD_LDFLAGS=\"-X main.BuildTimestamp=$(TIMESTAMP)\"").
+    KANIKO_CACHE_DIR    string    Local directory for kaniko layer caching (default: ~/.kaniko-cache).
 
 Configuration:
     The tool reads container build specifications from .project.yaml
