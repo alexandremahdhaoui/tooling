@@ -39,11 +39,12 @@ GOTESTSUM      := go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION) --format pk
 MOCKERY        := go run github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
 OAPI_CODEGEN   := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
-BUILD_BINARY        := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" go run ./cmd/build-binary
-BUILD_CONTAINER     := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" BUILD_ARGS="GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS)" go run ./cmd/build-container
-KINDENV             := $(KINDENV_ENVS) go run ./cmd/kindenv
-OAPI_CODEGEN_HELPER := OAPI_CODEGEN="$(OAPI_CODEGEN)" go run ./cmd/oapi-codegen-helper
-TEST_GO             := GOTESTSUM="$(GOTESTSUM)" go run ./cmd/test-go
+BUILD_BINARY                := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" go run ./cmd/build-binary
+BUILD_CONTAINER             := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" BUILD_ARGS="GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS)" go run ./cmd/build-container
+KINDENV                     := $(KINDENV_ENVS) go run ./cmd/kindenv
+LOCAL_CONTAINER_REGISTRY    := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" PREPEND_CMD=sudo go run ./cmd/local-container-registry
+OAPI_CODEGEN_HELPER         := OAPI_CODEGEN="$(OAPI_CODEGEN)" go run ./cmd/oapi-codegen-helper
+TEST_GO                     := GOTESTSUM="$(GOTESTSUM)" go run ./cmd/test-go
 
 CLEAN_MOCKS := rm -rf ./internal/util/mocks
 
@@ -117,11 +118,13 @@ test-e2e:
 	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./cmd/e2e/main.sh
 
 .PHONY: test-setup
-test-setup:
+test-setup: build-container
 	$(KINDENV) setup
+	$(LOCAL_CONTAINER_REGISTRY)
 
 .PHONY: test-teardown
 test-teardown:
+	$(LOCAL_CONTAINER_REGISTRY) teardown
 	$(KINDENV) teardown
 
 .PHONY: test

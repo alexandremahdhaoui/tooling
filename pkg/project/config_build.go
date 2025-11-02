@@ -8,9 +8,9 @@ type BinarySpec struct {
 	Destination string `json:"destination"`
 	// Path to the source code that must be built
 	Source string `json:"source"` // e.g. ./cmd/<NAME>/main.go or ./cmd/<NAME>
-	// The url to an executable
-	// e.g. "github.com/alexandremahdhaoui/tooling/cmd/build-go"
-	// or just "build-go" if it's in github.com/alexandremahdhaoui/tooling
+	// The url to an executable.
+	// e.g. "go://github.com/alexandremahdhaoui/tooling/cmd/build-go"
+	// or just "go://build-go" if it's in github.com/alexandremahdhaoui/tooling
 	Builder string `json:"builder"`
 }
 
