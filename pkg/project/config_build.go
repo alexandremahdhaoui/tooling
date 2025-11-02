@@ -1,14 +1,14 @@
 package project
 
-// TODO: DISCLAIMER: this is not implemented yet
+// BinarySpec defines the configuration for building a binary.
 type BinarySpec struct {
 	// Name of the binary
 	Name string `json:"name"`
-	// The destination of the binary, default is ./build/bin
+	// The destination directory of the binary, default is ./build/bin
 	Destination string `json:"destination"`
-	// Path to the source code that must be built
-	Source string `json:"source"` // e.g. ./cmd/<NAME>/main.go or ./cmd/<NAME>
-	// The url to an executable.
+	// Path to the source code that must be built (e.g. ./cmd/<NAME>)
+	Source string `json:"source"`
+	// The url to an executable builder (reserved for future use).
 	// e.g. "go://github.com/alexandremahdhaoui/tooling/cmd/build-go"
 	// or just "go://build-go" if it's in github.com/alexandremahdhaoui/tooling
 	Builder string `json:"builder"`

@@ -6,6 +6,17 @@ build:
   artifactStorePath: .ignore.artifact-store.yaml
   # -- specs defines the list of artifacts to build.
   specs:
+    # Binaries
+    - binary:
+        name: kindenv
+        source: ./cmd/kindenv
+    - binary:
+        name: local-container-registry
+        source: ./cmd/local-container-registry
+    - binary:
+        name: test-go
+        source: ./cmd/test-go
+    # Containers
     - container:
         name: for-testing-purposes
         file: ./containers/for-testing-purposes/Containerfile
