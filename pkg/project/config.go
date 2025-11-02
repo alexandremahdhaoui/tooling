@@ -28,6 +28,9 @@ type Config struct {
 	LocalContainerRegistry LocalContainerRegistry `json:"localContainerRegistry"`
 	// OAPICodegenHelper holds the configuration for the oapi-codegen-helper tool.
 	OAPICodegenHelper OAPICodegenHelper `json:"oapiCodegenHelper"`
+
+	// Build holds the list of artifacts to build
+	Build Build `json:"build"`
 }
 
 var errReadingProjectConfig = errors.New("error reading project config")

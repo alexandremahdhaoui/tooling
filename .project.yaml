@@ -1,11 +1,23 @@
 name: tooling
 
+# -- build defines the artifacts to build and the artifact store location.
+build:
+  # -- artifactStorePath is the path to the artifact store yaml file.
+  artifactStorePath: .ignore.artifact-store.yaml
+  # -- specs defines the list of artifacts to build.
+  specs:
+    - container:
+        name: for-testing-purposes
+        file: ./containers/for-testing-purposes/Containerfile
+
 kindenv:
   kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
 
 # -- localContainerRegistry will create if enabled a container registry in the kindenv using the kubeconfig which path
 #    is defined by {.kindenv.kubeconfigPath}.
 localContainerRegistry:
+  # -- autoPushImages defines whether to automatically push images from artifact store on setup.
+  autoPushImages: true
   # -- enabled defines whether the local container registry must be created or not.
   enabled: true
   # -- creadentialPath defines the output file containing the container registry credentials.
@@ -16,3 +28,4 @@ localContainerRegistry:
   namespace: local-container-registry
 
 oapiCodegenHelper: {}
+

@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
@@ -12,6 +14,7 @@ import (
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -97,7 +100,12 @@ func (t *TLS) Setup(ctx context.Context) error {
 		return flaterrors.Join(err, errSettingUpTLS)
 	}
 
-	// 4. Pass the tls secret name to EventualConfig.
+	// 4. Export CA certificate to file
+	if err := t.exportCACert(ctx); err != nil {
+		return flaterrors.Join(err, errSettingUpTLS)
+	}
+
+	// 5. Pass the tls secret name to EventualConfig.
 	if err := errors.Join(
 		t.ec.SetValue(TLSSecretName, cert.Name),
 		t.ec.SetValue(TLSCACert, Mount{Dir: tlsMountDir, Filename: certmanagermetav1.TLSCAKey}),
@@ -116,6 +124,45 @@ func (t *TLS) ResourceName() string {
 }
 
 var errTearingDownTLS = errors.New("tearing down TLS")
+
+var errExportingCACert = errors.New("failed to export CA certificate")
+
+// exportCACert waits for the certificate to be ready and exports the CA cert to a file.
+func (t *TLS) exportCACert(ctx context.Context) error {
+	// Wait for the secret to be created and contain the CA cert
+	secret := &corev1.Secret{}
+	secretKey := client.ObjectKey{
+		Namespace: t.namespace,
+		Name:      t.ResourceName(),
+	}
+
+	// Retry for up to 60 seconds
+	var lastErr error
+	for i := 0; i < 60; i++ {
+		if err := t.client.Get(ctx, secretKey, secret); err != nil {
+			lastErr = err
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		// Check if CA cert exists in the secret
+		caCert, ok := secret.Data[certmanagermetav1.TLSCAKey]
+		if !ok || len(caCert) == 0 {
+			lastErr = errors.New("CA certificate not found in secret")
+			time.Sleep(1 * time.Second)
+			continue
+		}
+
+		// Write CA cert to file
+		if err := os.WriteFile(t.caCrtPath, caCert, 0o600); err != nil {
+			return flaterrors.Join(err, errExportingCACert)
+		}
+
+		return nil
+	}
+
+	return flaterrors.Join(lastErr, errExportingCACert)
+}
 
 // Teardown tears down TLS for the local container registry.
 // It deletes the cert-manager manifests.

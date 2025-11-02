@@ -1,6 +1,6 @@
 module github.com/alexandremahdhaoui/tooling
 
-go 1.22.5
+go 1.24.1
 
 require (
 	github.com/caarlos0/env/v11 v11.1.0

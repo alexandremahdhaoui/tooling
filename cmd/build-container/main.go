@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/tooling/pkg/project"
 	"github.com/caarlos0/env/v11"
 )
+
+const Name = "build-container"
 
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
@@ -26,47 +31,192 @@ func main() {
 
 // ----------------------------------------------------- RUN -------------------------------------------------------- //
 
+var errBuildingContainers = errors.New("building containers")
+
 // run executes the main logic of the build-container tool.
-// It reads environment variables, sets up the build environment, and runs the container build command.
+// It reads the project configuration, builds all defined containers, and writes artifacts to the artifact store.
 func run() error {
+	// I. Read environment variables
 	envs := Envs{} //nolint:exhaustruct // unmarshal
 
 	if err := env.Parse(&envs); err != nil {
 		printUsage()
-		return flaterrors.Join(err, errors.New("error reading environment variables"))
+		return flaterrors.Join(err, errBuildingContainers)
 	}
+
+	// II. Read project configuration
+	config, err := project.ReadConfig()
+	if err != nil {
+		return flaterrors.Join(err, errBuildingContainers)
+	}
+
+	// III. Read artifact store
+	store, err := project.ReadArtifactStore(config.Build.ArtifactStorePath)
+	if err != nil {
+		return flaterrors.Join(err, errBuildingContainers)
+	}
+
+	// IV. Get git version for artifacts
+	version, err := getGitVersion()
+	if err != nil {
+		return flaterrors.Join(err, errBuildingContainers)
+	}
+
+	timestamp := time.Now().UTC().Format(time.RFC3339)
+
+	// V. Build each container spec
+	for _, spec := range config.Build.Specs {
+		if err := buildContainer(envs, spec.Container, version, timestamp, &store); err != nil {
+			return flaterrors.Join(err, errBuildingContainers)
+		}
+	}
+
+	// VI. Write artifact store
+	if err := project.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
+		return flaterrors.Join(err, errBuildingContainers)
+	}
+
+	return nil
+}
+
+var errGettingGitVersion = errors.New("getting git version")
+
+// getGitVersion gets the current git commit hash to use as the artifact version.
+func getGitVersion() (string, error) {
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", flaterrors.Join(err, errGettingGitVersion)
+	}
+
+	version := strings.TrimSpace(string(output))
+	if version == "" {
+		return "", flaterrors.Join(errors.New("empty git version"), errGettingGitVersion)
+	}
+
+	return version, nil
+}
+
+var errBuildingContainer = errors.New("building container")
+
+// buildContainer builds a single container and adds it to the artifact store.
+func buildContainer(
+	envs Envs,
+	containerSpec project.ContainerSpec,
+	version, timestamp string,
+	store *project.ArtifactStore,
+) error {
+	_, _ = fmt.Fprintf(os.Stdout, "⏳ Building container: %s\n", containerSpec.Name)
 
 	wd, err := os.Getwd()
 	if err != nil {
-		return err
+		return flaterrors.Join(err, errBuildingContainer)
 	}
 
+	// Build image tags
+	imageBase := containerSpec.Name
+	imageWithVersion := fmt.Sprintf("%s:%s", imageBase, version)
+	imageLatest := fmt.Sprintf("%s:latest", imageBase)
+
+	// Prepare kaniko command
 	cmd := envs.ContainerEngine
 	args := []string{
 		"run", "-i",
 		"-v", fmt.Sprintf("%s:/workspace", wd),
 		"gcr.io/kaniko-project/executor:latest",
-		"-f", fmt.Sprintf("./containers/%s/Containerfile", envs.ContainerName),
+		"-f", containerSpec.File,
+		"--context", "/workspace",
+		"--no-push",
+		"--tarPath", fmt.Sprintf("/workspace/.ignore.%s.tar", containerSpec.Name),
 	}
 
+	// Add build args if provided
 	for _, buildArg := range envs.BuildArgs {
 		args = append(args, "--build-arg", buildArg)
 	}
 
-	switch len(envs.Destinations) {
-	default:
-		for _, dest := range envs.Destinations {
-			args = append(args, "-d", dest)
-		}
-	case 0:
-		args = append(args, "--no-push")
+	// Execute build
+	if err := util.RunCmdWithStdPipes(exec.Command(cmd, args...)); err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
 	}
 
-	if err := util.RunCmdWithStdPipes(exec.Command(cmd, args...)); err != nil {
-		return err
+	// Load the tar into the container engine
+	tarPath := fmt.Sprintf(".ignore.%s.tar", containerSpec.Name)
+	loadCmd := exec.Command(envs.ContainerEngine, "load", "-i", tarPath)
+	if err := util.RunCmdWithStdPipes(loadCmd); err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
 	}
+
+	// Tag with version and latest
+	// First, get the image ID from the tar
+	imageID, err := getImageIDFromTar(envs.ContainerEngine, tarPath)
+	if err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
+	// Tag with version
+	tagCmd := exec.Command(envs.ContainerEngine, "tag", imageID, imageWithVersion)
+	if err := util.RunCmdWithStdPipes(tagCmd); err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
+	// Tag with latest
+	tagLatestCmd := exec.Command(envs.ContainerEngine, "tag", imageID, imageLatest)
+	if err := util.RunCmdWithStdPipes(tagLatestCmd); err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
+	// Clean up tar file
+	if err := os.Remove(tarPath); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to remove tar file: %s\n", err)
+	}
+
+	// Add to artifact store
+	artifact := project.Artifact{
+		Name:      containerSpec.Name,
+		Type:      "container",
+		Location:  imageWithVersion, // Local image reference
+		Timestamp: timestamp,
+		Version:   version,
+	}
+
+	project.AddOrUpdateArtifact(store, artifact)
+
+	_, _ = fmt.Fprintf(os.Stdout, "✅ Built container: %s (version: %s)\n", containerSpec.Name, version)
 
 	return nil
+}
+
+var errGettingImageID = errors.New("getting image ID from tar")
+
+// getImageIDFromTar loads a tar and extracts the image ID.
+func getImageIDFromTar(containerEngine, tarPath string) (string, error) {
+	cmd := exec.Command(containerEngine, "load", "-i", tarPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", flaterrors.Join(err, errGettingImageID)
+	}
+
+	// Parse output like: "Loaded image ID: sha256:abc123..."
+	// or "Loaded image: <image>:latest"
+	outputStr := string(output)
+	lines := strings.Split(outputStr, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "Loaded image") {
+			// Extract image reference or ID
+			parts := strings.Split(line, ":")
+			if len(parts) >= 2 {
+				// Get everything after the first colon
+				imageRef := strings.TrimSpace(strings.Join(parts[1:], ":"))
+				return imageRef, nil
+			}
+		}
+	}
+
+	return "", flaterrors.Join(
+		errors.New("could not parse image ID from load output: "+outputStr),
+		errGettingImageID,
+	)
 }
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
@@ -75,43 +225,39 @@ func run() error {
 type Envs struct {
 	// ContainerEngine is the container engine to use for building the container (e.g., docker, podman).
 	ContainerEngine string `env:"CONTAINER_ENGINE,required"`
-	// ContainerName is the name of the container to build.
-	ContainerName string `env:"CONTAINER_NAME,required"`
 	// BuildArgs is a list of build arguments to pass to the container build command.
-	BuildArgs []string `env:"BUILD_ARGS,required"`
-	// Destinations is a list of destinations to push the container image to.
-	Destinations []string `env:"DESTINATIONS"`
+	BuildArgs []string `env:"BUILD_ARGS"`
 }
 
 // ----------------------------------------------------- PRINT HELPERS ----------------------------------------------- //
 
 const usage = `USAGE
 
-CONTAINER_ENGINE=%q CONTAINER_NAME=%q BUILD_ARGS=%q %s [BINARY_NAME]
+CONTAINER_ENGINE=%q %s
 
 Required environment variables:
-    CONTAINER_ENGINE    string			Container engine such as podman or docker.
-    CONTAINER_NAME      string      Name of the container to build.
-    BUILD_ARGS          []string		List of build args (e.g. "GO_BUILD_LDFLAGS=\"-X main.BuildTimestamp=$(TIMESTAMP)\"").
+    CONTAINER_ENGINE    string    Container engine such as podman or docker.
 
 Optional environment variables:
-    DESTINATIONS        []string		List of destinations (e.g. "docker.io/alexandremahdhaoui/test:latest").
+    BUILD_ARGS          []string  List of build args (e.g. "GO_BUILD_LDFLAGS=\"-X main.BuildTimestamp=$(TIMESTAMP)\"").
+
+Configuration:
+    The tool reads container build specifications from .project.yaml
+    Artifacts are written to the path specified in build.artifactStorePath
 `
 
 func printUsage() {
 	fmt.Printf(
 		usage,
 		os.Getenv("CONTAINER_ENGINE"),
-		os.Getenv("CONTAINER_NAME"),
-		os.Getenv("BUILD_ARGS"),
 		os.Args[0],
 	)
 }
 
 func printSuccess() {
-	fmt.Printf("✅ Container built successfully\n")
+	fmt.Printf("✅ All containers built successfully\n")
 }
 
 func printFailure(err error) {
-	fmt.Printf("❌ Error building container\n%s\n", err.Error())
+	fmt.Printf("❌ Error building containers\n%s\n", err.Error())
 }

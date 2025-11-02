@@ -1,4 +1,4 @@
-FROM docker.io/golang:1.23 as downloader
+FROM docker.io/golang:1.24 as downloader
 
 WORKDIR /workdir
 COPY ./go.* ./
@@ -12,9 +12,10 @@ ARG INPUT_CMD="./cmd/${NAME}"
 ARG OUTPUT_BIN="/bin/${NAME}"
 WORKDIR /workdir
 COPY . ./
-RUN CG0_ENABLED=0 \
+RUN CGO_ENABLED=0 \
     GOOS=linux \
     go build \
+      -buildvcs=false \
       -ldflags "${GO_BUILD_LDFLAGS}" \
       -o "${OUTPUT_BIN}" \
       "${INPUT_CMD}"

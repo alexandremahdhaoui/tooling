@@ -133,7 +133,7 @@ var errHashingCredentials = errors.New("failed to hash credentials")
 func (c *Credential) hashCredentials() ([]byte, error) {
 	cmd := exec.Command(
 		c.containerEngineExecutable,
-		"run", "--rm", "-i", "-t",
+		"run", "--rm",
 		"--entrypoint", "htpasswd",
 		htpasswdContainerImage,
 		"-Bbn",

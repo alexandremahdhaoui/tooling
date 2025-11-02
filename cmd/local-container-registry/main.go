@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/caarlos0/env/v11"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
@@ -14,6 +15,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/alexandremahdhaoui/tooling/internal/util"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 	"github.com/alexandremahdhaoui/tooling/pkg/project"
 )
@@ -28,6 +30,8 @@ const (
 type Envs struct {
 	// ContainerEngineExecutable is the path to the container engine executable (e.g., docker, podman).
 	ContainerEngineExecutable string `env:"CONTAINER_ENGINE"`
+	// PrependCmd is an optional command to prepend to privileged operations (e.g., "sudo").
+	PrependCmd string `env:"PREPEND_CMD"`
 }
 
 var errReadingEnvVars = errors.New("reading environment variables")
@@ -46,16 +50,38 @@ func readEnvs() (Envs, error) {
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
-	// teardown
-	if len(os.Args) > 1 && os.Args[1] == "teardown" {
-		if err := teardown(); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "❌ %s\n", err.Error())
-			os.Exit(1)
-		}
+	// Command parsing
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "teardown":
+			if err := teardown(); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "❌ %s\n", err.Error())
+				os.Exit(1)
+			}
+			os.Exit(0)
 
-		os.Exit(0)
+		case "push":
+			if len(os.Args) < 3 {
+				_, _ = fmt.Fprintf(os.Stderr, "❌ Error: push command requires an image name\n")
+				_, _ = fmt.Fprintf(os.Stderr, "Usage: %s push <image-name>\n", os.Args[0])
+				os.Exit(1)
+			}
+			if err := push(os.Args[2]); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "❌ %s\n", err.Error())
+				os.Exit(1)
+			}
+			os.Exit(0)
+
+		case "push-all":
+			if err := pushAll(); err != nil {
+				_, _ = fmt.Fprintf(os.Stderr, "❌ %s\n", err.Error())
+				os.Exit(1)
+			}
+			os.Exit(0)
+		}
 	}
 
+	// Default: setup
 	if err := setup(); err != nil {
 		_, _ = fmt.Fprintf(os.Stderr, "❌ %s\n", err.Error())
 
@@ -141,7 +167,32 @@ func setup() error {
 		return flaterrors.Join(err, errSettingLocalContainerRegistry)
 	}
 
-	// How to make required images available in the container registry?
+	// VIII. Add /etc/hosts entry
+	if err := addHostsEntry(containerRegistry.FQDN(), envs.PrependCmd); err != nil {
+		return flaterrors.Join(err, errSettingLocalContainerRegistry)
+	}
+
+	// IX. Wait for registry deployment to be ready before auto-pushing
+	if config.LocalContainerRegistry.AutoPushImages && len(config.Build.Specs) > 0 {
+		_, _ = fmt.Fprintln(os.Stdout, "⏳ Waiting for registry to be ready")
+		waitCmd := exec.Command(
+			"kubectl",
+			"wait",
+			"--for=condition=available",
+			"--timeout=60s",
+			"-n", config.LocalContainerRegistry.Namespace,
+			"deployment/"+Name,
+		)
+		waitCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", config.Kindenv.KubeconfigPath))
+		if err := util.RunCmdWithStdPipes(waitCmd); err != nil {
+			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Warning: registry deployment not ready: %s\n", err.Error())
+		} else {
+			if err := pushImagesFromArtifactStore(ctx, config, envs); err != nil {
+				// Log warning but don't fail setup if push fails
+				_, _ = fmt.Fprintf(os.Stderr, "⚠️  Warning: failed to auto-push images: %s\n", err.Error())
+			}
+		}
+	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "✅ Successfully set up "+Name)
 
@@ -163,6 +214,11 @@ func teardown() error {
 		return flaterrors.Join(err, errTearingDownLocalContainerRegistry)
 	}
 
+	envs, err := readEnvs()
+	if err != nil {
+		return flaterrors.Join(err, errTearingDownLocalContainerRegistry)
+	}
+
 	// II. Create client.
 	cl, err := createKubeClient(config)
 	if err != nil {
@@ -179,19 +235,64 @@ func teardown() error {
 		config.LocalContainerRegistry.Namespace,
 		containerRegistry.FQDN(), nil)
 
-	// III. Tear down K8s
+	// IV. Tear down K8s
 	if err := k8s.Teardown(ctx); err != nil {
 		return flaterrors.Join(err, errTearingDownLocalContainerRegistry)
 	}
 
-	// IV. Tear down TLS
+	// V. Tear down TLS
 	if err := tls.Teardown(); err != nil {
+		return flaterrors.Join(err, errTearingDownLocalContainerRegistry)
+	}
+
+	// VI. Remove /etc/hosts entry
+	if err := removeHostsEntry(containerRegistry.FQDN(), envs.PrependCmd); err != nil {
 		return flaterrors.Join(err, errTearingDownLocalContainerRegistry)
 	}
 
 	_, _ = fmt.Fprintln(os.Stdout, "✅ Torn down "+Name+" successfully")
 
 	return nil
+}
+
+var errPushingImage = errors.New("error received while pushing image to " + Name)
+
+// push executes the main logic of the `local-container-registry push <image>` command.
+// It pushes a single image to the local container registry.
+func push(imageName string) error {
+	ctx := context.Background()
+
+	config, err := project.ReadConfig()
+	if err != nil {
+		return flaterrors.Join(err, errPushingImage)
+	}
+
+	envs, err := readEnvs()
+	if err != nil {
+		return flaterrors.Join(err, errPushingImage)
+	}
+
+	return pushSingleImage(ctx, config, envs, imageName)
+}
+
+var errPushingAllImages = errors.New("error received while pushing all images to " + Name)
+
+// pushAll executes the main logic of the `local-container-registry push-all` command.
+// It pushes all container images defined in the project configuration from the artifact store.
+func pushAll() error {
+	ctx := context.Background()
+
+	config, err := project.ReadConfig()
+	if err != nil {
+		return flaterrors.Join(err, errPushingAllImages)
+	}
+
+	envs, err := readEnvs()
+	if err != nil {
+		return flaterrors.Join(err, errPushingAllImages)
+	}
+
+	return pushImagesFromArtifactStore(ctx, config, envs)
 }
 
 var errCreatingKubernetesClient = errors.New("creating kubernetes client")
