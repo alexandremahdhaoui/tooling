@@ -227,7 +227,7 @@ func pushImagesFromArtifactStore(ctx context.Context, config forge.Spec, envs En
 
 	return withRegistryAccess(ctx, config, envs, func(registryFQDNWithPort string) error {
 		// I. Read artifact store
-		store, err := forge.ReadArtifactStore(config.Build.ArtifactStorePath)
+		store, err := forge.ReadOrCreateArtifactStore(config.ArtifactStorePath)
 		if err != nil {
 			return flaterrors.Join(err, errPushingImages)
 		}

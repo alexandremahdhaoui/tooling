@@ -45,8 +45,8 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-	case "integration":
-		if err := runIntegration(os.Args[2:]); err != nil {
+	case "test":
+		if err := runTest(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -65,16 +65,19 @@ func printUsage() {
 	fmt.Println(`forge - A build orchestration tool
 
 Usage:
-  forge build [artifact-name]    Build artifacts from forge.yaml
-  forge integration <command>    Manage integration environments
-  forge version                  Show version information
+  forge build [artifact-name]         Build artifacts from forge.yaml
+  forge test <stage> <operation>      Manage test environments
+  forge version                       Show version information
 
 Commands:
-  build                         Build all artifacts
-  integration create [name]     Create integration environment
-  integration list              List integration environments
-  integration get <id>          Get environment details
-  integration delete <id>       Delete integration environment
-  version                       Show version information
-  help                          Show this help message`)
+  build                              Build all artifacts
+
+  test <stage> create                Create test environment for stage
+  test <stage> get <id>              Get test environment details
+  test <stage> delete <id>           Delete test environment
+  test <stage> list                  List test environments for stage
+  test <stage> run [test-id]         Run tests for stage
+
+  version                            Show version information
+  help                               Show this help message`)
 }

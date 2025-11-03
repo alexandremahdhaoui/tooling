@@ -16,13 +16,6 @@ type BuildInput struct {
 	ArtifactName string `json:"artifactName,omitempty"` // Alternative to Name
 }
 
-// IntegrationInput represents the input for integration commands.
-type IntegrationInput struct {
-	Command string `json:"command"` // create, list, get, delete
-	Name    string `json:"name,omitempty"`
-	ID      string `json:"id,omitempty"`
-}
-
 // runMCPServer starts the forge MCP server with stdio transport.
 func runMCPServer() error {
 	v, _, _ := versionInfo.Get()
@@ -33,12 +26,6 @@ func runMCPServer() error {
 		Name:        "build",
 		Description: "Build artifacts from forge.yaml configuration",
 	}, handleBuildTool)
-
-	// Register integration tool
-	mcpserver.RegisterTool(server, &mcp.Tool{
-		Name:        "integration",
-		Description: "Manage integration environments (create, list, get, delete)",
-	}, handleIntegrationTool)
 
 	// Run the MCP server
 	return server.RunDefault()
@@ -69,7 +56,7 @@ func handleBuildTool(
 	}
 
 	// Read artifact store
-	store, err := forge.ReadArtifactStore(config.Build.ArtifactStorePath)
+	store, err := forge.ReadArtifactStore(config.ArtifactStorePath)
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
@@ -150,7 +137,7 @@ func handleBuildTool(
 	}
 
 	// Write updated artifact store
-	if err := forge.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
+	if err := forge.WriteArtifactStore(config.ArtifactStorePath, store); err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: fmt.Sprintf("Warning: could not write artifact store: %v", err)},
@@ -171,39 +158,6 @@ func handleBuildTool(
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
 			&mcp.TextContent{Text: fmt.Sprintf("Successfully built %d artifact(s)", totalBuilt)},
-		},
-	}, nil, nil
-}
-
-// handleIntegrationTool handles the "integration" tool call from MCP clients.
-func handleIntegrationTool(
-	ctx context.Context,
-	req *mcp.CallToolRequest,
-	input IntegrationInput,
-) (*mcp.CallToolResult, any, error) {
-	log.Printf("Integration command: %s", input.Command)
-
-	// Build args for runIntegration
-	args := []string{input.Command}
-	if input.Name != "" {
-		args = append(args, input.Name)
-	} else if input.ID != "" {
-		args = append(args, input.ID)
-	}
-
-	// Run integration command
-	if err := runIntegration(args); err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Integration command failed: %v", err)},
-			},
-			IsError: true,
-		}, nil, nil
-	}
-
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Integration command '%s' completed successfully", input.Command)},
 		},
 	}, nil, nil
 }

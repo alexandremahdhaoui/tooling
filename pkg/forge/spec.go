@@ -20,6 +20,10 @@ type Spec struct {
 	// Name is the name of the project.
 	Name string `json:"name"`
 
+	// Path to the artifact store. The artifact store is a yaml data structures that
+	// tracks the name, timestamp etc of all built artifacts
+	ArtifactStorePath string `json:"artifactStorePath"`
+
 	// Kindenv holds the configuration for the kindenv tool.
 	Kindenv Kindenv `json:"kindenv"`
 	// LocalContainerRegistry holds the configuration for the local-container-registry tool.
@@ -27,8 +31,11 @@ type Spec struct {
 	// OAPICodegenHelper holds the configuration for the oapi-codegen-helper tool.
 	OAPICodegenHelper OAPICodegenHelper `json:"oapiCodegenHelper"`
 
-	// Build holds the list of artifacts to build
+	// Build holds the build configuration
 	Build Build `json:"build"`
+
+	// Test holds the test stage configurations
+	Test []TestSpec `json:"test"`
 }
 
 var errReadingProjectConfig = errors.New("error reading project config")

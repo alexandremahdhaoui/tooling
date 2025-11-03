@@ -191,5 +191,7 @@ func AllEngines(repoRoot string) []Engine {
 		{Name: "local-container-registry", BinaryPath: filepath.Join(buildBin, "local-container-registry"), SupportsMCP: false},
 		{Name: "test-go", BinaryPath: filepath.Join(buildBin, "test-go"), SupportsMCP: false},
 		{Name: "oapi-codegen-helper", BinaryPath: filepath.Join(buildBin, "oapi-codegen-helper"), SupportsMCP: false},
+		{Name: "test-runner-go", BinaryPath: filepath.Join(buildBin, "test-runner-go"), SupportsMCP: true},
+		{Name: "test-integration", BinaryPath: filepath.Join(buildBin, "test-integration"), SupportsMCP: true},
 	}
 }

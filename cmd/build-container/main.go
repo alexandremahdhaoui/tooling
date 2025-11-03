@@ -90,7 +90,7 @@ func run() error {
 	}
 
 	// III. Read artifact store
-	store, err := forge.ReadArtifactStore(config.Build.ArtifactStorePath)
+	store, err := forge.ReadOrCreateArtifactStore(config.ArtifactStorePath)
 	if err != nil {
 		return flaterrors.Join(err, errBuildingContainers)
 	}
@@ -116,7 +116,7 @@ func run() error {
 	}
 
 	// VI. Write artifact store
-	if err := forge.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
+	if err := forge.WriteArtifactStore(config.ArtifactStorePath, store); err != nil {
 		return flaterrors.Join(err, errBuildingContainers)
 	}
 

@@ -111,10 +111,6 @@ test-unit:
 test-integration:
 	TEST_TAG=integration $(TEST_GO)
 
-.PHONY: test-functional
-test-functional:
-	TEST_TAG=functional $(TEST_GO)
-
 .PHONY: test-e2e
 test-e2e:
 	echo "DISCLAIMER: this is still a work in progress"

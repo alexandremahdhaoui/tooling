@@ -63,8 +63,8 @@ func TestEnginesList(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	engines := enginetest.AllEngines(repoRoot)
 
-	if len(engines) != 7 {
-		t.Errorf("Expected 7 engines, got %d", len(engines))
+	if len(engines) != 9 {
+		t.Errorf("Expected 9 engines, got %d", len(engines))
 	}
 
 	expectedEngines := map[string]bool{
@@ -75,6 +75,8 @@ func TestEnginesList(t *testing.T) {
 		"local-container-registry": true,
 		"test-go":                  true,
 		"oapi-codegen-helper":      true,
+		"test-runner-go":           true,
+		"test-integration":         true,
 	}
 
 	for _, engine := range engines {
@@ -97,9 +99,11 @@ func TestMCPEnginesConfiguration(t *testing.T) {
 
 	// Verify which engines should support MCP
 	expectedMCPEngines := map[string]bool{
-		"forge":           true,
-		"build-go":        true,
-		"build-container": true,
+		"forge":            true,
+		"build-go":         true,
+		"build-container":  true,
+		"test-runner-go":   true,
+		"test-integration": true,
 	}
 
 	for _, engine := range engines {

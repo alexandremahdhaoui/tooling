@@ -15,7 +15,7 @@ func runBuild(args []string) error {
 	}
 
 	// Read artifact store
-	store, err := forge.ReadArtifactStore(config.Build.ArtifactStorePath)
+	store, err := forge.ReadOrCreateArtifactStore(config.ArtifactStorePath)
 	if err != nil {
 		return fmt.Errorf("failed to read artifact store: %w", err)
 	}
@@ -94,7 +94,7 @@ func runBuild(args []string) error {
 	}
 
 	// Write updated artifact store
-	if err := forge.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
+	if err := forge.WriteArtifactStore(config.ArtifactStorePath, store); err != nil {
 		return fmt.Errorf("failed to write artifact store: %w", err)
 	}
 

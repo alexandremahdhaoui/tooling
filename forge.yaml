@@ -1,9 +1,22 @@
 name: forge
 
-# -- build defines the artifacts to build and the artifact store location.
+# -- artifactStorePath is the path to the unified artifact store (moved to root level)
+artifactStorePath: .ignore.artifact-store.yaml
+
+# -- test defines the test stages and their configuration
+test:
+  # -- unit tests - no environment management needed
+  - name: unit
+    engine: "noop"
+    runner: "go://test-runner-go"
+
+  # -- integration tests - creates isolated test environments
+  - name: integration
+    engine: "go://test-integration"
+    runner: "go://test-runner-go"
+
+# -- build defines the artifacts to build
 build:
-  # -- artifactStorePath is the path to the artifact store yaml file.
-  artifactStorePath: .ignore.artifact-store.yaml
   # -- specs defines the list of artifacts to build using the BuildSpec format.
   specs:
     # Binaries
@@ -29,6 +42,14 @@ build:
       builder: go://build-go
     - name: test-go
       src: ./cmd/test-go
+      dest: ./build/bin
+      builder: go://build-go
+    - name: test-runner-go
+      src: ./cmd/test-runner-go
+      dest: ./build/bin
+      builder: go://build-go
+    - name: test-integration
+      src: ./cmd/test-integration
       dest: ./build/bin
       builder: go://build-go
     # Containers
