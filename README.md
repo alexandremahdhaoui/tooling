@@ -46,7 +46,10 @@ if [ -z "$GOBIN_PATH" ]; then
 fi
 export PATH="$GOBIN_PATH:$PATH"
 
-# 2. Create forge.yaml (or use existing)
+# 2. Verify installation
+forge version
+
+# 3. Create forge.yaml (or use existing)
 cat > forge.yaml <<EOF
 name: my-project
 
@@ -69,13 +72,13 @@ localContainerRegistry:
   namespace: local-container-registry
 EOF
 
-# 3. Build all artifacts
+# 4. Build all artifacts
 forge build
 
-# 4. Create integration environment
+# 5. Create integration environment
 forge integration create dev
 
-# 5. Use the environment
+# 6. Use the environment
 export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
 kubectl get nodes
 ```

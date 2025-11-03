@@ -32,9 +32,37 @@ export PATH="$GOBIN_PATH:$PATH"
 
 # Verify installation
 forge --help
+
+# Check version
+forge version
 ```
 
 **Note:** Add the PATH export to your `~/.bashrc`, `~/.zshrc`, or equivalent shell profile to make it permanent.
+
+### Version Information
+
+Check the installed version of forge:
+
+```bash
+forge version
+# Or use short flags
+forge --version
+forge -v
+```
+
+**Output example:**
+```
+forge version v0.2.1
+  commit:    f42cc14
+  built:     2025-11-03T19:30:40Z
+  go:        go1.24.1
+  platform:  linux/amd64
+```
+
+**Version Sources:**
+- **When installed via `go install`**: Version info comes automatically from Go's build system (module version, VCS commit, build time)
+- **When built with forge or make**: Version info comes from git tags and ldflags (`-X main.Version=...`)
+- **Development builds**: Shows "dev" for version with available build info
 
 ### Basic Build
 
