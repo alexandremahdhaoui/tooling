@@ -1,4 +1,4 @@
-module github.com/alexandremahdhaoui/tooling
+module github.com/alexandremahdhaoui/forge
 
 go 1.24.1
 

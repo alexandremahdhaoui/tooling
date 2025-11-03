@@ -28,7 +28,7 @@ func TestParseEngine(t *testing.T) {
 		},
 		{
 			name:           "full path",
-			engineURI:      "go://github.com/alexandremahdhaoui/tooling/cmd/build-go",
+			engineURI:      "go://github.com/alexandremahdhaoui/forge/cmd/build-go",
 			wantType:       "mcp",
 			wantBinaryPath: "build-go",
 			wantErr:        false,

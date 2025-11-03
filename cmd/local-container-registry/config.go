@@ -3,7 +3,7 @@ package main
 import (
 	"path/filepath"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
+	"github.com/alexandremahdhaoui/forge/pkg/eventualconfig"
 )
 
 const (

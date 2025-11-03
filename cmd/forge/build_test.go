@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 // TestBuildIntegration tests the forge build command end-to-end

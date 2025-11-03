@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 

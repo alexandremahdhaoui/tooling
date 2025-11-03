@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/alexandremahdhaoui/tooling/internal/util"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"sigs.k8s.io/yaml"
 )
 

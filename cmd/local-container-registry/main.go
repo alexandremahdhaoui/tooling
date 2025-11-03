@@ -15,9 +15,9 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	"github.com/alexandremahdhaoui/tooling/internal/util"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 const (

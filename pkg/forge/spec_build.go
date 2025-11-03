@@ -12,8 +12,8 @@ type BuildSpec struct {
 	// - can be left empty for container images
 	Dest string `json:"dest,omitempty"`
 	// Engine that will build this artifact, e.g.:
-	// - go://build-container (go://github.com/alexandremahdhaoui/tooling/cmd/build-container)
-	// - go://build-go        (go://github.com/alexandremahdhaoui/tooling/cmd/build-go)
+	// - go://build-container (go://github.com/alexandremahdhaoui/forge/cmd/build-container)
+	// - go://build-go        (go://github.com/alexandremahdhaoui/forge/cmd/build-go)
 	Engine string `json:"builder"`
 }
 

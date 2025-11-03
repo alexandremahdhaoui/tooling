@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 // TestIntegrationLifecycle tests the complete lifecycle: create, list, get, delete

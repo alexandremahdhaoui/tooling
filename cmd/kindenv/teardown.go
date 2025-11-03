@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/alexandremahdhaoui/tooling/internal/util"
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 // ----------------------------------------------------- TEARDOWN --------------------------------------------------- //

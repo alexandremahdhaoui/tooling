@@ -1,0 +1,2 @@
+- Allow specifying prepend cmd and container engine as flags ?
+- Run go get -u

@@ -274,13 +274,18 @@ go://<binary-name>
 
 ### Engine Resolution
 
-When forge encounters an engine URI like `go://build-go`:
+When forge encounters an engine URI like `go://build-go@v1.0.0`:
 
-1. **Binary Name:** Extracts `build-go` from URI
-2. **Binary Location:** Looks for `./build/bin/build-go` binary
-3. **Fallback:** If not found, uses `go run ./cmd/build-go`
-4. **MCP Mode:** Invokes with `--mcp` flag
-5. **Communication:** Uses stdio JSON-RPC 2.0 protocol
+1. **URI Parsing:** Extracts engine name and version from `go://<name>[@<version>]`
+2. **Short Name Expansion:** Expands short names to full paths
+   - `go://build-go@v1.0.0` → `github.com/alexandremahdhaoui/forge/cmd/build-go@v1.0.0`
+   - `go://build-container` → `github.com/alexandremahdhaoui/forge/cmd/build-container@latest`
+3. **Binary Check:** Looks for binary in PATH (from previous `go install`)
+4. **Auto-Install:** If not found, runs `go install <full-path@version>`
+5. **MCP Mode:** Invokes with `--mcp` flag
+6. **Communication:** Uses stdio JSON-RPC 2.0 protocol
+
+**Note:** Engines are automatically installed on first use. No manual installation required.
 
 ### Available Engines
 
@@ -772,14 +777,21 @@ If migrating from `.project.yaml`:
 **Problem:** Forge cannot find the specified engine binary.
 
 **Solution:**
-```bash
-# Build engines first
-go build -o ./build/bin/build-go ./cmd/build-go
-go build -o ./build/bin/build-container ./cmd/build-container
 
-# Or let forge use go run (slower)
+Engines are automatically installed on first use. If you still encounter issues:
+```bash
+# Ensure GOBIN is in your PATH
+GOBIN_PATH=$(go env GOBIN)
+if [ -z "$GOBIN_PATH" ]; then
+  GOBIN_PATH=$(go env GOPATH)/bin
+fi
+export PATH="$GOBIN_PATH:$PATH"
+
+# Run forge build again
 forge build
 ```
+
+**Note:** Forge automatically runs `go install` for missing engines.
 
 ### Artifact Store Errors
 

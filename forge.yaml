@@ -1,4 +1,4 @@
-name: tooling
+name: forge
 
 # -- build defines the artifacts to build and the artifact store location.
 build:

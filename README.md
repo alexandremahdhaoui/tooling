@@ -35,7 +35,18 @@ All tools are configured via a central `forge.yaml` file, allowing for consisten
 ## Quick Start
 
 ```bash
-# 1. Create forge.yaml (or use existing)
+# 1. Install forge
+go install github.com/alexandremahdhaoui/forge/cmd/forge@latest
+
+# Add Go bin directory to PATH (if not already)
+# This checks go env GOBIN first, then falls back to GOPATH/bin
+GOBIN_PATH=$(go env GOBIN)
+if [ -z "$GOBIN_PATH" ]; then
+  GOBIN_PATH=$(go env GOPATH)/bin
+fi
+export PATH="$GOBIN_PATH:$PATH"
+
+# 2. Create forge.yaml (or use existing)
 cat > forge.yaml <<EOF
 name: my-project
 
@@ -58,13 +69,13 @@ localContainerRegistry:
   namespace: local-container-registry
 EOF
 
-# 2. Build all artifacts
-go run ./cmd/forge build
+# 3. Build all artifacts
+forge build
 
-# 3. Create integration environment
-go run ./cmd/forge integration create dev
+# 4. Create integration environment
+forge integration create dev
 
-# 4. Use the environment
+# 5. Use the environment
 export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
 kubectl get nodes
 ```
@@ -257,8 +268,8 @@ This tool manages a local Kubernetes cluster using Kind.
 **Example:**
 
 ```sh
-go run github.com/alexandremahdhaoui/tooling/cmd/kindenv setup
-go run github.com/alexandremahdhaoui/tooling/cmd/kindenv teardown
+go run github.com/alexandremahdhaoui/forge/cmd/kindenv setup
+go run github.com/alexandremahdhaoui/forge/cmd/kindenv teardown
 ```
 
 ### `local-container-registry`
@@ -273,8 +284,8 @@ This tool sets up a local container registry in the Kind cluster.
 **Example:**
 
 ```sh
-go run github.com/alexandremahdhaoui/tooling/cmd/local-container-registry setup
-go run github.com/alexandremahdhaoui/tooling/cmd/local-container-registry teardown
+go run github.com/alexandremahdhaoui/forge/cmd/local-container-registry setup
+go run github.com/alexandremahdhaoui/forge/cmd/local-container-registry teardown
 ```
 
 ### `oapi-codegen-helper`
@@ -288,7 +299,7 @@ This tool generates Go code from OpenAPI specifications.
 **Example:**
 
 ```sh
-OAPI_CODEGEN="go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen" go run github.com/alexandremahdhaoui/tooling/cmd/oapi-codegen-helper
+OAPI_CODEGEN="go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen" go run github.com/alexandremahdhaoui/forge/cmd/oapi-codegen-helper
 ```
 
 ### `test-go`
@@ -303,7 +314,7 @@ This tool runs Go tests using `gotestsum`.
 **Example:**
 
 ```sh
-TEST_TAG="unit" GOTESTSUM="go run gotest.tools/gotestsum" go run github.com/alexandremahdhaoui/tooling/cmd/test-go
+TEST_TAG="unit" GOTESTSUM="go run gotest.tools/gotestsum" go run github.com/alexandremahdhaoui/forge/cmd/test-go
 ```
 
 ## Examples
@@ -389,7 +400,7 @@ GOTESTSUM           := go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION) --form
 MOCKERY             := go run github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
 OAPI_CODEGEN        := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
-TOOLING := go run github.com/alexandremahdhaoui/tooling/cmd
+TOOLING := go run github.com/alexandremahdhaoui/forge/cmd
 
 BUILD_BINARY        := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" $(TOOLING)/build-binary@$(TOOLING_VERSION)
 BUILD_CONTAINER     := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" BUILD_ARGS="GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS)" $(TOOLING)/build-container@$(TOOLING_VERSION)
@@ -532,17 +543,29 @@ pre-push: generate fmt lint test
 
 ## Contributing
 
-1. **Install pre-push hooks:**
+1. **Install forge:**
+   ```bash
+   go install github.com/alexandremahdhaoui/forge/cmd/forge@latest
+
+   # Add to PATH (add to ~/.bashrc or ~/.zshrc for persistence)
+   GOBIN_PATH=$(go env GOBIN)
+   if [ -z "$GOBIN_PATH" ]; then
+     GOBIN_PATH=$(go env GOPATH)/bin
+   fi
+   export PATH="$GOBIN_PATH:$PATH"
+   ```
+
+2. **Install pre-push hooks:**
    ```bash
    make githooks
    ```
 
-2. **Run pre-push validation:**
+3. **Run pre-push validation:**
    ```bash
    make pre-push
    ```
 
-3. **Build with forge:**
+4. **Build with forge:**
    ```bash
    forge build
    ```

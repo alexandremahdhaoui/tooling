@@ -980,13 +980,27 @@ func executeBuild(args BuildSpec) error {
 
 ### Integration with Makefile
 
+**Installation:**
+
+```bash
+# Install forge (engines are auto-installed on first use)
+go install github.com/alexandremahdhaoui/forge/cmd/forge@latest
+
+# Add to PATH
+GOBIN_PATH=$(go env GOBIN)
+if [ -z "$GOBIN_PATH" ]; then
+  GOBIN_PATH=$(go env GOPATH)/bin
+fi
+export PATH="$GOBIN_PATH:$PATH"
+```
+
 **Makefile Variables:**
 
 ```makefile
 FORGE := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" \
          $(KINDENV_ENVS) \
          CONTAINER_ENGINE="$(CONTAINER_ENGINE)" \
-         go run ./cmd/forge
+         forge
 
 BUILD_GO := $(FORGE) build
 BUILD_CONTAINER := $(FORGE) build
@@ -1063,8 +1077,10 @@ func TestBuildIntegration(t *testing.T) {
 # Build containers using forge
 CONTAINER_ENGINE="${CONTAINER_ENGINE}" \
 GO_BUILD_LDFLAGS="${GO_BUILD_LDFLAGS:-}" \
-go run ./cmd/forge build
+forge build
 ```
+
+**Note:** E2E tests use `go run ./cmd/forge` in the actual test script to ensure they test the current source code, not an installed version.
 
 ### Data Structures
 

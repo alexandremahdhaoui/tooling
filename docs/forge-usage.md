@@ -17,17 +17,24 @@ This guide provides practical examples and workflows for using the forge CLI too
 
 ### Installation
 
-Forge can be run directly using Go:
+Install forge using `go install`:
 
 ```bash
-# Run forge from source
-go run ./cmd/forge <command>
+# Install forge
+go install github.com/alexandremahdhaoui/forge/cmd/forge@latest
 
-# Or build and install
-go build -o ./build/bin/forge ./cmd/forge
-export PATH=$PATH:$(pwd)/build/bin
-forge <command>
+# Add Go bin directory to PATH (if not already in your shell profile)
+GOBIN_PATH=$(go env GOBIN)
+if [ -z "$GOBIN_PATH" ]; then
+  GOBIN_PATH=$(go env GOPATH)/bin
+fi
+export PATH="$GOBIN_PATH:$PATH"
+
+# Verify installation
+forge --help
 ```
+
+**Note:** Add the PATH export to your `~/.bashrc`, `~/.zshrc`, or equivalent shell profile to make it permanent.
 
 ### Basic Build
 
@@ -574,15 +581,14 @@ forge integration list --output=json | jq .
 **Problem:** Forge cannot locate the build engine binary.
 
 **Solution:**
-```bash
-# Option 1: Build engines first
-go build -o ./build/bin/build-go ./cmd/build-go
-go build -o ./build/bin/build-container ./cmd/build-container
 
-# Option 2: Let forge use go run (automatically)
-# This is slower but works without pre-building
+Forge automatically installs missing engines. If you encounter this error:
+```bash
+# Forge will automatically install missing engines on first use
 forge build
 ```
+
+**Note:** Engines are automatically installed from the forge repository when needed. No manual installation is required.
 
 #### "go build failed"
 

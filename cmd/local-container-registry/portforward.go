@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 var errPortForwarding = errors.New("port forwarding")

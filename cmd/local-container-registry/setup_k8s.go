@@ -5,7 +5,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

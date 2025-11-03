@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 )
 
 // Key defines a type for keys used in the EventualConfig.

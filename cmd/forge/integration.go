@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 const integrationEnvStorePath = ".ignore.integration-envs.yaml"

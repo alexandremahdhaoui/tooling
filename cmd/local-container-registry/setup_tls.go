@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/eventualconfig"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 	certmanagermetav1 "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 
-	"github.com/alexandremahdhaoui/tooling/internal/util"
+	"github.com/alexandremahdhaoui/forge/internal/util"
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"

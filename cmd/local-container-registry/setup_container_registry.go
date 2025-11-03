@@ -11,8 +11,8 @@ import (
 
 	"k8s.io/apimachinery/pkg/types"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/eventualconfig"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"

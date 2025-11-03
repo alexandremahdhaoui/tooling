@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/alexandremahdhaoui/tooling/internal/util"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 )
 
 const (

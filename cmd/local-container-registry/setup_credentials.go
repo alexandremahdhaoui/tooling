@@ -8,8 +8,8 @@ import (
 	"os/exec"
 	"time"
 
-	"github.com/alexandremahdhaoui/tooling/pkg/eventualconfig"
-	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
+	"github.com/alexandremahdhaoui/forge/pkg/eventualconfig"
+	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 
 	"sigs.k8s.io/yaml"
 
