@@ -6,7 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 )
 
 // ----------------------------------------------------- TEARDOWN --------------------------------------------------- //
@@ -15,7 +15,7 @@ import (
 // It reads the project and kindenv configuration, and then deletes the kind cluster.
 func teardown() error {
 	// 1. read project Envs.
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return err // TODO: wrap err
 	}
@@ -40,7 +40,7 @@ func teardown() error {
 	return nil
 }
 
-func doTeardown(config project.Config, envs Envs) error {
+func doTeardown(config forge.Spec, envs Envs) error {
 	cmdName := envs.KindBinary
 	args := []string{
 		"delete",

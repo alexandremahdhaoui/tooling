@@ -10,14 +10,14 @@ import (
 	"time"
 
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 )
 
 var errPortForwarding = errors.New("port forwarding")
 
 // PortForwarder manages a port-forward connection to a Kubernetes service.
 type PortForwarder struct {
-	config    project.Config
+	config    forge.Spec
 	namespace string
 	localPort int
 	cmd       *exec.Cmd
@@ -25,7 +25,7 @@ type PortForwarder struct {
 }
 
 // NewPortForwarder creates a new port forwarder.
-func NewPortForwarder(config project.Config, namespace string) *PortForwarder {
+func NewPortForwarder(config forge.Spec, namespace string) *PortForwarder {
 	return &PortForwarder{
 		config:    config,
 		namespace: namespace,

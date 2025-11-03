@@ -53,9 +53,9 @@ __setup_cluster
 # Run the test
 trap '__teardown && __teardown_cluster && echo "❌ [FAILED] local-container-registry e2e test failed"' EXIT
 
-# Step 1: Build containers using build-container
-echo "⏳ [TEST] Building containers with build-container"
-CONTAINER_ENGINE="${CONTAINER_ENGINE}" go run ./cmd/build-container
+# Step 1: Build containers using forge
+echo "⏳ [TEST] Building containers with forge"
+CONTAINER_ENGINE="${CONTAINER_ENGINE}" GO_BUILD_LDFLAGS="${GO_BUILD_LDFLAGS:-}" go run ./cmd/forge build
 echo "✅ [TEST] Containers built successfully"
 
 # Step 2: Verify artifact store exists and contains build-container artifact

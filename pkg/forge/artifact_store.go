@@ -1,4 +1,4 @@
-package project
+package forge
 
 import (
 	"errors"
@@ -10,10 +10,10 @@ import (
 )
 
 var (
-	errReadingArtifactStore  = errors.New("reading artifact store")
-	errWritingArtifactStore  = errors.New("writing artifact store")
-	errArtifactNotFound      = errors.New("artifact not found")
-	errInvalidArtifactStore  = errors.New("invalid artifact store")
+	errReadingArtifactStore = errors.New("reading artifact store")
+	errWritingArtifactStore = errors.New("writing artifact store")
+	errArtifactNotFound     = errors.New("artifact not found")
+	errInvalidArtifactStore = errors.New("invalid artifact store")
 )
 
 // ReadArtifactStore reads the artifact store from the specified path.

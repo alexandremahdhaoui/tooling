@@ -17,7 +17,7 @@ import (
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 )
 
 const (
@@ -102,7 +102,7 @@ func setup() error {
 	ctx := context.Background()
 
 	// I. Read config
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return flaterrors.Join(err, errSettingLocalContainerRegistry)
 	}
@@ -183,9 +183,16 @@ func setup() error {
 			"-n", config.LocalContainerRegistry.Namespace,
 			"deployment/"+Name,
 		)
-		waitCmd.Env = append(os.Environ(), fmt.Sprintf("KUBECONFIG=%s", config.Kindenv.KubeconfigPath))
+		waitCmd.Env = append(
+			os.Environ(),
+			fmt.Sprintf("KUBECONFIG=%s", config.Kindenv.KubeconfigPath),
+		)
 		if err := util.RunCmdWithStdPipes(waitCmd); err != nil {
-			_, _ = fmt.Fprintf(os.Stderr, "⚠️  Warning: registry deployment not ready: %s\n", err.Error())
+			_, _ = fmt.Fprintf(
+				os.Stderr,
+				"⚠️  Warning: registry deployment not ready: %s\n",
+				err.Error(),
+			)
 		} else {
 			if err := pushImagesFromArtifactStore(ctx, config, envs); err != nil {
 				// Log warning but don't fail setup if push fails
@@ -209,7 +216,7 @@ func teardown() error {
 	ctx := context.Background()
 
 	// I. Read project config
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return flaterrors.Join(err, errTearingDownLocalContainerRegistry)
 	}
@@ -262,7 +269,7 @@ var errPushingImage = errors.New("error received while pushing image to " + Name
 func push(imageName string) error {
 	ctx := context.Background()
 
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return flaterrors.Join(err, errPushingImage)
 	}
@@ -282,7 +289,7 @@ var errPushingAllImages = errors.New("error received while pushing all images to
 func pushAll() error {
 	ctx := context.Background()
 
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return flaterrors.Join(err, errPushingAllImages)
 	}
@@ -298,7 +305,7 @@ func pushAll() error {
 var errCreatingKubernetesClient = errors.New("creating kubernetes client")
 
 // createKubeClient creates a new Kubernetes client from the kubeconfig file specified in the project configuration.
-func createKubeClient(config project.Config) (client.Client, error) { //nolint:ireturn
+func createKubeClient(config forge.Spec) (client.Client, error) { //nolint:ireturn
 	b, err := os.ReadFile(config.Kindenv.KubeconfigPath)
 	if err != nil {
 		return nil, flaterrors.Join(err, errCreatingKubernetesClient)

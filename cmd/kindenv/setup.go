@@ -8,7 +8,7 @@ import (
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -59,7 +59,7 @@ func readEnvs() (Envs, error) {
 // It reads the project and kindenv configuration, and then creates a kind cluster.
 func setup() error {
 	// 1. read project Envs.
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return err // TODO: wrap err
 	}
@@ -82,7 +82,7 @@ func setup() error {
 	return nil
 }
 
-func doSetup(pCfg project.Config, envs Envs) error {
+func doSetup(pCfg forge.Spec, envs Envs) error {
 	// 1. Allow prefixing kind binary with "sudo".
 	cmdName := envs.KindBinary
 	args := []string{

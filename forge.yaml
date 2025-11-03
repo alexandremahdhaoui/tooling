@@ -4,22 +4,37 @@ name: tooling
 build:
   # -- artifactStorePath is the path to the artifact store yaml file.
   artifactStorePath: .ignore.artifact-store.yaml
-  # -- specs defines the list of artifacts to build.
+  # -- specs defines the list of artifacts to build using the BuildSpec format.
   specs:
     # Binaries
-    - binary:
-        name: kindenv
-        source: ./cmd/kindenv
-    - binary:
-        name: local-container-registry
-        source: ./cmd/local-container-registry
-    - binary:
-        name: test-go
-        source: ./cmd/test-go
+    - name: forge
+      src: ./cmd/forge
+      dest: ./build/bin
+      builder: go://build-go
+    - name: build-go
+      src: ./cmd/build-go
+      dest: ./build/bin
+      builder: go://build-go
+    - name: build-container
+      src: ./cmd/build-container
+      dest: ./build/bin
+      builder: go://build-go
+    - name: kindenv
+      src: ./cmd/kindenv
+      dest: ./build/bin
+      builder: go://build-go
+    - name: local-container-registry
+      src: ./cmd/local-container-registry
+      dest: ./build/bin
+      builder: go://build-go
+    - name: test-go
+      src: ./cmd/test-go
+      dest: ./build/bin
+      builder: go://build-go
     # Containers
-    - container:
-        name: for-testing-purposes
-        file: ./containers/for-testing-purposes/Containerfile
+    - name: for-testing-purposes
+      src: ./containers/for-testing-purposes/Containerfile
+      builder: go://build-container
 
 kindenv:
   kubeconfigPath: .ignore.kindenv.kubeconfig.yaml

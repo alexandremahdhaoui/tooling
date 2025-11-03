@@ -1,4 +1,4 @@
-package project
+package forge
 
 import (
 	"errors"
@@ -10,15 +10,13 @@ import (
 )
 
 const (
-	// ConfigPath is the default path to the project configuration file.
-	ConfigPath = ".project.yaml"
+	// ConfigPath is the default path to the forge configuration file.
+	ConfigPath = "forge.yaml"
 )
 
-// ----------------------------------------------------- PROJECT CONFIG --------------------------------------------- //
-
-// Config represents the project configuration.
-// It is read from the .project.yaml file.
-type Config struct {
+// Spec represents the forge configuration.
+// It is read from the forge.yaml file.
+type Spec struct {
 	// Name is the name of the project.
 	Name string `json:"name"`
 
@@ -35,18 +33,18 @@ type Config struct {
 
 var errReadingProjectConfig = errors.New("error reading project config")
 
-// ReadConfig reads the project configuration from the .project.yaml file.
-// It returns a Config struct and an error if the file cannot be read or parsed.
-func ReadConfig() (Config, error) {
+// ReadSpec reads the forge configuration from the forge.yaml file.
+// It returns a Spec struct and an error if the file cannot be read or parsed.
+func ReadSpec() (Spec, error) {
 	b, err := os.ReadFile(ConfigPath) //nolint:varnamelen
 	if err != nil {
-		return Config{}, flaterrors.Join(err, errReadingProjectConfig)
+		return Spec{}, flaterrors.Join(err, errReadingProjectConfig)
 	}
 
-	out := Config{} //nolint:exhaustruct // unmarshal
+	out := Spec{} //nolint:exhaustruct // unmarshal
 
 	if err := yaml.Unmarshal(b, &out); err != nil {
-		return Config{}, flaterrors.Join(err, errReadingProjectConfig)
+		return Spec{}, flaterrors.Join(err, errReadingProjectConfig)
 	}
 
 	return out, nil

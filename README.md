@@ -1,15 +1,26 @@
 # Go Development Tooling
 
-This repository provides a collection of tools and utilities designed to streamline Go development workflows, particularly for projects involving containers and Kubernetes. These tools are configured via a central `.project.yaml` file, allowing for consistent and reproducible builds, tests, and deployments.
+This repository provides a collection of tools and utilities designed to streamline Go development workflows, particularly for projects involving containers and Kubernetes.
+
+**Key Features:**
+- **Forge CLI**: Make-like build orchestrator using MCP (Model Context Protocol) servers
+- **Unified Build System**: Single configuration file (`forge.yaml`) for all artifacts
+- **Integration Environments**: Managed Kind clusters with local container registries
+- **Artifact Tracking**: Automatic versioning and metadata tracking
+
+All tools are configured via a central `forge.yaml` file, allowing for consistent and reproducible builds, tests, and deployments.
 
 ## Table of Contents
 
 - [Go Development Tooling](#go-development-tooling)
+  - [Quick Start](#quick-start)
+  - [Forge CLI](#forge-cli)
   - [Available Tools](#available-tools)
-  - [Project Configuration (`.project.yaml`)](#project-configuration-projectyaml)
-    - [Example `.project.yaml`](#example-projectyaml)
+  - [Project Configuration (`forge.yaml`)](#project-configuration-forgeyaml)
+    - [Example `forge.yaml`](#example-forgeyaml)
   - [Usage](#usage)
-    - [`build-binary`](#build-binary)
+    - [`forge`](#forge)
+    - [`build-go`](#build-go)
     - [`build-container`](#build-container)
     - [`kindenv`](#kindenv)
     - [`local-container-registry`](#local-container-registry)
@@ -19,39 +30,130 @@ This repository provides a collection of tools and utilities designed to streaml
     - [Containerfile](#containerfile)
       - [Go](#go)
     - [Makefile](#makefile)
+  - [Documentation](#documentation)
 
-## Available Tools
+## Quick Start
 
-| Name                       | Description                                                                                                                                                                                                     |
-|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `build-binary` | A wrapper around `go build` that simplifies building Go binaries. It uses environment variables for configuration. |
-| `build-container` | A wrapper script around `kaniko` to build container images from a `Containerfile`. It is configured using environment variables. |
-| `chart-prereq` | A helper tool to install necessary Helm charts in a Kubernetes cluster dedicated for tests. |
-| `ci-orchestrator` | The `ci-orchestrator` is a tool responsible for orchestrating CI jobs. |
-| `e2e` | A script to execute end-to-end tests for the `local-container-registry`. |
-| `kindenv`                  | This tool wraps `kind` to create a Kubernetes cluster for local development and testing. It outputs the kubeconfig to a local path specified in the `.project.yaml` file.                                                                                        |
-| `local-container-registry` | This tool creates a container registry within the kind cluster created by `kindenv`. It reads its configuration from the `.project.yaml` file.                                                                                     |
-| `oapi-codegen-helper`      | A wrapper for `oapi-codegen` that simplifies the generation of server and client code from OpenAPI specifications. It reads its configuration from the `.project.yaml` file and parallelizes code generation. |
-| `test-go` | A wrapper around `gotestsum` for executing scoped tests. It uses environment variables for configuration and supports test tags. |
-
-## Project Configuration (`.project.yaml`)
-
-The `.project.yaml` file is the central configuration file for all the tools in this repository. It allows you to declare the intent of your project and configure the behavior of the tools.
-
-### Example `.project.yaml`
-
-```yaml
+```bash
+# 1. Create forge.yaml (or use existing)
+cat > forge.yaml <<EOF
 name: my-project
+
+build:
+  artifactStorePath: .ignore.artifact-store.yaml
+  specs:
+    - name: my-app
+      src: ./cmd/my-app
+      dest: ./build/bin
+      builder: go://build-go
 
 kindenv:
   kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
 
 localContainerRegistry:
   enabled: true
+  autoPushImages: true
+  credentialPath: .ignore.local-container-registry.yaml
+  caCrtPath: .ignore.ca.crt
+  namespace: local-container-registry
+EOF
+
+# 2. Build all artifacts
+go run ./cmd/forge build
+
+# 3. Create integration environment
+go run ./cmd/forge integration create dev
+
+# 4. Use the environment
+export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
+kubectl get nodes
+```
+
+See [docs/forge-usage.md](./docs/forge-usage.md) for complete usage guide.
+
+## Forge CLI
+
+**Forge** is a make-like build orchestrator that provides a unified interface for building artifacts and managing integration environments.
+
+**Key Concepts:**
+- **BuildSpec**: Unified specification for building any artifact (binaries, containers)
+- **MCP Servers**: Build engines that communicate via Model Context Protocol
+- **Artifact Store**: Automatic tracking of built artifacts with metadata
+- **Integration Environments**: Managed Kind clusters with optional components
+
+**Commands:**
+- `forge build` - Build all artifacts defined in forge.yaml
+- `forge integration create <name>` - Create integration environment
+- `forge integration list` - List environments
+- `forge integration get <id>` - Get environment details
+- `forge integration delete <id>` - Delete environment
+
+**Documentation:**
+- [Forge CLI Usage Guide](./docs/forge-usage.md)
+- [forge.yaml Schema Documentation](./docs/forge-schema.md)
+- [Architecture Documentation](./ARCHITECTURE.md#forge-architecture)
+
+## Available Tools
+
+| Name                       | Description                                                                                                                                                                                                     |
+|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `forge` | **Primary build orchestrator.** Builds all artifacts and manages integration environments using MCP servers. Configured via `forge.yaml`. |
+| `build-go` | MCP server for building Go binaries. Used by forge as a build engine. Can also be invoked directly. |
+| `build-container` | MCP server for building container images using Kaniko. Used by forge as a build engine. Can also be invoked directly. |
+| `kindenv`                  | Manages Kind (Kubernetes in Docker) clusters for local development and testing. Outputs kubeconfig to path specified in `forge.yaml`. |
+| `local-container-registry` | Creates a TLS-enabled container registry within Kind clusters. Configured via `forge.yaml`. |
+| `oapi-codegen-helper`      | Wrapper for `oapi-codegen` that generates server and client code from OpenAPI specifications. Reads configuration from `forge.yaml` and parallelizes code generation. |
+| `test-go` | Wrapper around `gotestsum` for executing scoped tests. Supports test tags (unit, integration, functional, e2e). |
+| `chart-prereq` | Helper tool to install necessary Helm charts in Kubernetes clusters for testing. |
+| `ci-orchestrator` | Tool for orchestrating CI jobs (work in progress). |
+| `e2e` | End-to-end test script for `local-container-registry`. Now uses forge for building artifacts. |
+
+## Project Configuration (`forge.yaml`)
+
+The `forge.yaml` file is the central configuration file for all the tools in this repository. It allows you to declare the intent of your project and configure the behavior of the tools, including:
+- **Build artifacts** (binaries and containers)
+- **Integration environment** components
+- **Artifact tracking** configuration
+
+### Example `forge.yaml`
+
+```yaml
+name: my-project
+
+# Build configuration
+build:
+  artifactStorePath: .ignore.artifact-store.yaml
+  specs:
+    # Go binaries
+    - name: my-cli
+      src: ./cmd/my-cli
+      dest: ./build/bin
+      builder: go://build-go
+
+    - name: api-server
+      src: ./cmd/api-server
+      dest: ./build/bin
+      builder: go://build-go
+
+    # Container images
+    - name: api-server
+      src: ./containers/api-server/Containerfile
+      dest: localhost:5000
+      builder: go://build-container
+
+# Kind cluster configuration
+kindenv:
+  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+
+# Local container registry configuration
+localContainerRegistry:
+  enabled: true
+  autoPushImages: true
   credentialPath: .ignore.local-container-registry.yaml
   caCrtPath: .ignore.ca.crt
   namespace: local-container-registry
 
+# OpenAPI code generation
 oapiCodegenHelper:
   defaults:
     sourceDir: "api"
@@ -67,43 +169,81 @@ oapiCodegenHelper:
         packageName: "myapiv1"
 ```
 
+See [docs/forge-schema.md](./docs/forge-schema.md) for complete schema documentation.
+
 ## Usage
 
-### `build-binary`
+### `forge`
 
-This tool builds a Go binary.
+**Primary build orchestrator** - builds all artifacts and manages integration environments.
+
+**Build all artifacts:**
+
+```sh
+# Build everything defined in forge.yaml
+forge build
+
+# With custom flags
+GO_BUILD_LDFLAGS="-X main.Version=v1.0.0" CONTAINER_ENGINE=docker forge build
+```
+
+**Manage integration environments:**
+
+```sh
+# Create environment
+forge integration create my-dev-env
+
+# List environments
+forge integration list
+
+# Get environment details
+forge integration get my-dev-env
+
+# Delete environment
+forge integration delete my-dev-env
+```
+
+**See:** [docs/forge-usage.md](./docs/forge-usage.md) for complete usage guide.
+
+### `build-go`
+
+This tool builds Go binaries. It can be used as an MCP server by forge or invoked directly.
 
 **Environment Variables:**
 
-* `BINARY_NAME`: The name of the binary to build.
-* `GO_BUILD_LDFLAGS`: The linker flags to pass to the `go build` command.
+* `BINARY_NAME`: The name of the binary to build (direct invocation only)
+* `GO_BUILD_LDFLAGS`: The linker flags to pass to the `go build` command
 
-**Example:**
+**Direct invocation example:**
 
 ```sh
-BINARY_NAME="my-app" GO_BUILD_LDFLAGS="-X main.Version=1.0.0" go run github.com/alexandremahdhaoui/tooling/cmd/build-binary
+BINARY_NAME="my-app" GO_BUILD_LDFLAGS="-X main.Version=1.0.0" go run ./cmd/build-go
 ```
+
+**Recommended:** Use forge instead for consistent builds.
 
 ### `build-container`
 
-This tool builds a container image using Kaniko.
+This tool builds container images using Kaniko. It can be used as an MCP server by forge or invoked directly.
 
 **Environment Variables:**
 
-* `CONTAINER_ENGINE`: The container engine to use (e.g., `docker`, `podman`).
-* `CONTAINER_NAME`: The name of the container to build.
-* `BUILD_ARGS`: A list of build arguments to pass to the container build command.
-* `DESTINATIONS`: A list of destinations to push the container image to.
+* `CONTAINER_ENGINE`: The container engine to use (e.g., `docker`, `podman`)
+* `CONTAINER_NAME`: The name of the container to build (direct invocation only)
+* `BUILD_ARGS`: A list of build arguments to pass to the container build command
+* `DESTINATIONS`: A list of destinations to push the container image to
 
-**Example:**
+**Direct invocation example:**
 
 ```sh
 CONTAINER_ENGINE="docker" \
 CONTAINER_NAME="my-app" \
 BUILD_ARGS="VERSION=1.0.0" \
 DESTINATIONS="docker.io/my-user/my-app:latest" \
-go run github.com/alexandremahdhaoui/tooling/cmd/build-container
+go run ./cmd/build-container
 ```
+
+**Recommended:** Use forge instead for consistent builds.
 
 ### `kindenv`
 
@@ -366,3 +506,47 @@ pre-push: generate fmt lint test
 
 ```
 
+## Documentation
+
+### Forge Documentation
+
+- **[Forge CLI Usage Guide](./docs/forge-usage.md)** - Comprehensive usage guide with examples and workflows
+- **[forge.yaml Schema Documentation](./docs/forge-schema.md)** - Complete schema reference for forge.yaml
+- **[Architecture - Forge Section](./ARCHITECTURE.md#forge-architecture)** - Technical architecture and design
+
+### Architecture
+
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Complete architecture documentation
+  - Core packages (eventualconfig, flaterrors, project)
+  - Command-line tools
+  - Forge architecture
+  - Local container registry
+  - Configuration management
+  - Design patterns
+
+### Additional Resources
+
+- **[Model Context Protocol](https://modelcontextprotocol.io)** - MCP specification
+- **[Makefile](./Makefile)** - Build automation and tool orchestration
+- **[.project.yaml → forge.yaml Migration](./docs/forge-schema.md#migration-from-projectyaml)** - Migration guide
+
+## Contributing
+
+1. **Install pre-push hooks:**
+   ```bash
+   make githooks
+   ```
+
+2. **Run pre-push validation:**
+   ```bash
+   make pre-push
+   ```
+
+3. **Build with forge:**
+   ```bash
+   forge build
+   ```
+
+## License
+
+Apache 2.0 - See LICENSE file for details.

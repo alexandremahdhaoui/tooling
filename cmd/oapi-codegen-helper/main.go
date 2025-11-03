@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 )
 
 const (
@@ -54,7 +54,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
@@ -69,7 +69,7 @@ func main() {
 	os.Exit(0)
 }
 
-func do(executable string, config project.OAPICodegenHelper) error {
+func do(executable string, config forge.OAPICodegenHelper) error {
 	cmdName, args := parseExecutable(executable)
 	errChan := make(chan error)
 	wg := &sync.WaitGroup{}
@@ -85,7 +85,7 @@ func do(executable string, config project.OAPICodegenHelper) error {
 			sourcePath := templateSourcePath(config, i, version)
 
 			for _, pkg := range []struct { // for each client OR server pkg
-				opts     project.GenOpts
+				opts     forge.GenOpts
 				template string
 			}{
 				{ // Client
@@ -178,7 +178,7 @@ func writeTempCodegenConfig(templatedConfig string) (string, func(), error) {
 	return tempFile.Name(), cleanup, nil
 }
 
-func templateOutputPath(config project.OAPICodegenHelper, index int, packageName string) string {
+func templateOutputPath(config forge.OAPICodegenHelper, index int, packageName string) string {
 	destDir := config.Defaults.DestinationDir
 	if config.Specs[index].DestinationDir != "" { // it takes precedence over defaults.
 		destDir = config.Specs[index].DestinationDir
@@ -187,7 +187,7 @@ func templateOutputPath(config project.OAPICodegenHelper, index int, packageName
 	return filepath.Join(destDir, packageName, zzGeneratedFilename)
 }
 
-func templateSourcePath(config project.OAPICodegenHelper, index int, version string) string {
+func templateSourcePath(config forge.OAPICodegenHelper, index int, version string) string {
 	if source := config.Specs[index].Source; source != "" {
 		return source
 	}

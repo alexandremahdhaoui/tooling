@@ -10,17 +10,17 @@ import (
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 	"sigs.k8s.io/yaml"
 )
 
 var (
-	errLoggingInToRegistry      = errors.New("logging in to registry")
-	errPushingSingleImage       = errors.New("pushing image")
-	errPushingImages            = errors.New("pushing images from artifact store")
-	errReadingCredentials       = errors.New("reading credentials")
-	errSettingUpDockerCerts     = errors.New("setting up docker certificates")
-	errTearingDownDockerCerts   = errors.New("tearing down docker certificates")
+	errLoggingInToRegistry    = errors.New("logging in to registry")
+	errPushingSingleImage     = errors.New("pushing image")
+	errPushingImages          = errors.New("pushing images from artifact store")
+	errReadingCredentials     = errors.New("reading credentials")
+	errSettingUpDockerCerts   = errors.New("setting up docker certificates")
+	errTearingDownDockerCerts = errors.New("tearing down docker certificates")
 )
 
 // readCredentials reads the credentials from the specified file.
@@ -177,7 +177,12 @@ func pushImage(containerEngine, sourceImage, registryFQDN string) error {
 
 // withRegistryAccess handles all the setup (port-forward, certs, login) and teardown for registry access.
 // It calls the provided function with the registry FQDN:PORT.
-func withRegistryAccess(ctx context.Context, config project.Config, envs Envs, fn func(registryFQDNWithPort string) error) error {
+func withRegistryAccess(
+	ctx context.Context,
+	config forge.Spec,
+	envs Envs,
+	fn func(registryFQDNWithPort string) error,
+) error {
 	// I. Establish port-forward to registry
 	pf := NewPortForwarder(config, config.LocalContainerRegistry.Namespace)
 	if err := pf.Start(ctx); err != nil {
@@ -193,7 +198,11 @@ func withRegistryAccess(ctx context.Context, config project.Config, envs Envs, f
 	var certsDir string
 	var err error
 	if envs.ContainerEngineExecutable == "docker" {
-		certsDir, err = setupDockerCerts(registryFQDNWithPort, config.LocalContainerRegistry.CaCrtPath, envs.PrependCmd)
+		certsDir, err = setupDockerCerts(
+			registryFQDNWithPort,
+			config.LocalContainerRegistry.CaCrtPath,
+			envs.PrependCmd,
+		)
 		if err != nil {
 			return flaterrors.Join(err, errSettingUpDockerCerts)
 		}
@@ -213,23 +222,33 @@ func withRegistryAccess(ctx context.Context, config project.Config, envs Envs, f
 
 // pushImagesFromArtifactStore reads the artifact store and pushes all container images
 // defined in the project configuration to the local container registry.
-func pushImagesFromArtifactStore(ctx context.Context, config project.Config, envs Envs) error {
+func pushImagesFromArtifactStore(ctx context.Context, config forge.Spec, envs Envs) error {
 	_, _ = fmt.Fprintln(os.Stdout, "⏳ Pushing images from artifact store")
 
 	return withRegistryAccess(ctx, config, envs, func(registryFQDNWithPort string) error {
 		// I. Read artifact store
-		store, err := project.ReadArtifactStore(config.Build.ArtifactStorePath)
+		store, err := forge.ReadArtifactStore(config.Build.ArtifactStorePath)
 		if err != nil {
 			return flaterrors.Join(err, errPushingImages)
 		}
 
 		// II. For each container spec in the config, find the latest artifact and push it
 		for _, spec := range config.Build.Specs {
+			// Skip if not a container spec (check engine field)
+			if spec.Engine != "go://build-container" {
+				continue
+			}
+
 			// Get latest artifact for this container
-			artifact, err := project.GetLatestArtifact(store, spec.Container.Name)
+			artifact, err := forge.GetLatestArtifact(store, spec.Name)
 			if err != nil {
 				// If no artifact found, skip with warning
-				_, _ = fmt.Fprintf(os.Stderr, "⚠️  Warning: %s - skipping %s\n", err.Error(), spec.Container.Name)
+				_, _ = fmt.Fprintf(
+					os.Stderr,
+					"⚠️  Warning: %s - skipping %s\n",
+					err.Error(),
+					spec.Name,
+				)
 				continue
 			}
 
@@ -245,7 +264,12 @@ func pushImagesFromArtifactStore(ctx context.Context, config project.Config, env
 }
 
 // pushSingleImage pushes a single image to the local container registry.
-func pushSingleImage(ctx context.Context, config project.Config, envs Envs, imageName string) error {
+func pushSingleImage(
+	ctx context.Context,
+	config forge.Spec,
+	envs Envs,
+	imageName string,
+) error {
 	_, _ = fmt.Fprintf(os.Stdout, "⏳ Pushing image: %s\n", imageName)
 
 	return withRegistryAccess(ctx, config, envs, func(registryFQDNWithPort string) error {

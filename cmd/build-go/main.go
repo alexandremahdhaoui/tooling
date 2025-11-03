@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,15 +12,27 @@ import (
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 	"github.com/caarlos0/env/v11"
 )
 
-const Name = "build-binary"
+const Name = "build-go"
 
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
+	// Check for --mcp flag to run as MCP server
+	for _, arg := range os.Args[1:] {
+		if arg == "--mcp" {
+			if err := runMCPServer(); err != nil {
+				log.Printf("MCP server error: %v", err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
+
+	// Normal CLI mode
 	if err := run(); err != nil {
 		printFailure(err)
 		os.Exit(1)
@@ -34,7 +47,7 @@ func main() {
 
 var errBuildingBinaries = errors.New("building binaries")
 
-// run executes the main logic of the build-binary tool.
+// run executes the main logic of the build-go tool.
 // It reads the project configuration, builds all defined binaries, and writes artifacts to the artifact store.
 func run() error {
 	// I. Read environment variables
@@ -45,13 +58,13 @@ func run() error {
 	}
 
 	// II. Read project configuration
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return flaterrors.Join(err, errBuildingBinaries)
 	}
 
 	// III. Read artifact store
-	store, err := project.ReadArtifactStore(config.Build.ArtifactStorePath)
+	store, err := forge.ReadArtifactStore(config.Build.ArtifactStorePath)
 	if err != nil {
 		return flaterrors.Join(err, errBuildingBinaries)
 	}
@@ -66,18 +79,18 @@ func run() error {
 
 	// V. Build each binary spec
 	for _, spec := range config.Build.Specs {
-		// Skip if binary spec is empty
-		if spec.Binary.Name == "" {
+		// Skip if spec name is empty or engine doesn't match
+		if spec.Name == "" || spec.Engine != "go://build-go" {
 			continue
 		}
 
-		if err := buildBinary(envs, spec.Binary, version, timestamp, &store); err != nil {
+		if err := buildBinary(envs, spec, version, timestamp, &store, false); err != nil {
 			return flaterrors.Join(err, errBuildingBinaries)
 		}
 	}
 
 	// VI. Write artifact store
-	if err := project.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
+	if err := forge.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
 		return flaterrors.Join(err, errBuildingBinaries)
 	}
 
@@ -105,11 +118,23 @@ func getGitVersion() (string, error) {
 var errBuildingBinary = errors.New("building binary")
 
 // buildBinary builds a single binary based on the provided spec and adds it to the artifact store.
-func buildBinary(envs Envs, spec project.BinarySpec, version, timestamp string, store *project.ArtifactStore) error {
-	_, _ = fmt.Fprintf(os.Stdout, "⏳ Building binary: %s\n", spec.Name)
+// The isMCPMode parameter controls output streams (stdout must be reserved for JSON-RPC).
+func buildBinary(
+	envs Envs,
+	spec forge.BuildSpec,
+	version, timestamp string,
+	store *forge.ArtifactStore,
+	isMCPMode bool,
+) error {
+	// In MCP mode, write to stderr; in normal mode, write to stdout
+	out := os.Stdout
+	if isMCPMode {
+		out = os.Stderr
+	}
+	_, _ = fmt.Fprintf(out, "⏳ Building binary: %s\n", spec.Name)
 
 	// I. Determine output path
-	destination := spec.Destination
+	destination := spec.Dest
 	if destination == "" {
 		destination = "./build/bin"
 	}
@@ -138,16 +163,27 @@ func buildBinary(envs Envs, spec project.BinarySpec, version, timestamp string, 
 	}
 
 	// Add source path
-	args = append(args, spec.Source)
+	args = append(args, spec.Src)
 
 	cmd := exec.Command("go", args...)
 
-	if err := util.RunCmdWithStdPipes(cmd); err != nil {
-		return flaterrors.Join(err, errBuildingBinary)
+	// In MCP mode, redirect output to stderr to avoid corrupting JSON-RPC stream
+	if isMCPMode {
+		// Show build output on stderr (safe for MCP)
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return flaterrors.Join(err, errBuildingBinary)
+		}
+	} else {
+		// Normal mode: show all output
+		if err := util.RunCmdWithStdPipes(cmd); err != nil {
+			return flaterrors.Join(err, errBuildingBinary)
+		}
 	}
 
 	// IV. Create artifact entry
-	artifact := project.Artifact{
+	artifact := forge.Artifact{
 		Name:      spec.Name,
 		Type:      "binary",
 		Location:  outputPath,
@@ -155,16 +191,16 @@ func buildBinary(envs Envs, spec project.BinarySpec, version, timestamp string, 
 		Version:   version,
 	}
 
-	project.AddOrUpdateArtifact(store, artifact)
+	forge.AddOrUpdateArtifact(store, artifact)
 
-	_, _ = fmt.Fprintf(os.Stdout, "✅ Built binary: %s (version: %s)\n", spec.Name, version)
+	_, _ = fmt.Fprintf(out, "✅ Built binary: %s (version: %s)\n", spec.Name, version)
 
 	return nil
 }
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
 
-// Envs holds the environment variables required by the build-binary tool.
+// Envs holds the environment variables required by the build-go tool.
 type Envs struct {
 	// GoBuildLDFlags are the linker flags to pass to the `go build` command.
 	GoBuildLDFlags string `env:"GO_BUILD_LDFLAGS"`

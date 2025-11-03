@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"strings"
@@ -10,7 +11,7 @@ import (
 
 	"github.com/alexandremahdhaoui/tooling/internal/util"
 	"github.com/alexandremahdhaoui/tooling/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/tooling/pkg/project"
+	"github.com/alexandremahdhaoui/tooling/pkg/forge"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -19,6 +20,18 @@ const Name = "build-container"
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
+	// Check for --mcp flag to run as MCP server
+	for _, arg := range os.Args[1:] {
+		if arg == "--mcp" {
+			if err := runMCPServer(); err != nil {
+				log.Printf("MCP server error: %v", err)
+				os.Exit(1)
+			}
+			return
+		}
+	}
+
+	// Normal CLI mode
 	if err := run(); err != nil {
 		printFailure(err)
 		os.Exit(1)
@@ -45,13 +58,13 @@ func run() error {
 	}
 
 	// II. Read project configuration
-	config, err := project.ReadConfig()
+	config, err := forge.ReadSpec()
 	if err != nil {
 		return flaterrors.Join(err, errBuildingContainers)
 	}
 
 	// III. Read artifact store
-	store, err := project.ReadArtifactStore(config.Build.ArtifactStorePath)
+	store, err := forge.ReadArtifactStore(config.Build.ArtifactStorePath)
 	if err != nil {
 		return flaterrors.Join(err, errBuildingContainers)
 	}
@@ -66,18 +79,18 @@ func run() error {
 
 	// V. Build each container spec
 	for _, spec := range config.Build.Specs {
-		// Skip specs that don't have a container defined
-		if spec.Container.Name == "" {
+		// Skip if spec name is empty or engine doesn't match
+		if spec.Name == "" || spec.Engine != "go://build-container" {
 			continue
 		}
 
-		if err := buildContainer(envs, spec.Container, version, timestamp, &store); err != nil {
+		if err := buildContainer(envs, spec, version, timestamp, &store, false); err != nil {
 			return flaterrors.Join(err, errBuildingContainers)
 		}
 	}
 
 	// VI. Write artifact store
-	if err := project.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
+	if err := forge.WriteArtifactStore(config.Build.ArtifactStorePath, store); err != nil {
 		return flaterrors.Join(err, errBuildingContainers)
 	}
 
@@ -105,13 +118,20 @@ func getGitVersion() (string, error) {
 var errBuildingContainer = errors.New("building container")
 
 // buildContainer builds a single container and adds it to the artifact store.
+// The isMCPMode parameter controls output streams (stdout must be reserved for JSON-RPC).
 func buildContainer(
 	envs Envs,
-	containerSpec project.ContainerSpec,
+	spec forge.BuildSpec,
 	version, timestamp string,
-	store *project.ArtifactStore,
+	store *forge.ArtifactStore,
+	isMCPMode bool,
 ) error {
-	_, _ = fmt.Fprintf(os.Stdout, "⏳ Building container: %s\n", containerSpec.Name)
+	// In MCP mode, write to stderr; in normal mode, write to stdout
+	out := os.Stdout
+	if isMCPMode {
+		out = os.Stderr
+	}
+	_, _ = fmt.Fprintf(out, "⏳ Building container: %s\n", spec.Name)
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -127,7 +147,7 @@ func buildContainer(
 	}
 
 	// Build image tags
-	imageBase := containerSpec.Name
+	imageBase := spec.Name
 	imageWithVersion := fmt.Sprintf("%s:%s", imageBase, version)
 	imageLatest := fmt.Sprintf("%s:latest", imageBase)
 
@@ -138,13 +158,13 @@ func buildContainer(
 		"-v", fmt.Sprintf("%s:/workspace", wd),
 		"-v", fmt.Sprintf("%s:/cache", cacheDir),
 		"gcr.io/kaniko-project/executor:latest",
-		"-f", containerSpec.File,
+		"-f", spec.Src,
 		"--context", "/workspace",
 		"--no-push",
 		"--cache=true",
 		"--cache-dir=/cache",
 		"--cache-repo=oci:/cache/repo",
-		"--tarPath", fmt.Sprintf("/workspace/.ignore.%s.tar", containerSpec.Name),
+		"--tarPath", fmt.Sprintf("/workspace/.ignore.%s.tar", spec.Name),
 	}
 
 	// Add build args if provided
@@ -153,14 +173,15 @@ func buildContainer(
 	}
 
 	// Execute build
-	if err := util.RunCmdWithStdPipes(exec.Command(cmd, args...)); err != nil {
+	buildCmd := exec.Command(cmd, args...)
+	if err := runCmd(buildCmd, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
 	// Load the tar into the container engine
-	tarPath := fmt.Sprintf(".ignore.%s.tar", containerSpec.Name)
+	tarPath := fmt.Sprintf(".ignore.%s.tar", spec.Name)
 	loadCmd := exec.Command(envs.ContainerEngine, "load", "-i", tarPath)
-	if err := util.RunCmdWithStdPipes(loadCmd); err != nil {
+	if err := runCmd(loadCmd, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
@@ -173,13 +194,13 @@ func buildContainer(
 
 	// Tag with version
 	tagCmd := exec.Command(envs.ContainerEngine, "tag", imageID, imageWithVersion)
-	if err := util.RunCmdWithStdPipes(tagCmd); err != nil {
+	if err := runCmd(tagCmd, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
 	// Tag with latest
 	tagLatestCmd := exec.Command(envs.ContainerEngine, "tag", imageID, imageLatest)
-	if err := util.RunCmdWithStdPipes(tagLatestCmd); err != nil {
+	if err := runCmd(tagLatestCmd, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
@@ -189,17 +210,22 @@ func buildContainer(
 	}
 
 	// Add to artifact store
-	artifact := project.Artifact{
-		Name:      containerSpec.Name,
+	artifact := forge.Artifact{
+		Name:      spec.Name,
 		Type:      "container",
 		Location:  imageWithVersion, // Local image reference
 		Timestamp: timestamp,
 		Version:   version,
 	}
 
-	project.AddOrUpdateArtifact(store, artifact)
+	forge.AddOrUpdateArtifact(store, artifact)
 
-	_, _ = fmt.Fprintf(os.Stdout, "✅ Built container: %s (version: %s)\n", containerSpec.Name, version)
+	_, _ = fmt.Fprintf(
+		out,
+		"✅ Built container: %s (version: %s)\n",
+		spec.Name,
+		version,
+	)
 
 	return nil
 }
@@ -256,7 +282,7 @@ type Envs struct {
 	BuildArgs []string `env:"BUILD_ARGS"`
 	// KanikoCacheDir is the local directory to use for kaniko layer caching.
 	// Defaults to ~/.kaniko-cache
-	KanikoCacheDir string `env:"KANIKO_CACHE_DIR" envDefault:"~/.kaniko-cache"`
+	KanikoCacheDir string `env:"KANIKO_CACHE_DIR"          envDefault:"~/.kaniko-cache"`
 }
 
 // ----------------------------------------------------- PRINT HELPERS ----------------------------------------------- //
@@ -276,6 +302,18 @@ Configuration:
     The tool reads container build specifications from .project.yaml
     Artifacts are written to the path specified in build.artifactStorePath
 `
+
+// runCmd runs a command, redirecting output to stderr in MCP mode to avoid corrupting JSON-RPC.
+func runCmd(cmd *exec.Cmd, isMCPMode bool) error {
+	if isMCPMode {
+		// MCP mode: redirect all output to stderr (safe for JSON-RPC on stdout)
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+		return cmd.Run()
+	}
+	// Normal mode: show all output
+	return util.RunCmdWithStdPipes(cmd)
+}
 
 func printUsage() {
 	fmt.Printf(

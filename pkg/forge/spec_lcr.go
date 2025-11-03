@@ -1,4 +1,4 @@
-package project
+package forge
 
 // LocalContainerRegistry holds the configuration for the local-container-registry tool.
 type LocalContainerRegistry struct {

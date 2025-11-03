@@ -11,6 +11,7 @@ This document provides a comprehensive overview of the tooling repository archit
 - [Build System](#build-system)
 - [Testing Infrastructure](#testing-infrastructure)
 - [Local Container Registry](#local-container-registry)
+- [Forge Architecture](#forge-architecture)
 - [Configuration Management](#configuration-management)
 - [Design Patterns](#design-patterns)
 - [Dependencies](#dependencies)
@@ -161,6 +162,14 @@ type Config struct {
 
 ## Command-Line Tools
 
+### Forge CLI
+
+**Location:** `cmd/forge/`
+
+**Purpose:** Make-like build orchestrator that uses MCP (Model Context Protocol) servers to build artifacts and manage integration environments.
+
+**Architecture:** See [Forge Architecture](#forge-architecture) section below.
+
 ### Local Container Registry
 
 **Location:** `cmd/local-container-registry/`
@@ -299,16 +308,17 @@ GO_BUILD_LDFLAGS # Linker flags for build metadata
 | Target | Description |
 |--------|-------------|
 | `generate` | Generates code (OpenAPI, CRDs, mocks, protobuf) |
-| `build-binary` | Builds Go binaries |
-| `build-container` | Builds container images |
+| `build` | Builds all artifacts using forge |
+| `build-go` | Builds Go binaries using forge |
+| `build-container` | Builds container images using forge |
 | `fmt` | Formats code with gofumpt |
 | `lint` | Runs golangci-lint |
 | `test-unit` | Runs unit tests |
 | `test-integration` | Runs integration tests |
 | `test-functional` | Runs functional tests |
-| `test-e2e` | Runs end-to-end tests |
-| `test-setup` | Creates Kind cluster |
-| `test-teardown` | Destroys Kind cluster |
+| `test-e2e` | Runs end-to-end tests (uses forge) |
+| `test-setup` | Creates Kind cluster and local registry |
+| `test-teardown` | Destroys Kind cluster and local registry |
 | `test` | Runs all tests |
 | `pre-push` | Pre-push validation (generate, fmt, lint, test) |
 
@@ -566,6 +576,623 @@ local-container-registry.local-container-registry.svc.cluster.local:5000
    ```bash
    kubectl port-forward -n local-container-registry svc/local-container-registry 5000:5000
    ```
+
+## Forge Architecture
+
+Forge is a make-like build orchestrator that provides a unified interface for building artifacts and managing integration environments using the Model Context Protocol (MCP).
+
+### Overview
+
+**Design Philosophy:**
+- Unified build specification across all artifact types
+- Engine-based architecture using MCP servers
+- Artifact tracking and versioning
+- Integration environment lifecycle management
+
+**Key Features:**
+- Build Go binaries and container images through a single interface
+- Track built artifacts with metadata (version, timestamp, type)
+- Manage integration environments (kind clusters with optional components)
+- Support for MCP-based build engines
+
+### Core Components
+
+#### 1. BuildSpec API
+
+The `BuildSpec` is a unified specification for building any type of artifact:
+
+```go
+type BuildSpec struct {
+    Name   string `yaml:"name"`   // Artifact name
+    Src    string `yaml:"src"`    // Source directory/file
+    Dest   string `yaml:"dest"`   // Destination directory
+    Engine string `yaml:"engine"` // Engine URI (e.g., "go://build-go")
+}
+```
+
+**Engine URI Format:** `<protocol>://<engine-name>`
+
+Supported engines:
+- `go://build-go` - Go binary builder
+- `container://build-container` - Container image builder
+
+#### 2. Build Engines (MCP Servers)
+
+Build engines are MCP servers that implement the build protocol via stdio communication.
+
+**MCP Server Architecture:**
+
+```
+forge CLI (client)
+    |
+    | JSON-RPC 2.0 over stdio
+    |
+    v
+MCP Server (--mcp flag)
+    |
+    | Executes build
+    |
+    v
+Build Artifact
+```
+
+**Available Engines:**
+
+1. **build-go** (`cmd/build-go/`)
+   - Builds Go binaries
+   - Supports ldflags injection
+   - MCP tool: `build`
+
+2. **build-container** (`cmd/build-container/`)
+   - Builds container images using Kaniko
+   - Supports custom Containerfiles
+   - MCP tool: `build`
+
+**MCP Communication Example:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "build",
+    "arguments": {
+      "name": "my-binary",
+      "src": "./cmd/my-app",
+      "dest": "./build/bin",
+      "engine": "go://build-go"
+    }
+  }
+}
+```
+
+#### 3. Artifact Store
+
+**Location:** `.ignore.artifact-store.yaml`
+
+**Purpose:** Tracks all built artifacts with metadata for version control and reproducibility.
+
+**Structure:**
+
+```yaml
+artifacts:
+  - name: build-binary
+    type: go-binary
+    version: v1.2.3-abc1234-dirty
+    timestamp: "2025-01-03T10:30:00Z"
+    src: ./cmd/build-binary
+    dest: ./build/bin
+
+  - name: build-container
+    type: container
+    version: v1.2.3-abc1234
+    timestamp: "2025-01-03T10:31:00Z"
+    containerfile: ./containers/build-container/Containerfile
+    context: .
+    image: localhost:5000/build-container:v1.2.3-abc1234
+```
+
+**Artifact Types:**
+- `go-binary` - Go executable binaries
+- `container` - Container images
+
+**Metadata Fields:**
+- `name` - Artifact identifier
+- `type` - Artifact type
+- `version` - Semantic version with git metadata
+- `timestamp` - ISO 8601 build timestamp
+- `src` - Source location
+- `dest` - Output location
+
+#### 4. Integration Environment Management
+
+**Location:** `.ignore.integration-envs.yaml`
+
+**Purpose:** Manage integration testing environments with kind clusters and optional components.
+
+**Environment Structure:**
+
+```go
+type IntegrationEnvironment struct {
+    ID         string                 `yaml:"id"`
+    Name       string                 `yaml:"name"`
+    Created    string                 `yaml:"created"`
+    Components map[string]Component   `yaml:"components"`
+}
+
+type Component struct {
+    Enabled        bool              `yaml:"enabled"`
+    Ready          bool              `yaml:"ready"`
+    ConnectionInfo map[string]string `yaml:"connectionInfo,omitempty"`
+}
+```
+
+**Supported Components:**
+- `kindenv` - Kind cluster
+- `local-container-registry` - Local registry with TLS
+
+**Environment Store Example:**
+
+```yaml
+environments:
+  - id: abc123-def456
+    name: my-dev-env
+    created: "2025-01-03T10:00:00Z"
+    components:
+      kindenv:
+        enabled: true
+        ready: true
+        connectionInfo:
+          kubeconfig: .ignore.kindenv.kubeconfig.yaml
+      local-container-registry:
+        enabled: true
+        ready: true
+        connectionInfo:
+          namespace: local-container-registry
+          credentialsFile: .ignore.local-container-registry.yaml
+```
+
+### Configuration: forge.yaml
+
+**Location:** `forge.yaml` (root of repository)
+
+**Purpose:** Defines all buildable artifacts for the project.
+
+**Structure:**
+
+```yaml
+build:
+  - name: build-binary
+    src: ./cmd/build-binary
+    dest: ./build/bin
+    engine: go://build-go
+
+  - name: build-container
+    src: ./cmd/build-container
+    dest: ./build/bin
+    engine: go://build-go
+
+  - name: build-container-image
+    src: ./containers/build-container/Containerfile
+    dest: localhost:5000
+    engine: container://build-container
+```
+
+**Configuration Fields:**
+- `build` - Array of BuildSpec objects
+- Each BuildSpec defines one buildable artifact
+
+### CLI Commands
+
+#### Build Commands
+
+**forge build** - Build all artifacts defined in forge.yaml
+
+```bash
+forge build
+```
+
+**Environment Variables:**
+- `CONTAINER_ENGINE` - Container engine (docker/podman)
+- `GO_BUILD_LDFLAGS` - Go linker flags
+- `PREPEND_CMD` - Command prefix (e.g., sudo)
+
+**Outputs:**
+- Built artifacts in specified destinations
+- Updated artifact store (`.ignore.artifact-store.yaml`)
+
+**Build Flow:**
+
+```
+1. Read forge.yaml
+2. For each BuildSpec:
+   a. Parse engine URI
+   b. Locate engine binary
+   c. Start MCP server (--mcp flag)
+   d. Send JSON-RPC build request
+   e. Capture build output
+   f. Record artifact metadata
+3. Write artifact store
+```
+
+#### Integration Environment Commands
+
+**forge integration create** - Create a new integration environment
+
+```bash
+forge integration create <name>
+```
+
+**Outputs:**
+- Kind cluster
+- Optional: local container registry
+- Environment record in `.ignore.integration-envs.yaml`
+- Environment ID for reference
+
+**forge integration list** - List all integration environments
+
+```bash
+forge integration list
+```
+
+**Output Format:**
+```
+Integration Environments:
+- my-dev-env (ID: abc123-def456)
+  Created: 2025-01-03T10:00:00Z
+  Components:
+    - kindenv: enabled, ready
+    - local-container-registry: enabled, ready
+```
+
+**forge integration get** - Get details about an environment
+
+```bash
+forge integration get <id-or-name>
+```
+
+**forge integration delete** - Delete an integration environment
+
+```bash
+forge integration delete <id-or-name>
+```
+
+**Operations:**
+- Teardown kind cluster
+- Teardown local container registry
+- Remove from environment store
+
+### MCP Server Protocol
+
+#### Initialization
+
+1. Start engine with `--mcp` flag
+2. Engine sends `initialize` request
+3. Client responds with capabilities
+4. Engine sends `initialized` notification
+
+#### Tool Invocation
+
+**Request Format:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "build",
+    "arguments": {
+      "name": "artifact-name",
+      "src": "./source/path",
+      "dest": "./dest/path",
+      "engine": "go://engine-name"
+    }
+  }
+}
+```
+
+**Response Format:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "Build completed successfully"
+      }
+    ]
+  }
+}
+```
+
+**Error Response:**
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "error": {
+    "code": -32603,
+    "message": "Build failed: compilation error"
+  }
+}
+```
+
+### Build Engine Implementation
+
+#### Engine Interface
+
+Each build engine must:
+1. Accept `--mcp` flag to enable MCP mode
+2. Implement stdio-based JSON-RPC 2.0 protocol
+3. Provide `build` tool with BuildSpec parameters
+4. Return success/failure with detailed messages
+
+#### Example: build-go Engine
+
+**Location:** `cmd/build-go/main.go`
+
+**Capabilities:**
+
+```go
+// MCP tool definition
+tool := mcp.Tool{
+    Name: "build",
+    Description: "Build a Go binary",
+    InputSchema: mcp.ToolInputSchema{
+        Type: "object",
+        Properties: map[string]interface{}{
+            "name":   map[string]string{"type": "string"},
+            "src":    map[string]string{"type": "string"},
+            "dest":   map[string]string{"type": "string"},
+            "engine": map[string]string{"type": "string"},
+        },
+        Required: []string{"name", "src", "dest", "engine"},
+    },
+}
+```
+
+**Build Execution:**
+
+```go
+func executeBuild(args BuildSpec) error {
+    // Construct go build command
+    cmd := exec.Command("go", "build",
+        "-o", filepath.Join(args.Dest, args.Name),
+        "-ldflags", os.Getenv("GO_BUILD_LDFLAGS"),
+        args.Src,
+    )
+
+    // Execute and capture output
+    output, err := cmd.CombinedOutput()
+    if err != nil {
+        return fmt.Errorf("build failed: %w\n%s", err, output)
+    }
+
+    return nil
+}
+```
+
+### Integration with Makefile
+
+**Makefile Variables:**
+
+```makefile
+FORGE := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" \
+         $(KINDENV_ENVS) \
+         CONTAINER_ENGINE="$(CONTAINER_ENGINE)" \
+         go run ./cmd/forge
+
+BUILD_GO := $(FORGE) build
+BUILD_CONTAINER := $(FORGE) build
+```
+
+**Makefile Targets:**
+
+```makefile
+.PHONY: build
+build: ## Build all artifacts using forge
+	$(FORGE) build
+
+.PHONY: build-go
+build-go: ## Build Go binaries using forge
+	$(BUILD_GO)
+
+.PHONY: build-container
+build-container: ## Build container images using forge
+	$(BUILD_CONTAINER)
+```
+
+### Testing
+
+#### Integration Tests
+
+**Location:** `cmd/forge/build_test.go`, `cmd/forge/integration_test.go`
+
+**Test Coverage:**
+- Build lifecycle (all artifacts)
+- Single artifact builds
+- Error handling (nonexistent artifacts)
+- Integration environment lifecycle (create, list, get, delete)
+- Artifact store operations
+
+**Example Test:**
+
+```go
+func TestBuildIntegration(t *testing.T) {
+    // Change to repository root
+    os.Chdir("../..")
+
+    // Build forge binary
+    exec.Command("go", "build", "-o", "./build/bin/forge", "./cmd/forge").Run()
+
+    // Run forge build
+    cmd := exec.Command("./build/bin/forge", "build")
+    output, err := cmd.CombinedOutput()
+
+    // Verify artifacts
+    store, _ := forge.ReadArtifactStore(".ignore.artifact-store.yaml")
+    // Assert artifact properties
+}
+```
+
+#### MCP Server Tests
+
+**Location:** `cmd/test-mcp-servers.sh`
+
+**Purpose:** Direct MCP server invocation testing
+
+**Test Flow:**
+1. Build MCP server binaries
+2. Send JSON-RPC requests via stdin
+3. Capture JSON-RPC responses via stdout
+4. Verify artifacts were created
+
+#### E2E Tests
+
+**Location:** `cmd/e2e/main.sh`
+
+**Integration:** E2E tests now use forge for building containers:
+
+```bash
+# Build containers using forge
+CONTAINER_ENGINE="${CONTAINER_ENGINE}" \
+GO_BUILD_LDFLAGS="${GO_BUILD_LDFLAGS:-}" \
+go run ./cmd/forge build
+```
+
+### Data Structures
+
+#### Artifact
+
+```go
+type Artifact struct {
+    Name          string            `yaml:"name"`
+    Type          ArtifactType      `yaml:"type"`
+    Version       string            `yaml:"version"`
+    Timestamp     string            `yaml:"timestamp"`
+    Src           string            `yaml:"src,omitempty"`
+    Dest          string            `yaml:"dest,omitempty"`
+    Containerfile string            `yaml:"containerfile,omitempty"`
+    Context       string            `yaml:"context,omitempty"`
+    Image         string            `yaml:"image,omitempty"`
+}
+
+type ArtifactType string
+
+const (
+    ArtifactTypeGoBinary  ArtifactType = "go-binary"
+    ArtifactTypeContainer ArtifactType = "container"
+)
+```
+
+#### ArtifactStore
+
+```go
+type ArtifactStore struct {
+    Artifacts []Artifact `yaml:"artifacts"`
+}
+
+// Read artifact store from file
+func ReadArtifactStore(path string) (ArtifactStore, error)
+
+// Write artifact store to file
+func WriteArtifactStore(path string, store ArtifactStore) error
+
+// Add or update artifact
+func AddOrUpdateArtifact(store *ArtifactStore, artifact Artifact)
+```
+
+#### IntegrationEnvStore
+
+```go
+type IntegrationEnvStore struct {
+    Environments []IntegrationEnvironment `yaml:"environments"`
+}
+
+// Store operations
+func ReadIntegrationEnvStore(path string) (IntegrationEnvStore, error)
+func WriteIntegrationEnvStore(path string, store IntegrationEnvStore) error
+func AddEnvironment(store *IntegrationEnvStore, env IntegrationEnvironment)
+func GetEnvironment(store IntegrationEnvStore, idOrName string) (IntegrationEnvironment, error)
+func DeleteEnvironment(store *IntegrationEnvStore, idOrName string) error
+```
+
+### Architecture Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         Forge CLI                                │
+│                                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌────────────────────┐   │
+│  │ Build Command│  │ Integration  │  │  Artifact Store    │   │
+│  │              │  │  Command     │  │  Management        │   │
+│  └──────┬───────┘  └──────┬───────┘  └────────┬───────────┘   │
+│         │                  │                    │                │
+│         v                  v                    v                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │              Engine Manager (MCP Client)                  │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└─────────────────────────────┬───────────────────────────────────┘
+                               │
+                               │ stdio + JSON-RPC 2.0
+                               │
+         ┌─────────────────────┴─────────────────────┐
+         │                                             │
+         v                                             v
+┌────────────────────┐                      ┌────────────────────┐
+│  build-go          │                      │ build-container    │
+│  (MCP Server)      │                      │ (MCP Server)       │
+│                    │                      │                    │
+│  ┌──────────────┐  │                      │ ┌──────────────┐  │
+│  │ MCP Protocol │  │                      │ │ MCP Protocol │  │
+│  └──────┬───────┘  │                      │ └──────┬───────┘  │
+│         v          │                      │        v          │
+│  ┌──────────────┐  │                      │ ┌──────────────┐  │
+│  │ go build     │  │                      │ │ kaniko       │  │
+│  └──────────────┘  │                      │ └──────────────┘  │
+└────────────────────┘                      └────────────────────┘
+```
+
+### Future Enhancements
+
+1. **Additional Build Engines:**
+   - `helm://package` - Helm chart packaging
+   - `protoc://compile` - Protocol buffer compilation
+   - `npm://build` - Node.js builds
+
+2. **Parallel Builds:**
+   - Build multiple artifacts concurrently
+   - Dependency graph resolution
+   - Smart caching
+
+3. **Remote Engines:**
+   - Network-based MCP servers
+   - Distributed builds
+   - Build farms
+
+4. **Build Caching:**
+   - Content-addressable storage
+   - Skip unchanged artifacts
+   - Cache invalidation strategies
+
+5. **Enhanced Integration Environments:**
+   - Custom component plugins
+   - Environment templates
+   - Resource quotas
+
+### Known Limitations
+
+1. **Sequential Builds:** Currently builds artifacts sequentially
+2. **No Dependency Graph:** Cannot express build dependencies between artifacts
+3. **Local Only:** MCP servers must be local binaries
+4. **No Caching:** Rebuilds all artifacts every time
+5. **Basic Error Recovery:** Limited retry or rollback capabilities
 
 ## Configuration Management
 
@@ -942,7 +1569,14 @@ This tooling repository represents a well-architected, production-grade Go devel
 - **Comprehensive testing** with multiple test tiers
 - **Automated quality control** via linting, formatting, and git hooks
 - **Reproducible environments** between local and CI
+- **Unified build orchestration** via forge and MCP servers
 
-The **local-container-registry** component is particularly noteworthy, demonstrating advanced Kubernetes concepts including custom resource generation, secret management, TLS automation, and event-driven coordination.
+The **forge CLI** is particularly noteworthy as a modern build orchestrator that demonstrates:
+- Protocol-based extensibility (MCP)
+- Unified artifact specification (BuildSpec)
+- Comprehensive artifact tracking
+- Integration environment lifecycle management
 
-This toolkit would be valuable for any organization building Go microservices on Kubernetes, especially those prioritizing reproducible local development environments and infrastructure-as-code principles.
+The **local-container-registry** component demonstrates advanced Kubernetes concepts including custom resource generation, secret management, TLS automation, and event-driven coordination.
+
+This toolkit would be valuable for any organization building Go microservices on Kubernetes, especially those prioritizing reproducible local development environments, infrastructure-as-code principles, and unified build tooling.

@@ -1,4 +1,4 @@
-package project
+package forge
 
 // Kindenv holds the configuration for the kindenv tool.
 type Kindenv struct {

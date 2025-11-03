@@ -1,4 +1,4 @@
-package project
+package forge
 
 // OAPICodegenHelper holds the configuration for the oapi-codegen-helper tool.
 type OAPICodegenHelper struct {

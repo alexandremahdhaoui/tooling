@@ -39,8 +39,9 @@ GOTESTSUM      := go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION) --format pk
 MOCKERY        := go run github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
 OAPI_CODEGEN   := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
 
-BUILD_BINARY                := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" go run ./cmd/build-binary
-BUILD_CONTAINER             := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" BUILD_ARGS="GO_BUILD_LDFLAGS=$(GO_BUILD_LDFLAGS)" go run ./cmd/build-container
+FORGE                       := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" $(KINDENV_ENVS) CONTAINER_ENGINE="$(CONTAINER_ENGINE)" go run ./cmd/forge
+BUILD_GO                    := $(FORGE) build
+BUILD_CONTAINER             := $(FORGE) build
 KINDENV                     := $(KINDENV_ENVS) go run ./cmd/kindenv
 LOCAL_CONTAINER_REGISTRY    := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" PREPEND_CMD=sudo go run ./cmd/local-container-registry
 OAPI_CODEGEN_HELPER         := OAPI_CODEGEN="$(OAPI_CODEGEN)" go run ./cmd/oapi-codegen-helper
@@ -70,16 +71,18 @@ generate: ## Generate REST API server/client code, CRDs and other go generators.
 	$(CLEAN_MOCKS)
 	$(MOCKERY)
 
-# ------------------------------------------------------- BUILD BINARIES --------------------------------------------- #
+# ------------------------------------------------------- BUILD ---------------------------------------------------- #
 
-.PHONY: build-binary
-build-binary:
-	$(BUILD_BINARY)
+.PHONY: build
+build: ## Build all artifacts using forge
+	$(FORGE) build
 
-# ------------------------------------------------------- BUILD CONTAINERS -------------------------------------------- #
+.PHONY: build-go
+build-go: ## Build Go binaries using forge
+	$(BUILD_GO)
 
 .PHONY: build-container
-build-container:
+build-container: ## Build container images using forge
 	$(BUILD_CONTAINER)
 
 # ------------------------------------------------------- FMT -------------------------------------------------------- #
