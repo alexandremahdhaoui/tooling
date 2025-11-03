@@ -8,13 +8,41 @@ import (
 	"strings"
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 	"github.com/caarlos0/env/v11"
 )
 
+const Name = "test-go"
+
+// Version information (set via ldflags during build)
+var (
+	Version        = "dev"
+	CommitSHA      = "unknown"
+	BuildTimestamp = "unknown"
+)
+
+// versionInfo holds test-go's version information
+var versionInfo *version.Info
+
+func init() {
+	versionInfo = version.New(Name)
+	versionInfo.Version = Version
+	versionInfo.CommitSHA = CommitSHA
+	versionInfo.BuildTimestamp = BuildTimestamp
+}
+
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
+	// Check for version flag
+	for _, arg := range os.Args[1:] {
+		if arg == "version" || arg == "--version" || arg == "-v" {
+			versionInfo.Print()
+			return
+		}
+	}
+
 	if err := run(); err != nil {
 		printFailure(err)
 		os.Exit(1)

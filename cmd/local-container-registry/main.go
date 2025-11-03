@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
@@ -23,6 +24,23 @@ import (
 const (
 	Name = "local-container-registry"
 )
+
+// Version information (set via ldflags during build)
+var (
+	Version        = "dev"
+	CommitSHA      = "unknown"
+	BuildTimestamp = "unknown"
+)
+
+// versionInfo holds local-container-registry's version information
+var versionInfo *version.Info
+
+func init() {
+	versionInfo = version.New(Name)
+	versionInfo.Version = Version
+	versionInfo.CommitSHA = CommitSHA
+	versionInfo.BuildTimestamp = BuildTimestamp
+}
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
 
@@ -53,6 +71,10 @@ func main() {
 	// Command parsing
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "version", "--version", "-v":
+			versionInfo.Print()
+			return
+
 		case "teardown":
 			if err := teardown(); err != nil {
 				_, _ = fmt.Fprintf(os.Stderr, "❌ %s\n", err.Error())

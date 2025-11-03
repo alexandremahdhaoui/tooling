@@ -3,14 +3,33 @@ package main
 import (
 	"fmt"
 	"os"
+
+	"github.com/alexandremahdhaoui/forge/internal/version"
 )
 
-const (
+// Version information (set via ldflags during build)
+var (
+	Version        = "dev"
+	CommitSHA      = "unknown"
+	BuildTimestamp = "unknown"
+)
 
+// versionInfo holds kindenv's version information
+var versionInfo *version.Info
+
+func init() {
+	versionInfo = version.New("kindenv")
+	versionInfo.Version = Version
+	versionInfo.CommitSHA = CommitSHA
+	versionInfo.BuildTimestamp = BuildTimestamp
+}
+
+const (
 	// Available commands
 	setupCommand    = "setup"
 	teardownCommand = "teardown"
 	helpCommand     = "usage"
+	versionCommand  = "version"
 )
 
 // ----------------------------------------------------- USAGE ------------------------------------------------------ //
@@ -38,6 +57,15 @@ func usage() error {
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
+	// Check for version flag first
+	if len(os.Args) > 1 {
+		arg := os.Args[1]
+		if arg == "version" || arg == "--version" || arg == "-v" {
+			versionInfo.Print()
+			return
+		}
+	}
+
 	_, _ = fmt.Fprint(os.Stdout, banner)
 
 	// 1. Print usageTemplate or
@@ -61,6 +89,9 @@ func main() {
 		command = teardown
 	case helpCommand:
 		command = usage
+	case versionCommand:
+		versionInfo.Print()
+		return
 	}
 
 	// 3. Execute command

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/caarlos0/env/v11"
@@ -18,9 +19,34 @@ import (
 
 const Name = "build-go"
 
+// Version information (set via ldflags during build)
+var (
+	Version        = "dev"
+	CommitSHA      = "unknown"
+	BuildTimestamp = "unknown"
+)
+
+// versionInfo holds build-go's version information
+var versionInfo *version.Info
+
+func init() {
+	versionInfo = version.New(Name)
+	versionInfo.Version = Version
+	versionInfo.CommitSHA = CommitSHA
+	versionInfo.BuildTimestamp = BuildTimestamp
+}
+
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
+	// Check for version flag
+	for _, arg := range os.Args[1:] {
+		if arg == "version" || arg == "--version" || arg == "-v" {
+			versionInfo.Print()
+			return
+		}
+	}
+
 	// Check for --mcp flag to run as MCP server
 	for _, arg := range os.Args[1:] {
 		if arg == "--mcp" {

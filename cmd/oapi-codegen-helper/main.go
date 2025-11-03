@@ -9,8 +9,28 @@ import (
 	"sync"
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
+
+const Name = "oapi-codegen-helper"
+
+// Version information (set via ldflags during build)
+var (
+	Version        = "dev"
+	CommitSHA      = "unknown"
+	BuildTimestamp = "unknown"
+)
+
+// versionInfo holds oapi-codegen-helper's version information
+var versionInfo *version.Info
+
+func init() {
+	versionInfo = version.New(Name)
+	versionInfo.Version = Version
+	versionInfo.CommitSHA = CommitSHA
+	versionInfo.BuildTimestamp = BuildTimestamp
+}
 
 const (
 	OAPICodegenEnvKey = "OAPI_CODEGEN"
@@ -48,6 +68,14 @@ output-options:
 // main is the entrypoint for the oapi-codegen-helper tool.
 // It reads the project configuration and generates code from OpenAPI specifications.
 func main() {
+	// Check for version flag
+	for _, arg := range os.Args[1:] {
+		if arg == "version" || arg == "--version" || arg == "-v" {
+			versionInfo.Print()
+			return
+		}
+	}
+
 	executable := os.Getenv(OAPICodegenEnvKey)
 	if executable == "" {
 		_, _ = fmt.Fprintln(os.Stderr, errEnv)

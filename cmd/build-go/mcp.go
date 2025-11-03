@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -23,34 +24,23 @@ type BuildInput struct {
 // runMCPServer starts the build-go MCP server with stdio transport.
 // It creates an MCP server, registers tools, and runs the server until stdin closes.
 func runMCPServer() error {
-	// Create MCP server with implementation info
-	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "build-go",
-		Version: "v1.0.0",
-	}, nil)
+	v, _, _ := versionInfo.Get()
+	server := mcpserver.New("build-go", v)
 
 	// Register build tool
-	mcp.AddTool(server, &mcp.Tool{
+	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "build",
 		Description: "Build a single Go binary from source",
 	}, handleBuildTool)
 
 	// Register buildBatch tool
-	mcp.AddTool(server, &mcp.Tool{
+	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "buildBatch",
 		Description: "Build multiple Go binaries from source",
 	}, handleBuildBatchTool)
 
-	// Run server with stdio transport
-	// Reads JSON-RPC from stdin, writes responses to stdout
-	// Logs go to stderr only
-	ctx := context.Background()
-	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
-		log.Printf("MCP server failed: %v", err)
-		return err
-	}
-
-	return nil
+	// Run the MCP server
+	return server.RunDefault()
 }
 
 // handleBuildTool handles the "build" tool call from MCP clients.

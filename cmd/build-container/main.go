@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
+	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/caarlos0/env/v11"
@@ -17,9 +18,34 @@ import (
 
 const Name = "build-container"
 
+// Version information (set via ldflags during build)
+var (
+	Version        = "dev"
+	CommitSHA      = "unknown"
+	BuildTimestamp = "unknown"
+)
+
+// versionInfo holds build-container's version information
+var versionInfo *version.Info
+
+func init() {
+	versionInfo = version.New(Name)
+	versionInfo.Version = Version
+	versionInfo.CommitSHA = CommitSHA
+	versionInfo.BuildTimestamp = BuildTimestamp
+}
+
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
+	// Check for version flag
+	for _, arg := range os.Args[1:] {
+		if arg == "version" || arg == "--version" || arg == "-v" {
+			versionInfo.Print()
+			return
+		}
+	}
+
 	// Check for --mcp flag to run as MCP server
 	for _, arg := range os.Args[1:] {
 		if arg == "--mcp" {
@@ -299,7 +325,7 @@ Optional environment variables:
     KANIKO_CACHE_DIR    string    Local directory for kaniko layer caching (default: ~/.kaniko-cache).
 
 Configuration:
-    The tool reads container build specifications from .project.yaml
+    The tool reads container build specifications from forge.yaml
     Artifacts are written to the path specified in build.artifactStorePath
 `
 

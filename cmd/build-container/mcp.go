@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -22,30 +23,23 @@ type BuildInput struct {
 
 // runMCPServer starts the build-container MCP server with stdio transport.
 func runMCPServer() error {
-	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "build-container",
-		Version: "v1.0.0",
-	}, nil)
+	v, _, _ := versionInfo.Get()
+	server := mcpserver.New("build-container", v)
 
 	// Register build tool
-	mcp.AddTool(server, &mcp.Tool{
+	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "build",
 		Description: "Build a container image using Kaniko",
 	}, handleBuildTool)
 
 	// Register buildBatch tool
-	mcp.AddTool(server, &mcp.Tool{
+	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "buildBatch",
 		Description: "Build multiple container images using Kaniko",
 	}, handleBuildBatchTool)
 
-	ctx := context.Background()
-	if err := server.Run(ctx, &mcp.StdioTransport{}); err != nil {
-		log.Printf("MCP server failed: %v", err)
-		return err
-	}
-
-	return nil
+	// Run the MCP server
+	return server.RunDefault()
 }
 
 // handleBuildTool handles the "build" tool call from MCP clients.

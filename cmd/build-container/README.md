@@ -4,11 +4,11 @@ A tool for building container images from declarative configuration and tracking
 
 ## Overview
 
-`build-container` reads container build specifications from `.project.yaml`, builds all defined containers using Kaniko, and writes artifact metadata to an artifact store for version tracking.
+`build-container` reads container build specifications from `forge.yaml`, builds all defined containers using Kaniko, and writes artifact metadata to an artifact store for version tracking.
 
 ## Features
 
-- **Declarative configuration** - Define container builds in `.project.yaml`
+- **Declarative configuration** - Define container builds in `forge.yaml`
 - **Git-based versioning** - Uses git commit hash for artifact versions
 - **Artifact tracking** - Maintains artifact store with timestamps and versions
 - **Kaniko-based builds** - Rootless container builds
@@ -23,7 +23,7 @@ A tool for building container images from declarative configuration and tracking
 
 ## Configuration
 
-### .project.yaml
+### forge.yaml
 
 Define container build specifications:
 
@@ -51,7 +51,7 @@ build:
 ### Basic Build
 
 ```bash
-# Build all containers defined in .project.yaml
+# Build all containers defined in forge.yaml
 CONTAINER_ENGINE=docker go run ./cmd/build-container
 ```
 
@@ -66,7 +66,7 @@ CONTAINER_ENGINE=docker \
 
 ## How It Works
 
-1. **Read Configuration** - Loads `.project.yaml` to get container specs
+1. **Read Configuration** - Loads `forge.yaml` to get container specs
 2. **Get Git Version** - Runs `git rev-parse HEAD` to get current commit hash
 3. **Build Each Container**:
    - Runs Kaniko to build container from specified Containerfile
@@ -106,8 +106,8 @@ artifacts:
 ## Example Workflow
 
 ```bash
-# 1. Define containers in .project.yaml
-cat >> .project.yaml <<EOF
+# 1. Define containers in forge.yaml
+cat >> forge.yaml <<EOF
 build:
   artifactStorePath: .ignore.artifact-store.yaml
   specs:

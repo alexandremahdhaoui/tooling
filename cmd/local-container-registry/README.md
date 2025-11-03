@@ -36,7 +36,7 @@ CONTAINER_ENGINE=docker PREPEND_CMD=sudo go run ./cmd/local-container-registry
 
 ## Configuration
 
-The tool reads configuration from `.project.yaml`:
+The tool reads configuration from `forge.yaml`:
 
 ```yaml
 localContainerRegistry:
@@ -121,7 +121,7 @@ CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push-all
 ```
 
 **What happens during push-all:**
-1. Reads `.project.yaml` build configuration
+1. Reads `forge.yaml` build configuration
 2. Reads artifact store
 3. Logs in to registry
 4. For each container in config:

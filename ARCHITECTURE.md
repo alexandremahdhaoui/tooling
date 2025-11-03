@@ -45,7 +45,7 @@ This is a Go development tooling repository that provides a comprehensive set of
 ├── docs/                  # Documentation
 ├── hack/                  # Build and generation scripts
 ├── .githooks/            # Git hooks for quality control
-├── .project.yaml         # Central project configuration
+├── forge.yaml         # Central project configuration
 └── Makefile              # Build automation
 ```
 
@@ -142,7 +142,7 @@ flatErr := flaterrors.Join(err1, err2)
 
 **Purpose:** Central configuration management for the entire project.
 
-**Configuration File:** `.project.yaml`
+**Configuration File:** `forge.yaml`
 
 **Key Structures:**
 
@@ -157,7 +157,7 @@ type Config struct {
 
 **Configuration Sources:**
 
-1. `.project.yaml` file (primary)
+1. `forge.yaml` file (primary)
 2. Environment variables (override)
 
 ## Command-Line Tools
@@ -253,7 +253,7 @@ type Config struct {
 **Features:**
 
 - Wraps oapi-codegen with project conventions
-- Configurable via `.project.yaml`
+- Configurable via `forge.yaml`
 
 ### chart-prereq
 
@@ -533,7 +533,7 @@ type Mount struct {
 
 ```
 main()
-├── Read .project.yaml
+├── Read forge.yaml
 ├── Create Kubernetes client
 ├── Initialize EventualConfig
 ├── Initialize all adapters
@@ -1212,7 +1212,7 @@ func DeleteEnvironment(store *IntegrationEnvStore, idOrName string) error
 
 ## Configuration Management
 
-### .project.yaml
+### forge.yaml
 
 Central configuration file for the entire project.
 
@@ -1235,7 +1235,7 @@ oapiCodegenHelper: {}
 
 **Configuration Loading:**
 
-1. Parse `.project.yaml` file
+1. Parse `forge.yaml` file
 2. Override with environment variables (using `github.com/caarlos0/env`)
 3. Validate configuration
 
@@ -1550,7 +1550,7 @@ make githooks
    - Don't silently ignore errors
 
 6. **Configuration:**
-   - Use `.project.yaml` for project configuration
+   - Use `forge.yaml` for project configuration
    - Support environment variable overrides
    - Document all configuration options
 
