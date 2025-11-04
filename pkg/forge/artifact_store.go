@@ -1,8 +1,27 @@
+// Package forge provides artifact store management for tracking built artifacts and test environments.
+//
+// The artifact store automatically prunes old build artifacts to prevent unbounded growth:
+//   - Only the 3 most recent artifacts are kept for each unique type:name combination
+//   - Pruning occurs automatically on every WriteArtifactStore() call
+//   - Test environments are NOT pruned - all test history is retained
+//
+// Example usage:
+//
+//	store, _ := forge.ReadOrCreateArtifactStore(".forge/artifacts.yaml")
+//	forge.AddOrUpdateArtifact(&store, forge.Artifact{
+//	    Name: "my-app",
+//	    Type: "binary",
+//	    Location: "./build/bin/my-app",
+//	    Timestamp: time.Now().Format(time.RFC3339),
+//	    Version: "v1.0.0",
+//	})
+//	forge.WriteArtifactStore(".forge/artifacts.yaml", store) // Automatically prunes old artifacts
 package forge
 
 import (
 	"errors"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
@@ -30,11 +49,11 @@ type ArtifactStore struct {
 }
 
 var (
-	errReadingArtifactStore     = errors.New("reading artifact store")
-	errWritingArtifactStore     = errors.New("writing artifact store")
-	errArtifactNotFound         = errors.New("artifact not found")
-	errTestEnvironmentNotFound  = errors.New("test environment not found")
-	errInvalidArtifactStore     = errors.New("invalid artifact store")
+	errReadingArtifactStore    = errors.New("reading artifact store")
+	errWritingArtifactStore    = errors.New("writing artifact store")
+	errArtifactNotFound        = errors.New("artifact not found")
+	errTestEnvironmentNotFound = errors.New("test environment not found")
+	errInvalidArtifactStore    = errors.New("invalid artifact store")
 )
 
 const artifactStoreVersion = "1.0"
@@ -86,8 +105,53 @@ func ReadOrCreateArtifactStore(path string) (ArtifactStore, error) {
 	return store, nil
 }
 
+// PruneBuildArtifacts keeps only the N most recent artifacts for each type+name combination.
+// Test environments are NOT pruned - only build artifacts are affected.
+func PruneBuildArtifacts(store *ArtifactStore, keepCount int) {
+	if store == nil || len(store.Artifacts) == 0 {
+		return
+	}
+
+	// Group artifacts by type+name
+	groups := make(map[string][]Artifact)
+	for _, artifact := range store.Artifacts {
+		key := artifact.Type + ":" + artifact.Name
+		groups[key] = append(groups[key], artifact)
+	}
+
+	// For each group, keep only the N most recent
+	var prunedArtifacts []Artifact
+	for _, artifacts := range groups {
+		// Sort by timestamp (newest first)
+		sort.Slice(artifacts, func(i, j int) bool {
+			ti, errI := time.Parse(time.RFC3339, artifacts[i].Timestamp)
+			tj, errJ := time.Parse(time.RFC3339, artifacts[j].Timestamp)
+			// If parsing fails, keep the artifact at the end
+			if errI != nil {
+				return false
+			}
+			if errJ != nil {
+				return true
+			}
+			return ti.After(tj)
+		})
+
+		// Keep only N most recent
+		if len(artifacts) > keepCount {
+			artifacts = artifacts[:keepCount]
+		}
+		prunedArtifacts = append(prunedArtifacts, artifacts...)
+	}
+
+	store.Artifacts = prunedArtifacts
+}
+
 // WriteArtifactStore writes the artifact store to the specified path.
+// Before writing, it prunes old build artifacts to keep only the 3 most recent per type+name.
 func WriteArtifactStore(path string, store ArtifactStore) error {
+	// Prune old build artifacts (keep only 3 most recent per type+name)
+	PruneBuildArtifacts(&store, 3)
+
 	b, err := yaml.Marshal(store)
 	if err != nil {
 		return flaterrors.Join(err, errWritingArtifactStore)

@@ -161,7 +161,7 @@ func checkEngineVersion(binaryPath, binaryName string) error {
 				engineVer := strings.TrimPrefix(engineVersion, "v")
 
 				// Compare major.minor versions (ignore patch and build metadata)
-				forgeVer = strings.Split(forgeVer, "-")[0]  // Remove build metadata
+				forgeVer = strings.Split(forgeVer, "-")[0] // Remove build metadata
 				engineVer = strings.Split(engineVer, "-")[0]
 
 				if forgeVer != engineVer && engineVer != "dev" {

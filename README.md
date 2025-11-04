@@ -92,15 +92,16 @@ See [docs/forge-usage.md](./docs/forge-usage.md) for complete usage guide.
 **Key Concepts:**
 - **BuildSpec**: Unified specification for building any artifact (binaries, containers)
 - **MCP Servers**: Build engines that communicate via Model Context Protocol
-- **Artifact Store**: Automatic tracking of built artifacts with metadata
+- **Artifact Store**: Automatic tracking of built artifacts with metadata (keeps 3 most recent per artifact)
 - **Integration Environments**: Managed Kind clusters with optional components
 
 **Commands:**
-- `forge build` - Build all artifacts defined in forge.yaml
-- `forge integration create <name>` - Create integration environment
-- `forge integration list` - List environments
-- `forge integration get <id>` - Get environment details
-- `forge integration delete <id>` - Delete environment
+- `forge build` - Build all artifacts defined in forge.yaml (automatically formats code first)
+- `forge test <stage> run` - Run tests for a specific stage (e.g., unit, integration, lint)
+- `forge test <stage> create` - Create test environment for stage
+- `forge test <stage> list` - List test environments for stage
+- `forge test <stage> get <id>` - Get test environment details
+- `forge test <stage> delete <id>` - Delete test environment
 
 **Documentation:**
 - [Forge CLI Usage Guide](./docs/forge-usage.md)
@@ -111,16 +112,21 @@ See [docs/forge-usage.md](./docs/forge-usage.md) for complete usage guide.
 
 | Name                       | Description                                                                                                                                                                                                     |
 |----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `forge` | **Primary build orchestrator.** Builds all artifacts and manages integration environments using MCP servers. Configured via `forge.yaml`. |
+| `forge` | **Primary build orchestrator.** Builds all artifacts and manages test environments using MCP servers. Configured via `forge.yaml`. Automatically formats code when building. |
 | `build-go` | MCP server for building Go binaries. Used by forge as a build engine. Can also be invoked directly. |
 | `build-container` | MCP server for building container images using Kaniko. Used by forge as a build engine. Can also be invoked directly. |
+| `format-go` | MCP server for formatting Go code using gofumpt (v0.6.0). Runs automatically during build when configured in `forge.yaml` build specs. |
+| `lint-go` | MCP server for linting Go code using golangci-lint (v2.6.0). Run via `forge test lint run`. Configured as a test stage in `forge.yaml`. |
+| `test-runner-go` | MCP server for running Go tests. Executes tests for unit, integration, and e2e stages. Used by forge test command. |
+| `test-integration` | MCP server for managing integration test environments. Creates Kind clusters with local registries for integration testing. |
 | `kindenv`                  | Manages Kind (Kubernetes in Docker) clusters for local development and testing. Outputs kubeconfig to path specified in `forge.yaml`. |
 | `local-container-registry` | Creates a TLS-enabled container registry within Kind clusters. Configured via `forge.yaml`. |
+| `generate-mocks` | MCP server for generating Go mocks using mockery. Used by forge for code generation. |
+| `generate-openapi-go` | MCP server for generating OpenAPI client/server code using oapi-codegen. Configured via `forge.yaml`. |
 | `oapi-codegen-helper`      | Wrapper for `oapi-codegen` that generates server and client code from OpenAPI specifications. Reads configuration from `forge.yaml` and parallelizes code generation. |
-| `test-go` | Wrapper around `gotestsum` for executing scoped tests. Supports test tags (unit, integration, functional, e2e). |
 | `chart-prereq` | Helper tool to install necessary Helm charts in Kubernetes clusters for testing. |
 | `ci-orchestrator` | Tool for orchestrating CI jobs (work in progress). |
-| `e2e` | End-to-end test script for `local-container-registry`. Now uses forge for building artifacts. |
+| `forge-e2e` | End-to-end tests for the forge CLI itself. Tests the complete build and test workflow. |
 
 ## Project Configuration (`forge.yaml`)
 
@@ -134,10 +140,34 @@ The `forge.yaml` file is the central configuration file for all the tools in thi
 ```yaml
 name: my-project
 
+# Artifact store path
+artifactStorePath: .ignore.artifact-store.yaml
+
+# Test stages configuration
+test:
+  # Unit tests - no environment management needed
+  - name: unit
+    engine: "noop"
+    runner: "go://test-runner-go"
+
+  # Integration tests - creates isolated test environments
+  - name: integration
+    engine: "go://test-integration"
+    runner: "go://test-runner-go"
+
+  # Linting as a test stage (uses golangci-lint v2.6.0)
+  - name: lint
+    engine: "noop"
+    runner: "go://lint-go"
+
 # Build configuration
 build:
-  artifactStorePath: .ignore.artifact-store.yaml
   specs:
+    # Format code before building (runs gofumpt)
+    - name: format-code
+      src: .
+      builder: go://format-go
+
     # Go binaries
     - name: my-cli
       src: ./cmd/my-cli
@@ -195,26 +225,62 @@ See [docs/forge-schema.md](./docs/forge-schema.md) for complete schema documenta
 
 ```sh
 # Build everything defined in forge.yaml
+# Note: Automatically formats code first if format-code build spec is configured
 forge build
+
+# Build specific artifact
+forge build my-cli
 
 # With custom flags
 GO_BUILD_LDFLAGS="-X main.Version=v1.0.0" CONTAINER_ENGINE=docker forge build
 ```
 
-**Manage integration environments:**
+**Format and Lint:**
 
 ```sh
-# Create environment
-forge integration create my-dev-env
+# Format code (runs automatically during build if configured in forge.yaml)
+# Add this to your build specs:
+#   - name: format-code
+#     src: .
+#     builder: go://format-go
 
-# List environments
-forge integration list
+# Run linter (uses golangci-lint v2.6.0)
+forge test lint run
+
+# The lint stage must be configured in forge.yaml:
+#   test:
+#     - name: lint
+#       engine: "noop"
+#       runner: "go://lint-go"
+```
+
+**Run Tests:**
+
+```sh
+# Run unit tests
+forge test unit run
+
+# Run integration tests (creates test environment automatically)
+forge test integration run
+
+# Run tests with existing environment
+forge test integration run <test-id>
+```
+
+**Manage test environments:**
+
+```sh
+# Create test environment
+forge test integration create
+
+# List test environments
+forge test integration list
 
 # Get environment details
-forge integration get my-dev-env
+forge test integration get <test-id>
 
-# Delete environment
-forge integration delete my-dev-env
+# Delete test environment
+forge test integration delete <test-id>
 ```
 
 **See:** [docs/forge-usage.md](./docs/forge-usage.md) for complete usage guide.

@@ -29,7 +29,7 @@ func TestParseJUnitXML(t *testing.T) {
   </testsuite>
 </testsuites>`
 
-	err := os.WriteFile(xmlPath, []byte(xmlContent), 0644)
+	err := os.WriteFile(xmlPath, []byte(xmlContent), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write test XML: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestParseJUnitXML_InvalidXML(t *testing.T) {
 	xmlPath := filepath.Join(tmpDir, "invalid.xml")
 
 	// Write invalid XML
-	err := os.WriteFile(xmlPath, []byte("not valid xml"), 0644)
+	err := os.WriteFile(xmlPath, []byte("not valid xml"), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestJUnitTestSuites_Parsing(t *testing.T) {
   <testsuite name="suite3" tests="3" failures="0" skipped="0" time="0.5"></testsuite>
 </testsuites>`
 
-	err := os.WriteFile(xmlPath, []byte(xmlContent), 0644)
+	err := os.WriteFile(xmlPath, []byte(xmlContent), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write test XML: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestJUnitTestSuites_EmptyFile(t *testing.T) {
 <testsuites>
 </testsuites>`
 
-	err := os.WriteFile(xmlPath, []byte(xmlContent), 0644)
+	err := os.WriteFile(xmlPath, []byte(xmlContent), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write test XML: %v", err)
 	}

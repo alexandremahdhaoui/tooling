@@ -15,10 +15,24 @@ test:
     engine: "go://test-integration"
     runner: "go://test-runner-go"
 
+  # -- e2e tests - comprehensive forge integration tests (no environment needed)
+  - name: e2e
+    engine: "noop"
+    runner: "go://forge-e2e"
+
+  # -- lint - linting as a test stage (no environment needed)
+  - name: lint
+    engine: "noop"
+    runner: "go://lint-go"
+
 # -- build defines the artifacts to build
 build:
   # -- specs defines the list of artifacts to build using the BuildSpec format.
   specs:
+    # Format code before building
+    - name: format-code
+      src: .
+      builder: go://format-go
     # Binaries
     - name: forge
       src: ./cmd/forge
@@ -52,6 +66,26 @@ build:
       src: ./cmd/test-integration
       dest: ./build/bin
       builder: go://build-go
+    - name: format-go
+      src: ./cmd/format-go
+      dest: ./build/bin
+      builder: go://build-go
+    - name: lint-go
+      src: ./cmd/lint-go
+      dest: ./build/bin
+      builder: go://build-go
+    - name: generate-mocks
+      src: ./cmd/generate-mocks
+      dest: ./build/bin
+      builder: go://build-go
+    - name: generate-openapi-go
+      src: ./cmd/generate-openapi-go
+      dest: ./build/bin
+      builder: go://build-go
+    - name: forge-e2e
+      src: ./cmd/forge-e2e
+      dest: ./build/bin
+      builder: go://build-go
     # Containers
     - name: for-testing-purposes
       src: ./containers/for-testing-purposes/Containerfile
@@ -74,5 +108,20 @@ localContainerRegistry:
   # -- namespace where the local container registry will be deployed.
   namespace: local-container-registry
 
-oapiCodegenHelper: {}
+# -- generateOpenAPI defines the configuration for generating OpenAPI client and server code
+# generateOpenAPI:
+#   defaults:
+#     sourceDir: ./api
+#     destinationDir: ./pkg/generated
+#     engine: go://generate-openapi-go
+#   specs:
+#     - name: example-api
+#       versions:
+#         - v1
+#       client:
+#         enabled: true
+#         packageName: exampleclient
+#       server:
+#         enabled: true
+#         packageName: exampleserver
 

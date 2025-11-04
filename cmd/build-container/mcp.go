@@ -91,7 +91,7 @@ func handleBuildTool(
 	// Build the container
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	envs := Envs{
-		ContainerEngine: "docker",  // Default for MCP mode
+		ContainerEngine: "docker", // Default for MCP mode
 		KanikoCacheDir:  "~/.kaniko-cache",
 	}
 

@@ -6,6 +6,10 @@ This guide provides practical examples and workflows for using the forge CLI too
 
 - [Quick Start](#quick-start)
 - [Building Artifacts](#building-artifacts)
+- [Code Quality](#code-quality)
+  - [Code Formatting](#code-formatting)
+  - [Linting](#linting)
+- [Testing](#testing)
 - [Integration Environments](#integration-environments)
 - [Common Workflows](#common-workflows)
 - [Environment Variables](#environment-variables)
@@ -68,6 +72,7 @@ forge version v0.2.1
 
 ```bash
 # Build all artifacts defined in forge.yaml
+# Note: Automatically formats code if format-code is in build specs
 forge build
 ```
 
@@ -94,12 +99,15 @@ forge build
 
 **What it does:**
 1. Reads `forge.yaml`
-2. For each BuildSpec:
+2. For each BuildSpec (in order):
+   - If `format-code` is first, formats all Go code using gofumpt
    - Locates the appropriate build engine
    - Invokes engine via MCP protocol
    - Builds the artifact
    - Records metadata in artifact store
 3. Updates `.ignore.artifact-store.yaml`
+
+**Note:** Build specs are processed in the order they appear in `forge.yaml`. To ensure code is formatted before building binaries, place the `format-code` spec first.
 
 **Output:**
 ```
@@ -203,6 +211,318 @@ artifacts:
     location: localhost:5000/my-api:v1.0.0-abc123
     timestamp: "2025-01-03T10:31:00Z"
     version: v1.0.0-abc123
+```
+
+## Code Quality
+
+Forge provides integrated code formatting and linting capabilities to maintain code quality.
+
+### Code Formatting
+
+Forge can automatically format your Go code using gofumpt (stricter gofmt) as part of the build process.
+
+#### Configure Formatting in forge.yaml
+
+Add `format-code` as the first build spec to ensure code is formatted before building:
+
+```yaml
+# forge.yaml
+build:
+  specs:
+    # Format code first
+    - name: format-code
+      src: .
+      builder: go://format-go
+
+    # Then build binaries
+    - name: my-app
+      src: ./cmd/my-app
+      dest: ./build/bin
+      builder: go://build-go
+```
+
+#### How It Works
+
+When you run `forge build`:
+
+1. The `format-code` spec runs first
+2. gofumpt v0.6.0 formats all `.go` files in the project
+3. Binary builds proceed with formatted code
+
+**Example output:**
+```bash
+$ forge build
+Building 1 artifact(s) with go://format-go...
+✅ Formatted Go code at .
+Building 13 artifact(s) with go://build-go...
+✅ Built binary: my-app (version: abc123)
+```
+
+#### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GOFUMPT_VERSION` | gofumpt version to use | `v0.6.0` |
+
+**Custom version:**
+```bash
+GOFUMPT_VERSION=v0.7.0 forge build
+```
+
+#### Manual Formatting
+
+You can also format code manually without building:
+
+```bash
+# Direct invocation
+go run ./cmd/format-go
+
+# Or if built locally
+./build/bin/format-go
+```
+
+### Linting
+
+Forge integrates golangci-lint as a test stage for comprehensive code linting.
+
+#### Configure Linting in forge.yaml
+
+Add a lint test stage:
+
+```yaml
+# forge.yaml
+test:
+  - name: lint
+    engine: "noop"  # No environment needed
+    runner: "go://lint-go"
+```
+
+#### Run Linter
+
+Execute the linter using the test command:
+
+```bash
+# Run linter
+forge test lint run
+
+# The linter will:
+# - Install golangci-lint v2.6.0 if needed
+# - Run all configured linters
+# - Apply automatic fixes with --fix flag
+# - Report issues
+```
+
+**Example output:**
+```bash
+$ forge test lint run
+Running tests: stage=lint, name=lint-20251104-011133
+✅ Linting passed
+
+Test Results:
+Status: passed
+Total: 0
+Passed: 1
+Failed: 0
+```
+
+#### Golangci-lint Configuration
+
+Golangci-lint uses:
+- **Version:** v2.6.0 (from `github.com/golangci/golangci-lint/v2`)
+- **Flags:** `--fix` (automatically fixes issues when possible)
+- **Config:** Reads `.golangci.yml` or `.golangci.yaml` in your project root
+
+**Create .golangci.yml:**
+```yaml
+# .golangci.yml
+linters:
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+
+linters-settings:
+  gofmt:
+    simplify: true
+```
+
+#### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GOLANGCI_LINT_VERSION` | golangci-lint version | `v2.6.0` |
+
+**Custom version:**
+```bash
+GOLANGCI_LINT_VERSION=v2.7.0 forge test lint run
+```
+
+#### Integration with Makefile
+
+```makefile
+# Makefile
+GOLANGCI_LINT_VERSION := v2.6.0
+GOFUMPT_VERSION := v0.6.0
+
+export GOLANGCI_LINT_VERSION
+export GOFUMPT_VERSION
+
+.PHONY: fmt
+fmt:
+	forge build format-code
+
+.PHONY: lint
+lint:
+	forge test lint run
+
+.PHONY: pre-commit
+pre-commit: fmt lint
+	git status
+```
+
+## Testing
+
+Forge provides a unified test management system that supports multiple test stages including unit, integration, e2e, and linting.
+
+### Test Command Structure
+
+```bash
+forge test <stage> <operation> [args...]
+```
+
+**Operations:**
+- `run [test-id]` - Run tests for the stage
+- `create` - Create test environment (for stages with engines)
+- `list` - List test environments
+- `get <test-id>` - Get environment details
+- `delete <test-id>` - Delete test environment
+
+### Configure Test Stages
+
+Define test stages in `forge.yaml`:
+
+```yaml
+# forge.yaml
+test:
+  # Unit tests - no environment needed
+  - name: unit
+    engine: "noop"
+    runner: "go://test-runner-go"
+
+  # Integration tests - creates Kind cluster automatically
+  - name: integration
+    engine: "go://test-integration"
+    runner: "go://test-runner-go"
+
+  # E2E tests
+  - name: e2e
+    engine: "noop"
+    runner: "go://forge-e2e"
+
+  # Linting as a test stage
+  - name: lint
+    engine: "noop"
+    runner: "go://lint-go"
+```
+
+### Run Tests
+
+#### Unit Tests
+
+Run fast, isolated unit tests:
+
+```bash
+# Run unit tests
+forge test unit run
+```
+
+**Output:**
+```
+Running tests: stage=unit, name=unit-20251104-012345
+✅ Unit tests passed
+
+Test Results:
+Status: passed
+Total: 42
+Passed: 42
+Failed: 0
+Coverage: 85.3%
+```
+
+#### Integration Tests
+
+Run integration tests with automatic environment creation:
+
+```bash
+# Run integration tests (creates environment automatically)
+forge test integration run
+
+# Or use existing environment
+forge test integration run <test-id>
+```
+
+**What it does:**
+1. Creates Kind cluster with local registry
+2. Runs integration tests
+3. Returns results
+4. Environment persists for inspection
+
+**Clean up environment:**
+```bash
+forge test integration delete <test-id>
+```
+
+#### Linting
+
+Run linter as a test:
+
+```bash
+forge test lint run
+```
+
+### Manage Test Environments
+
+For test stages with engines (like integration tests):
+
+```bash
+# Create environment manually
+forge test integration create
+
+# List all integration test environments
+forge test integration list
+
+# Get environment details
+forge test integration get <test-id>
+
+# Delete when done
+forge test integration delete <test-id>
+```
+
+### Test Workflow Example
+
+Complete testing workflow:
+
+```bash
+# 1. Format code
+forge build format-code
+
+# 2. Run unit tests
+forge test unit run
+
+# 3. Lint code
+forge test lint run
+
+# 4. Run integration tests
+forge test integration run
+
+# 5. Clean up
+forge test integration list
+forge test integration delete <test-id>
 ```
 
 ## Integration Environments
@@ -359,26 +679,24 @@ docker push localhost:5000/my-api:v1.0.0
 
 ### Workflow 1: Fresh Build and Test
 
-Complete workflow from build to testing:
+Complete workflow from build to testing with code quality checks:
 
 ```bash
-# 1. Build all artifacts
+# 1. Build all artifacts (automatically formats code)
 forge build
 
-# 2. Create integration environment
-forge integration create test-env
+# 2. Run linter
+forge test lint run
 
-# 3. Configure kubectl
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
+# 3. Run unit tests
+forge test unit run
 
-# 4. Deploy and test your application
-kubectl apply -f manifests/
+# 4. Run integration tests (creates environment automatically)
+forge test integration run
 
-# 5. Run tests
-make test-integration
-
-# 6. Clean up
-forge integration delete test-env
+# 5. Clean up test environments
+forge test integration list
+forge test integration delete <test-id>
 ```
 
 ### Workflow 2: Iterative Development
@@ -386,25 +704,21 @@ forge integration delete test-env
 Quick iteration during development:
 
 ```bash
-# One-time: Create environment
-forge integration create dev
-
 # Development loop:
 # 1. Make code changes
 vim cmd/my-app/main.go
 
-# 2. Rebuild
+# 2. Format and build (format happens automatically)
 forge build
 
-# 3. Redeploy
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
-kubectl rollout restart deployment/my-app
+# 3. Quick lint check
+forge test lint run
 
-# 4. Test
-curl http://localhost:8080/api/health
+# 4. Run relevant tests
+forge test unit run
 
-# When done:
-forge integration delete dev
+# When ready to commit:
+forge test integration run
 ```
 
 ### Workflow 3: Container Image Development
@@ -500,6 +814,19 @@ Forge respects several environment variables:
 | `CONTAINER_ENGINE` | Container engine | `docker` | `podman` |
 | `PREPEND_CMD` | Command prefix | None | `sudo` |
 
+### Code Quality-Related
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `GOFUMPT_VERSION` | gofumpt version for formatting | `v0.6.0` | `v0.7.0` |
+| `GOLANGCI_LINT_VERSION` | golangci-lint version for linting | `v2.6.0` | `v2.7.0` |
+
+### Test-Related
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `GOTESTSUM_VERSION` | gotestsum version for test runner | `v1.12.0` | `v1.13.0` |
+
 ### Environment-Related
 
 | Variable | Description | Default | Example |
@@ -511,12 +838,19 @@ Forge respects several environment variables:
 ### Example with All Variables
 
 ```bash
+# Build with all options
 GO_BUILD_LDFLAGS="-X main.Version=v1.0.0" \
 CONTAINER_ENGINE=podman \
 PREPEND_CMD=sudo \
+GOFUMPT_VERSION=v0.7.0 \
+forge build
+
+# Test with custom versions
+GOLANGCI_LINT_VERSION=v2.7.0 \
+GOTESTSUM_VERSION=v1.13.0 \
 KIND_BINARY=kind \
 KIND_BINARY_PREFIX=sudo \
-forge build
+forge test integration run
 ```
 
 ## Advanced Usage

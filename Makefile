@@ -15,7 +15,7 @@ CONTROLLER_GEN_VERSION := v0.14.0
 # renovate: datasource=github-release depName=mvdan/gofumpt
 GOFUMPT_VERSION        := v0.6.0
 # renovate: datasource=github-release depName=golangci/golangci-lint
-GOLANGCI_LINT_VERSION  := v1.59.1
+GOLANGCI_LINT_VERSION  := v2.6.0
 # renovate: datasource=github-release depName=gotestyourself/gotestsum
 GOTESTSUM_VERSION      := v1.12.0
 # renovate: datasource=github-release depName=vektra/mockery
@@ -31,47 +31,26 @@ KIND_BINARY_PREFIX ?= sudo
 
 KINDENV_ENVS := KIND_BINARY_PREFIX="$(KIND_BINARY_PREFIX)" KIND_BINARY="$(KIND_BINARY)"
 
-CONTROLLER_GEN := go run sigs.k8s.io/controller-tools/cmd/controller-gen@$(CONTROLLER_GEN_VERSION)
-GO_GEN         := go generate
-GOFUMPT        := go run mvdan.cc/gofumpt@$(GOFUMPT_VERSION)
-GOLANGCI_LINT  := go run github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
-GOTESTSUM      := go run gotest.tools/gotestsum@$(GOTESTSUM_VERSION) --format pkgname
-MOCKERY        := go run github.com/vektra/mockery/v2@$(MOCKERY_VERSION)
-OAPI_CODEGEN   := go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@$(OAPI_CODEGEN_VERSION)
+# Forge - the orchestration tool that runs everything
+FORGE := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" $(KINDENV_ENVS) CONTAINER_ENGINE="$(CONTAINER_ENGINE)" go run ./cmd/forge
 
-FORGE                       := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" $(KINDENV_ENVS) CONTAINER_ENGINE="$(CONTAINER_ENGINE)" go run ./cmd/forge
-BUILD_GO                    := $(FORGE) build
-BUILD_CONTAINER             := $(FORGE) build
-KINDENV                     := $(KINDENV_ENVS) go run ./cmd/kindenv
-LOCAL_CONTAINER_REGISTRY    := CONTAINER_ENGINE="$(CONTAINER_ENGINE)" PREPEND_CMD=sudo go run ./cmd/local-container-registry
-OAPI_CODEGEN_HELPER         := OAPI_CODEGEN="$(OAPI_CODEGEN)" go run ./cmd/oapi-codegen-helper
-TEST_GO                     := GOTESTSUM="$(GOTESTSUM)" go run ./cmd/test-go
+# Individual tools (for direct invocation if needed)
+FORMAT_GO            := GOFUMPT_VERSION="$(GOFUMPT_VERSION)" ./build/bin/format-go
+GENERATE_MOCKS       := MOCKERY_VERSION="$(MOCKERY_VERSION)" ./build/bin/generate-mocks
+GENERATE_OPENAPI_GO  := OAPI_CODEGEN_VERSION="$(OAPI_CODEGEN_VERSION)" ./build/bin/generate-openapi-go
 
-CLEAN_MOCKS := rm -rf ./internal/util/mocks
+# ------------------------------------------------------- HELP ------------------------------------------------------- #
 
-# ------------------------------------------------------- GENERATE --------------------------------------------------- #
+.DEFAULT_GOAL := help
 
+.PHONY: help
+help: ## Show this help message
+	@echo 'Usage: make [target]'
+	@echo ''
+	@echo 'Available targets:'
+	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-.PHONY: generate
-generate: ## Generate REST API server/client code, CRDs and other go generators.
-	$(OAPI_CODEGEN_HELPER)
-	$(GO_GEN) "./..."
-
-	$(CONTROLLER_GEN) object:headerFile="hack/boilerplate.go.txt" paths="./..."
-	$(CONTROLLER_GEN) paths="./..." \
-		crd:generateEmbeddedObjectMeta=true \
-		output:crd:artifacts:config=charts/$(PROJECT)/templates/crds
-
-	$(CONTROLLER_GEN) paths="./..." \
-		rbac:roleName=$(PROJECT) \
-		webhook \
-		output:rbac:dir=charts/$(PROJECT)/templates/rbac \
-		output:webhook:dir=charts/$(PROJECT)/templates/webhook
-
-	$(CLEAN_MOCKS)
-	$(MOCKERY)
-
-# ------------------------------------------------------- BUILD ---------------------------------------------------- #
+# ------------------------------------------------------- BUILD ------------------------------------------------------ #
 
 .PHONY: build
 build: ## Build all artifacts using forge
@@ -79,62 +58,79 @@ build: ## Build all artifacts using forge
 
 .PHONY: build-go
 build-go: ## Build Go binaries using forge
-	$(BUILD_GO)
+	$(FORGE) build
 
 .PHONY: build-container
 build-container: ## Build container images using forge
-	$(BUILD_CONTAINER)
+	$(FORGE) build for-testing-purposes
 
-# ------------------------------------------------------- FMT -------------------------------------------------------- #
+# ------------------------------------------------------- GENERATE --------------------------------------------------- #
+
+.PHONY: generate
+generate: generate-oapi generate-mocks ## Generate all code (oapi, mocks)
+
+.PHONY: generate-oapi
+generate-oapi: build-tools ## Generate OpenAPI client/server code
+	$(GENERATE_OPENAPI_GO)
+
+.PHONY: generate-mocks
+generate-mocks: build-tools ## Generate mocks
+	$(GENERATE_MOCKS)
+
+# ------------------------------------------------------- FORMAT ----------------------------------------------------- #
 
 .PHONY: fmt
-fmt:
-	$(GOFUMPT) -w .
+fmt: build-tools ## Format Go code using gofumpt
+	$(FORMAT_GO)
 
 # ------------------------------------------------------- LINT ------------------------------------------------------- #
 
 .PHONY: lint
-lint:
-	$(GOLANGCI_LINT) run --fix
+lint: ## Lint Go code using golangci-lint
+	$(FORGE) test lint run
 
 # ------------------------------------------------------- TEST ------------------------------------------------------- #
 
-.PHONY: test-chart
-test-chart:
-	echo TODO: implement 'make `test-chart`'.
-
 .PHONY: test-unit
-test-unit:
-	TEST_TAG=unit $(TEST_GO)
+test-unit: ## Run unit tests
+	$(FORGE) test unit run
 
 .PHONY: test-integration
-test-integration:
-	TEST_TAG=integration $(TEST_GO)
+test-integration: ## Run integration tests
+	$(FORGE) test integration run
 
 .PHONY: test-e2e
-test-e2e:
-	echo "DISCLAIMER: this is still a work in progress"
+test-e2e: ## Run end-to-end tests
+	@echo "DISCLAIMER: this is still a work in progress"
 	CONTAINER_ENGINE=$(CONTAINER_ENGINE) ./cmd/e2e/main.sh
 
+.PHONY: test-chart
+test-chart: ## Run chart tests
+	@echo "TODO: implement 'make test-chart'."
+
+# ------------------------------------------------------- TEST SETUP/TEARDOWN ---------------------------------------- #
+
 .PHONY: test-setup
-test-setup: build-container
-	$(KINDENV) setup
-	$(LOCAL_CONTAINER_REGISTRY)
+test-setup: build-container ## Setup test environment (kindenv + local registry)
+	$(KINDENV_ENVS) go run ./cmd/kindenv setup
+	CONTAINER_ENGINE="$(CONTAINER_ENGINE)" PREPEND_CMD=sudo go run ./cmd/local-container-registry
 
 .PHONY: test-teardown
-test-teardown:
-	$(LOCAL_CONTAINER_REGISTRY) teardown
-	$(KINDENV) teardown
+test-teardown: ## Teardown test environment
+	CONTAINER_ENGINE="$(CONTAINER_ENGINE)" PREPEND_CMD=sudo go run ./cmd/local-container-registry teardown
+	$(KINDENV_ENVS) go run ./cmd/kindenv teardown
 
-.PHONY: test
-test: test-unit test-setup test-integration test-functional test-teardown
+# ------------------------------------------------------- UTILITIES -------------------------------------------------- #
 
-# ------------------------------------------------------- PRE-PUSH --------------------------------------------------- #
+.PHONY: build-tools
+build-tools: ## Build format-go, lint-go, generate-mocks, and generate-openapi-go tools
+	@$(FORGE) build format-go lint-go generate-mocks generate-openapi-go > /dev/null 2>&1 || true
 
-.PHONY: githooks
-githooks: ## Set up git hooks to run before a push.
-	git config core.hooksPath .githooks
+.PHONY: clean
+clean: ## Clean build artifacts
+	rm -rf ./build/bin/*
+	rm -f .ignore.*
 
-.PHONY: pre-push
-pre-push: generate fmt lint test
-	git status --porcelain
+.PHONY: version
+version: ## Show forge version
+	$(FORGE) version

@@ -109,6 +109,8 @@ The artifact store file is automatically created and managed by forge. It contai
 - Build timestamp
 - Artifact location
 
+**Automatic Pruning:** The artifact store automatically retains only the 3 most recent build artifacts for each unique `type:name` combination. Older artifacts are automatically removed when the store is updated. This prevents unbounded growth while maintaining recent build history. Test environments are NOT pruned and retain all historical data.
+
 #### `specs` (array of BuildSpec, required)
 
 List of artifacts to build. Each entry follows the [BuildSpec specification](#buildspec-specification).
@@ -602,13 +604,36 @@ Defined by `build.artifactStorePath` in forge.yaml
 ### Schema
 
 ```yaml
+version: string       # Artifact store version (always "1.0")
+lastUpdated: string   # ISO 8601 timestamp of last update
 artifacts:
   - name: string        # Artifact identifier
-    type: string        # "binary" or "container"
+    type: string        # "binary", "container", or "formatted"
     location: string    # File path or image reference
     timestamp: string   # ISO 8601 timestamp
     version: string     # Git version (commit hash + dirty flag)
+testEnvironments:     # Test environment tracking (not pruned)
+  <env-id>:
+    id: string
+    name: string
+    status: string
+    createdAt: string
+    updatedAt: string
 ```
+
+### Automatic Pruning
+
+The artifact store implements automatic pruning to prevent unbounded growth:
+
+- **Build Artifacts:** Only the **3 most recent** artifacts are retained for each unique `type:name` combination
+- **Pruning Trigger:** Automatic on every `WriteArtifactStore()` call
+- **Sorting:** By timestamp (RFC3339 format), newest first
+- **Test Data:** Test environments are **NOT pruned** - all test history is retained
+
+**Example:**
+- If you build `binary:forge` 5 times, only the 3 most recent builds are kept
+- Each unique `type:name` pair (e.g., `binary:forge`, `container:api-server`) is pruned independently
+- Invalid timestamps are handled gracefully (kept at end of list)
 
 ### Example
 

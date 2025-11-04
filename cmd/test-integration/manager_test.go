@@ -74,7 +74,7 @@ test:
     runner: "go://test-runner-go"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestCmdGet_Integration(t *testing.T) {
 	forgeYAML := `name: test-project
 artifactStorePath: ` + artifactStorePath
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestCmdGet_NonexistentID(t *testing.T) {
 	forgeYAML := `name: test-project
 artifactStorePath: ` + artifactStorePath
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestCmdDelete_Integration(t *testing.T) {
 	forgeYAML := `name: test-project
 artifactStorePath: ` + artifactStorePath
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestCmdDelete_NonexistentID(t *testing.T) {
 	forgeYAML := `name: test-project
 artifactStorePath: ` + artifactStorePath
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -375,7 +375,7 @@ func TestCmdList_Integration(t *testing.T) {
 	forgeYAML := `name: test-project
 artifactStorePath: ` + artifactStorePath
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}

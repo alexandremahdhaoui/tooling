@@ -673,6 +673,8 @@ Build Artifact
 
 **Purpose:** Tracks all built artifacts with metadata for version control and reproducibility.
 
+**Automatic Pruning:** The artifact store automatically retains only the 3 most recent build artifacts for each unique `type:name` combination. Test environments are not pruned and retain all historical data.
+
 **Structure:**
 
 ```yaml
@@ -1111,17 +1113,32 @@ const (
 
 ```go
 type ArtifactStore struct {
-    Artifacts []Artifact `yaml:"artifacts"`
+    Version          string                      `json:"version"`
+    LastUpdated      time.Time                   `json:"lastUpdated"`
+    Artifacts        []Artifact                  `json:"artifacts"`
+    TestEnvironments map[string]*TestEnvironment `json:"testEnvironments,omitempty"`
 }
 
 // Read artifact store from file
 func ReadArtifactStore(path string) (ArtifactStore, error)
 
-// Write artifact store to file
+// Read artifact store or create empty one if not exists
+func ReadOrCreateArtifactStore(path string) (ArtifactStore, error)
+
+// Write artifact store to file (automatically prunes old artifacts)
 func WriteArtifactStore(path string, store ArtifactStore) error
 
 // Add or update artifact
 func AddOrUpdateArtifact(store *ArtifactStore, artifact Artifact)
+
+// Prune old build artifacts (keeps 3 most recent per type:name)
+func PruneBuildArtifacts(store *ArtifactStore, keepCount int)
+
+// Get latest artifact by name
+func GetLatestArtifact(store ArtifactStore, name string) (Artifact, error)
+
+// Get artifacts by type
+func GetArtifactsByType(store ArtifactStore, artifactType string) []Artifact
 ```
 
 #### IntegrationEnvStore

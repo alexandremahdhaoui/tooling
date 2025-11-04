@@ -28,8 +28,8 @@ type Spec struct {
 	Kindenv Kindenv `json:"kindenv"`
 	// LocalContainerRegistry holds the configuration for the local-container-registry tool.
 	LocalContainerRegistry LocalContainerRegistry `json:"localContainerRegistry"`
-	// OAPICodegenHelper holds the configuration for the oapi-codegen-helper tool.
-	OAPICodegenHelper OAPICodegenHelper `json:"oapiCodegenHelper"`
+	// GenerateOpenAPI holds the configuration for generating OpenAPI client/server code.
+	GenerateOpenAPI *GenerateOpenAPIConfig `json:"generateOpenAPI,omitempty"`
 
 	// Build holds the build configuration
 	Build Build `json:"build"`
@@ -43,7 +43,13 @@ var errReadingProjectConfig = errors.New("error reading project config")
 // ReadSpec reads the forge configuration from the forge.yaml file.
 // It returns a Spec struct and an error if the file cannot be read or parsed.
 func ReadSpec() (Spec, error) {
-	b, err := os.ReadFile(ConfigPath) //nolint:varnamelen
+	return ReadSpecFromPath(ConfigPath)
+}
+
+// ReadSpecFromPath reads the forge configuration from the specified file path.
+// It returns a Spec struct and an error if the file cannot be read or parsed.
+func ReadSpecFromPath(path string) (Spec, error) {
+	b, err := os.ReadFile(path) //nolint:varnamelen
 	if err != nil {
 		return Spec{}, flaterrors.Join(err, errReadingProjectConfig)
 	}

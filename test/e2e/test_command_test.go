@@ -24,7 +24,7 @@ func TestForgeTestCommand(t *testing.T) {
 
 	// Create build/bin directory in temp dir
 	buildBinDir := filepath.Join(tmpDir, "build", "bin")
-	if err := os.MkdirAll(buildBinDir, 0755); err != nil {
+	if err := os.MkdirAll(buildBinDir, 0o755); err != nil {
 		t.Fatalf("Failed to create build/bin directory: %v", err)
 	}
 
@@ -64,7 +64,7 @@ test:
     runner: "go://test-runner-go"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestForgeTestCommand_AutoCreateEnvironment(t *testing.T) {
 
 	// Create build/bin directory in temp dir
 	buildBinDir := filepath.Join(tmpDir, "build", "bin")
-	if err := os.MkdirAll(buildBinDir, 0755); err != nil {
+	if err := os.MkdirAll(buildBinDir, 0o755); err != nil {
 		t.Fatalf("Failed to create build/bin directory: %v", err)
 	}
 
@@ -237,7 +237,7 @@ test:
     runner: "go://test-runner-go"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -264,7 +264,7 @@ func TestForgeTestCommand_ErrorCases(t *testing.T) {
 
 	// Create build/bin directory in temp dir
 	buildBinDir := filepath.Join(tmpDir, "build", "bin")
-	if err := os.MkdirAll(buildBinDir, 0755); err != nil {
+	if err := os.MkdirAll(buildBinDir, 0o755); err != nil {
 		t.Fatalf("Failed to create build/bin directory: %v", err)
 	}
 
@@ -286,7 +286,7 @@ test:
     runner: "go://test-runner-go"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0644)
+	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestForgeTestCommand_MCP(t *testing.T) {
 
 	// Create build/bin directory in temp dir
 	buildBinDir := filepath.Join(tmpDir, "build", "bin")
-	if err := os.MkdirAll(buildBinDir, 0755); err != nil {
+	if err := os.MkdirAll(buildBinDir, 0o755); err != nil {
 		t.Fatalf("Failed to create build/bin directory: %v", err)
 	}
 

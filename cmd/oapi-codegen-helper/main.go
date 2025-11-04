@@ -88,7 +88,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := do(executable, config.OAPICodegenHelper); err != nil {
+	if config.GenerateOpenAPI == nil {
+		_, _ = fmt.Fprintln(os.Stderr, "no generateOpenAPI configuration found in forge.yaml")
+		os.Exit(1)
+	}
+
+	if err := do(executable, *config.GenerateOpenAPI); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err.Error())
 		os.Exit(1)
 	}
@@ -97,7 +102,7 @@ func main() {
 	os.Exit(0)
 }
 
-func do(executable string, config forge.OAPICodegenHelper) error {
+func do(executable string, config forge.GenerateOpenAPIConfig) error {
 	cmdName, args := parseExecutable(executable)
 	errChan := make(chan error)
 	wg := &sync.WaitGroup{}
@@ -206,7 +211,7 @@ func writeTempCodegenConfig(templatedConfig string) (string, func(), error) {
 	return tempFile.Name(), cleanup, nil
 }
 
-func templateOutputPath(config forge.OAPICodegenHelper, index int, packageName string) string {
+func templateOutputPath(config forge.GenerateOpenAPIConfig, index int, packageName string) string {
 	destDir := config.Defaults.DestinationDir
 	if config.Specs[index].DestinationDir != "" { // it takes precedence over defaults.
 		destDir = config.Specs[index].DestinationDir
@@ -215,12 +220,17 @@ func templateOutputPath(config forge.OAPICodegenHelper, index int, packageName s
 	return filepath.Join(destDir, packageName, zzGeneratedFilename)
 }
 
-func templateSourcePath(config forge.OAPICodegenHelper, index int, version string) string {
+func templateSourcePath(config forge.GenerateOpenAPIConfig, index int, version string) string {
 	if source := config.Specs[index].Source; source != "" {
 		return source
 	}
 
 	sourceFile := fmt.Sprintf(sourceFileTemplate, config.Specs[index].Name, version)
 
-	return filepath.Join(config.Defaults.SourceDir, sourceFile)
+	sourceDir := config.Defaults.SourceDir
+	if config.Specs[index].SourceDir != "" {
+		sourceDir = config.Specs[index].SourceDir
+	}
+
+	return filepath.Join(sourceDir, sourceFile)
 }

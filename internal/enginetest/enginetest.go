@@ -173,7 +173,7 @@ func TestBinaryExists(t *testing.T, engine Engine) {
 
 		// Check if file is executable (on Unix-like systems)
 		mode := info.Mode()
-		if mode&0111 == 0 {
+		if mode&0o111 == 0 {
 			t.Errorf("Binary is not executable: %s", engine.BinaryPath)
 		}
 	})
@@ -193,5 +193,10 @@ func AllEngines(repoRoot string) []Engine {
 		{Name: "oapi-codegen-helper", BinaryPath: filepath.Join(buildBin, "oapi-codegen-helper"), SupportsMCP: false},
 		{Name: "test-runner-go", BinaryPath: filepath.Join(buildBin, "test-runner-go"), SupportsMCP: true},
 		{Name: "test-integration", BinaryPath: filepath.Join(buildBin, "test-integration"), SupportsMCP: true},
+		{Name: "format-go", BinaryPath: filepath.Join(buildBin, "format-go"), SupportsMCP: true},
+		{Name: "lint-go", BinaryPath: filepath.Join(buildBin, "lint-go"), SupportsMCP: true},
+		{Name: "generate-mocks", BinaryPath: filepath.Join(buildBin, "generate-mocks"), SupportsMCP: true},
+		{Name: "generate-openapi-go", BinaryPath: filepath.Join(buildBin, "generate-openapi-go"), SupportsMCP: true},
+		{Name: "forge-e2e", BinaryPath: filepath.Join(buildBin, "forge-e2e"), SupportsMCP: true},
 	}
 }

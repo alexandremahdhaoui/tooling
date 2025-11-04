@@ -76,9 +76,9 @@ type junitTestSuite struct {
 }
 
 type junitTestCase struct {
-	Name    string          `xml:"name,attr"`
-	Failure *junitFailure   `xml:"failure,omitempty"`
-	Skipped *junitSkipped   `xml:"skipped,omitempty"`
+	Name    string        `xml:"name,attr"`
+	Failure *junitFailure `xml:"failure,omitempty"`
+	Skipped *junitSkipped `xml:"skipped,omitempty"`
 }
 
 type junitFailure struct {

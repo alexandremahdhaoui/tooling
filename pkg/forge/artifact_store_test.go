@@ -48,7 +48,7 @@ func TestAddOrUpdateTestEnvironment(t *testing.T) {
 	time.Sleep(10 * time.Millisecond) // Ensure time difference
 	AddOrUpdateTestEnvironment(store, env)
 
-	retrieved, _ = store.TestEnvironments[env.ID]
+	retrieved = store.TestEnvironments[env.ID]
 	if retrieved.Status != TestStatusPassed {
 		t.Errorf("Expected status %s, got %s", TestStatusPassed, retrieved.Status)
 	}
@@ -404,5 +404,288 @@ func TestTestEnvironmentStatusConstants(t *testing.T) {
 	}
 	if TestStatusPartiallyDeleted != "partially_deleted" {
 		t.Errorf("Expected TestStatusPartiallyDeleted to be 'partially_deleted', got %s", TestStatusPartiallyDeleted)
+	}
+}
+
+func TestPruneBuildArtifacts_KeepsThreeMostRecent(t *testing.T) {
+	now := time.Now().UTC()
+
+	store := &ArtifactStore{
+		Version: "1.0",
+		Artifacts: []Artifact{
+			{
+				Name:      "test-binary",
+				Type:      "binary",
+				Location:  "./build/bin/test1",
+				Timestamp: now.Add(-4 * time.Hour).Format(time.RFC3339),
+				Version:   "v1.0.0",
+			},
+			{
+				Name:      "test-binary",
+				Type:      "binary",
+				Location:  "./build/bin/test2",
+				Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339),
+				Version:   "v1.0.1",
+			},
+			{
+				Name:      "test-binary",
+				Type:      "binary",
+				Location:  "./build/bin/test3",
+				Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339),
+				Version:   "v1.0.2",
+			},
+			{
+				Name:      "test-binary",
+				Type:      "binary",
+				Location:  "./build/bin/test4",
+				Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339),
+				Version:   "v1.0.3",
+			},
+			{
+				Name:      "test-binary",
+				Type:      "binary",
+				Location:  "./build/bin/test5",
+				Timestamp: now.Format(time.RFC3339),
+				Version:   "v1.0.4",
+			},
+		},
+		TestEnvironments: make(map[string]*TestEnvironment),
+	}
+
+	PruneBuildArtifacts(store, 3)
+
+	// Should keep only 3 most recent artifacts
+	if len(store.Artifacts) != 3 {
+		t.Errorf("Expected 3 artifacts after pruning, got %d", len(store.Artifacts))
+	}
+
+	// Verify the 3 most recent are kept
+	foundVersions := make(map[string]bool)
+	for _, artifact := range store.Artifacts {
+		foundVersions[artifact.Version] = true
+	}
+
+	// Should keep v1.0.4, v1.0.3, v1.0.2 (the 3 most recent)
+	expectedVersions := []string{"v1.0.4", "v1.0.3", "v1.0.2"}
+	for _, v := range expectedVersions {
+		if !foundVersions[v] {
+			t.Errorf("Expected to find version %s after pruning", v)
+		}
+	}
+
+	// Should NOT keep v1.0.0, v1.0.1 (the oldest 2)
+	unexpectedVersions := []string{"v1.0.0", "v1.0.1"}
+	for _, v := range unexpectedVersions {
+		if foundVersions[v] {
+			t.Errorf("Expected version %s to be pruned", v)
+		}
+	}
+}
+
+func TestPruneBuildArtifacts_MultipleLTypes(t *testing.T) {
+	now := time.Now().UTC()
+
+	store := &ArtifactStore{
+		Version: "1.0",
+		Artifacts: []Artifact{
+			// Binary artifacts (5 total, should keep 3)
+			{Name: "app", Type: "binary", Timestamp: now.Add(-4 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v3"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v4"},
+			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v5"},
+			// Container artifacts (4 total, should keep 3)
+			{Name: "app", Type: "container", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "c1"},
+			{Name: "app", Type: "container", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "c2"},
+			{Name: "app", Type: "container", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "c3"},
+			{Name: "app", Type: "container", Timestamp: now.Format(time.RFC3339), Version: "c4"},
+		},
+		TestEnvironments: make(map[string]*TestEnvironment),
+	}
+
+	PruneBuildArtifacts(store, 3)
+
+	// Should keep 3 binaries + 3 containers = 6 total
+	if len(store.Artifacts) != 6 {
+		t.Errorf("Expected 6 artifacts after pruning, got %d", len(store.Artifacts))
+	}
+
+	// Count by type
+	binaryCount := 0
+	containerCount := 0
+	for _, artifact := range store.Artifacts {
+		switch artifact.Type {
+		case "binary":
+			binaryCount++
+		case "container":
+			containerCount++
+		}
+	}
+
+	if binaryCount != 3 {
+		t.Errorf("Expected 3 binary artifacts, got %d", binaryCount)
+	}
+
+	if containerCount != 3 {
+		t.Errorf("Expected 3 container artifacts, got %d", containerCount)
+	}
+}
+
+func TestPruneBuildArtifacts_MultipleNames(t *testing.T) {
+	now := time.Now().UTC()
+
+	store := &ArtifactStore{
+		Version: "1.0",
+		Artifacts: []Artifact{
+			// app1 artifacts (4 total, should keep 3)
+			{Name: "app1", Type: "binary", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app1", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app1", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v3"},
+			{Name: "app1", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v4"},
+			// app2 artifacts (2 total, should keep all)
+			{Name: "app2", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app2", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v2"},
+		},
+		TestEnvironments: make(map[string]*TestEnvironment),
+	}
+
+	PruneBuildArtifacts(store, 3)
+
+	// Should keep 3 app1 + 2 app2 = 5 total
+	if len(store.Artifacts) != 5 {
+		t.Errorf("Expected 5 artifacts after pruning, got %d", len(store.Artifacts))
+	}
+
+	// Count by name
+	app1Count := 0
+	app2Count := 0
+	for _, artifact := range store.Artifacts {
+		switch artifact.Name {
+		case "app1":
+			app1Count++
+		case "app2":
+			app2Count++
+		}
+	}
+
+	if app1Count != 3 {
+		t.Errorf("Expected 3 app1 artifacts, got %d", app1Count)
+	}
+
+	if app2Count != 2 {
+		t.Errorf("Expected 2 app2 artifacts (no pruning needed), got %d", app2Count)
+	}
+}
+
+func TestPruneBuildArtifacts_NoLPruningNeeded(t *testing.T) {
+	now := time.Now().UTC()
+
+	store := &ArtifactStore{
+		Version: "1.0",
+		Artifacts: []Artifact{
+			{Name: "app", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v3"},
+		},
+		TestEnvironments: make(map[string]*TestEnvironment),
+	}
+
+	PruneBuildArtifacts(store, 3)
+
+	// Should keep all 3 artifacts
+	if len(store.Artifacts) != 3 {
+		t.Errorf("Expected 3 artifacts (no pruning), got %d", len(store.Artifacts))
+	}
+}
+
+func TestPruneBuildArtifacts_InvalidTimestamps(t *testing.T) {
+	now := time.Now().UTC()
+
+	store := &ArtifactStore{
+		Version: "1.0",
+		Artifacts: []Artifact{
+			{Name: "app", Type: "binary", Timestamp: "invalid-timestamp", Version: "v1"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v3"},
+		},
+		TestEnvironments: make(map[string]*TestEnvironment),
+	}
+
+	// Should not panic with invalid timestamps
+	PruneBuildArtifacts(store, 3)
+
+	// Should keep all artifacts (1 invalid + 2 valid)
+	if len(store.Artifacts) != 3 {
+		t.Errorf("Expected 3 artifacts, got %d", len(store.Artifacts))
+	}
+}
+
+func TestPruneBuildArtifacts_NilStore(t *testing.T) {
+	// Should not panic with nil store
+	PruneBuildArtifacts(nil, 3)
+}
+
+func TestPruneBuildArtifacts_EmptyStore(t *testing.T) {
+	store := &ArtifactStore{
+		Version:          "1.0",
+		Artifacts:        []Artifact{},
+		TestEnvironments: make(map[string]*TestEnvironment),
+	}
+
+	// Should not panic with empty artifacts
+	PruneBuildArtifacts(store, 3)
+
+	if len(store.Artifacts) != 0 {
+		t.Errorf("Expected 0 artifacts, got %d", len(store.Artifacts))
+	}
+}
+
+func TestWriteArtifactStore_AutomaticPruning(t *testing.T) {
+	tmpDir := t.TempDir()
+	storePath := filepath.Join(tmpDir, "test-store.yaml")
+
+	now := time.Now().UTC()
+
+	// Create store with more than 3 artifacts of same type+name
+	store := ArtifactStore{
+		Version:     "1.0",
+		LastUpdated: now,
+		Artifacts: []Artifact{
+			{Name: "app", Type: "binary", Timestamp: now.Add(-4 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v3"},
+			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v4"},
+			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v5"},
+		},
+		TestEnvironments: make(map[string]*TestEnvironment),
+	}
+
+	// Write store (should automatically prune)
+	err := WriteArtifactStore(storePath, store)
+	if err != nil {
+		t.Fatalf("Failed to write artifact store: %v", err)
+	}
+
+	// Read back and verify pruning happened
+	readStore, err := ReadArtifactStore(storePath)
+	if err != nil {
+		t.Fatalf("Failed to read artifact store: %v", err)
+	}
+
+	if len(readStore.Artifacts) != 3 {
+		t.Errorf("Expected 3 artifacts after automatic pruning, got %d", len(readStore.Artifacts))
+	}
+
+	// Verify the 3 most recent are kept
+	foundVersions := make(map[string]bool)
+	for _, artifact := range readStore.Artifacts {
+		foundVersions[artifact.Version] = true
+	}
+
+	expectedVersions := []string{"v5", "v4", "v3"}
+	for _, v := range expectedVersions {
+		if !foundVersions[v] {
+			t.Errorf("Expected to find version %s after automatic pruning", v)
+		}
 	}
 }
