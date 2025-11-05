@@ -69,7 +69,7 @@ func handleBuildTool(
 	// Group specs by engine
 	engineSpecs := make(map[string][]map[string]any)
 
-	for _, spec := range config.Build.Specs {
+	for _, spec := range config.Build {
 		// Filter by artifact name if provided
 		if artifactName != "" && spec.Name != artifactName {
 			continue

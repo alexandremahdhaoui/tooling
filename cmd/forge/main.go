@@ -50,6 +50,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "prompt":
+		if err := runPrompt(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		versionInfo.Print()
 	case "help", "--help", "-h":
@@ -67,6 +72,7 @@ func printUsage() {
 Usage:
   forge build [artifact-name]         Build artifacts from forge.yaml
   forge test <stage> <operation>      Manage test environments
+  forge prompt <list|get> [name]      Fetch documentation prompts
   forge version                       Show version information
 
 Commands:
@@ -77,6 +83,9 @@ Commands:
   test <stage> delete <id>           Delete test environment
   test <stage> list                  List test environments for stage
   test <stage> run [test-id]         Run tests for stage
+
+  prompt list                        List all available prompts
+  prompt get <name>                  Fetch a specific prompt
 
   version                            Show version information
   help                               Show this help message`)

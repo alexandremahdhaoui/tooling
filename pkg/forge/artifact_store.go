@@ -41,11 +41,75 @@ type Artifact struct {
 	Version string `json:"version"`
 }
 
+// TestReport represents a test execution report stored in the artifact store.
+type TestReport struct {
+	// ID is the unique identifier for this test report (UUID)
+	ID string `json:"id"`
+
+	// Stage is the test stage name (e.g., "unit", "integration", "e2e")
+	Stage string `json:"stage"`
+
+	// Status is the overall test result ("passed" or "failed")
+	Status string `json:"status"`
+
+	// StartTime is when the test run started
+	StartTime time.Time `json:"startTime"`
+
+	// Duration is the total test duration in seconds
+	Duration float64 `json:"duration"`
+
+	// TestStats contains test execution statistics
+	TestStats TestStats `json:"testStats"`
+
+	// Coverage contains code coverage information
+	Coverage Coverage `json:"coverage"`
+
+	// ArtifactFiles lists all artifact files created by this test run (e.g., XML reports, coverage files)
+	ArtifactFiles []string `json:"artifactFiles,omitempty"`
+
+	// OutputPath is the path to detailed test output files
+	OutputPath string `json:"outputPath,omitempty"`
+
+	// ErrorMessage contains error details if the test run failed
+	ErrorMessage string `json:"errorMessage,omitempty"`
+
+	// CreatedAt is when this report was stored
+	CreatedAt time.Time `json:"createdAt"`
+
+	// UpdatedAt is when this report was last updated
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// TestStats contains statistics about test execution.
+type TestStats struct {
+	// Total is the total number of tests
+	Total int `json:"total"`
+
+	// Passed is the number of tests that passed
+	Passed int `json:"passed"`
+
+	// Failed is the number of tests that failed
+	Failed int `json:"failed"`
+
+	// Skipped is the number of tests that were skipped
+	Skipped int `json:"skipped"`
+}
+
+// Coverage contains code coverage information.
+type Coverage struct {
+	// Percentage is the code coverage percentage (0-100)
+	Percentage float64 `json:"percentage"`
+
+	// FilePath is the path to the coverage file
+	FilePath string `json:"filePath,omitempty"`
+}
+
 type ArtifactStore struct {
 	Version          string                      `json:"version"`
 	LastUpdated      time.Time                   `json:"lastUpdated"`
 	Artifacts        []Artifact                  `json:"artifacts"`
 	TestEnvironments map[string]*TestEnvironment `json:"testEnvironments,omitempty"`
+	TestReports      map[string]*TestReport      `json:"testReports,omitempty"`
 }
 
 var (
@@ -53,6 +117,7 @@ var (
 	errWritingArtifactStore    = errors.New("writing artifact store")
 	errArtifactNotFound        = errors.New("artifact not found")
 	errTestEnvironmentNotFound = errors.New("test environment not found")
+	errTestReportNotFound      = errors.New("test report not found")
 	errInvalidArtifactStore    = errors.New("invalid artifact store")
 )
 
@@ -79,6 +144,9 @@ func ReadArtifactStore(path string) (ArtifactStore, error) {
 	if out.TestEnvironments == nil {
 		out.TestEnvironments = make(map[string]*TestEnvironment)
 	}
+	if out.TestReports == nil {
+		out.TestReports = make(map[string]*TestReport)
+	}
 	if out.Version == "" {
 		out.Version = artifactStoreVersion
 	}
@@ -98,6 +166,7 @@ func ReadOrCreateArtifactStore(path string) (ArtifactStore, error) {
 				LastUpdated:      time.Now().UTC(),
 				Artifacts:        []Artifact{},
 				TestEnvironments: make(map[string]*TestEnvironment),
+				TestReports:      make(map[string]*TestReport),
 			}, nil
 		}
 		return ArtifactStore{}, err
@@ -328,4 +397,114 @@ func DeleteTestEnvironment(store *ArtifactStore, id string) error {
 	delete(store.TestEnvironments, id)
 	store.LastUpdated = time.Now().UTC()
 	return nil
+}
+
+// AddOrUpdateTestReport adds or updates a test report in the store.
+func AddOrUpdateTestReport(store *ArtifactStore, report *TestReport) {
+	if store == nil || report == nil {
+		return
+	}
+
+	// Initialize map if nil
+	if store.TestReports == nil {
+		store.TestReports = make(map[string]*TestReport)
+	}
+
+	// Update timestamps
+	now := time.Now().UTC()
+	if report.CreatedAt.IsZero() {
+		report.CreatedAt = now
+	}
+	report.UpdatedAt = now
+
+	store.TestReports[report.ID] = report
+	store.LastUpdated = now
+}
+
+// GetTestReport retrieves a test report by ID.
+func GetTestReport(store *ArtifactStore, id string) (*TestReport, error) {
+	if store == nil || store.TestReports == nil {
+		return nil, flaterrors.Join(
+			errors.New("test report not found: "+id),
+			errTestReportNotFound,
+		)
+	}
+
+	report, exists := store.TestReports[id]
+	if !exists {
+		return nil, flaterrors.Join(
+			errors.New("test report not found: "+id),
+			errTestReportNotFound,
+		)
+	}
+
+	return report, nil
+}
+
+// ListTestReports returns all test reports, optionally filtered by stage name.
+// If stageName is empty, returns all test reports.
+func ListTestReports(store *ArtifactStore, stageName string) []*TestReport {
+	if store == nil || store.TestReports == nil {
+		return []*TestReport{}
+	}
+
+	var results []*TestReport
+	for _, report := range store.TestReports {
+		if stageName == "" || report.Stage == stageName {
+			results = append(results, report)
+		}
+	}
+
+	return results
+}
+
+// DeleteTestReport removes a test report from the store.
+// Note: This does not delete the actual artifact files. Callers should handle
+// file cleanup separately using the report.ArtifactFiles list.
+func DeleteTestReport(store *ArtifactStore, id string) error {
+	if store == nil || store.TestReports == nil {
+		return flaterrors.Join(
+			errors.New("test report not found: "+id),
+			errTestReportNotFound,
+		)
+	}
+
+	if _, exists := store.TestReports[id]; !exists {
+		return flaterrors.Join(
+			errors.New("test report not found: "+id),
+			errTestReportNotFound,
+		)
+	}
+
+	delete(store.TestReports, id)
+	store.LastUpdated = time.Now().UTC()
+	return nil
+}
+
+// GetArtifactStorePath returns the configured artifact store path from forge.yaml,
+// or the provided default path if not configured.
+//
+// This is a convenience function that encapsulates the common pattern of:
+//  1. Reading forge.yaml
+//  2. Getting the ArtifactStorePath from config
+//  3. Using a default if not set
+//
+// Example usage:
+//
+//	path, err := forge.GetArtifactStorePath(".forge/artifacts.yaml")
+//	if err != nil {
+//	    return fmt.Errorf("failed to get artifact store path: %w", err)
+//	}
+//	store, err := forge.ReadOrCreateArtifactStore(path)
+func GetArtifactStorePath(defaultPath string) (string, error) {
+	config, err := ReadSpec()
+	if err != nil {
+		return "", err
+	}
+
+	if config.ArtifactStorePath != "" {
+		return config.ArtifactStorePath, nil
+	}
+
+	return defaultPath, nil
 }

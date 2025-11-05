@@ -3,110 +3,143 @@ name: forge
 # -- artifactStorePath is the path to the unified artifact store (moved to root level)
 artifactStorePath: .ignore.artifact-store.yaml
 
+# -- engines defines custom engine configurations with aliases
+engines:
+  # - alias: verify-tags-runner
+  #   type: test-runner
+  #   test-runner:
+  #     engine: go://generic-test-runner
+  #     config:
+  #       command: "go"
+  #       args: ["run", "./cmd/test-runner-go-verify-tags", "."]
+
+  - alias: setup-integration
+    type: testenv
+    testenv:
+      - engine: "go://kindenv"
+      # spec:
+      #   kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+      - # -- localContainerRegistry will create if enabled a container registry in the kindenv using the kubeconfig which path
+        #    is defined by {.kindenv.kubeconfigPath}.
+        engine: "go://localContainerRegistry"
+        spec:
+          # -- autoPushImages defines whether to automatically push images from artifact store on setup.
+          autoPushImages: true
+          # -- enabled defines whether the local container registry must be created or not.
+          enabled: true
+          # -- creadentialPath defines the output file containing the container registry credentials.
+          # credentialPath: .ignore.local-container-registry.yaml
+          # -- path to CA certificate.
+          # caCrtPath: .ignore.ca.crt
+          # -- namespace where the local container registry will be deployed.
+          # namespace: local-container-registry
+
 # -- test defines the test stages and their configuration
 test:
+  # -- verify-tags - verify all test files have build tags
+  - name: verify-tags
+    runner: "go://test-runner-go-verify-tags"
+    # -- default value for setup is "go://test-report"
+    # setup: "go://test-report"
+
+  # -- lint - linting as a test stage (no environment needed)
+  - name: lint
+    runner: "go://lint-go"
+
   # -- unit tests - no environment management needed
   - name: unit
-    engine: "noop"
     runner: "go://test-runner-go"
 
   # -- integration tests - creates isolated test environments
   - name: integration
-    engine: "go://test-integration"
-    runner: "go://test-runner-go"
+    runner: "go//test-runner-go"
+    setup: "alias://setup-integration"
 
   # -- e2e tests - comprehensive forge integration tests (no environment needed)
   - name: e2e
-    engine: "noop"
     runner: "go://forge-e2e"
-
-  # -- lint - linting as a test stage (no environment needed)
-  - name: lint
-    engine: "noop"
-    runner: "go://lint-go"
 
 # -- build defines the artifacts to build
 build:
-  # -- specs defines the list of artifacts to build using the BuildSpec format.
-  specs:
-    # Format code before building
-    - name: format-code
-      src: .
-      builder: go://format-go
-    # Binaries
-    - name: forge
-      src: ./cmd/forge
-      dest: ./build/bin
-      builder: go://build-go
-    - name: build-go
-      src: ./cmd/build-go
-      dest: ./build/bin
-      builder: go://build-go
-    - name: build-container
-      src: ./cmd/build-container
-      dest: ./build/bin
-      builder: go://build-go
-    - name: kindenv
-      src: ./cmd/kindenv
-      dest: ./build/bin
-      builder: go://build-go
-    - name: local-container-registry
-      src: ./cmd/local-container-registry
-      dest: ./build/bin
-      builder: go://build-go
-    - name: test-go
-      src: ./cmd/test-go
-      dest: ./build/bin
-      builder: go://build-go
-    - name: test-runner-go
-      src: ./cmd/test-runner-go
-      dest: ./build/bin
-      builder: go://build-go
-    - name: test-integration
-      src: ./cmd/test-integration
-      dest: ./build/bin
-      builder: go://build-go
-    - name: format-go
-      src: ./cmd/format-go
-      dest: ./build/bin
-      builder: go://build-go
-    - name: lint-go
-      src: ./cmd/lint-go
-      dest: ./build/bin
-      builder: go://build-go
-    - name: generate-mocks
-      src: ./cmd/generate-mocks
-      dest: ./build/bin
-      builder: go://build-go
-    - name: generate-openapi-go
-      src: ./cmd/generate-openapi-go
-      dest: ./build/bin
-      builder: go://build-go
-    - name: forge-e2e
-      src: ./cmd/forge-e2e
-      dest: ./build/bin
-      builder: go://build-go
-    # Containers
-    - name: for-testing-purposes
-      src: ./containers/for-testing-purposes/Containerfile
-      builder: go://build-container
+  # Format code before building
+  - name: format-code
+    src: .
+    engine: go://format-go
 
-kindenv:
-  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+  # Binaries
+  - name: forge
+    src: ./cmd/forge
+    dest: ./build/bin
+    engine: go://build-go
+  - name: build-go
+    src: ./cmd/build-go
+    dest: ./build/bin
+    engine: go://build-go
+  - name: build-container
+    src: ./cmd/build-container
+    dest: ./build/bin
+    engine: go://build-go
+  - name: kindenv
+    src: ./cmd/kindenv
+    dest: ./build/bin
+    engine: go://build-go
+  - name: local-container-registry
+    src: ./cmd/local-container-registry
+    dest: ./build/bin
+    engine: go://build-go
+  - name: test-go
+    src: ./cmd/test-go
+    dest: ./build/bin
+    engine: go://build-go
+  - name: test-runner-go
+    src: ./cmd/test-runner-go
+    dest: ./build/bin
+    engine: go://build-go
+  - name: test-runner-go-verify-tags
+    src: ./cmd/test-runner-go-verify-tags
+    dest: ./build/bin
+    engine: go://build-go
+  - name: test-integration
+    src: ./cmd/test-integration
+    dest: ./build/bin
+    engine: go://build-go
+  - name: format-go
+    src: ./cmd/format-go
+    dest: ./build/bin
+    engine: go://build-go
+  - name: lint-go
+    src: ./cmd/lint-go
+    dest: ./build/bin
+    engine: go://build-go
+  - name: generate-mocks
+    src: ./cmd/generate-mocks
+    dest: ./build/bin
+    engine: go://build-go
+  - name: generate-openapi-go
+    src: ./cmd/generate-openapi-go
+    dest: ./build/bin
+    engine: go://build-go
+  - name: forge-e2e
+    src: ./cmd/forge-e2e
+    dest: ./build/bin
+    engine: go://build-go
+  - name: generic-engine
+    src: ./cmd/generic-engine
+    dest: ./build/bin
+    engine: go://build-go
+  - name: generic-test-runner
+    src: ./cmd/generic-test-runner
+    dest: ./build/bin
+    engine: go://build-go
+  - name: test-report
+    src: ./cmd/test-report
+    dest: ./build/bin
+    engine: go://build-go
 
-# -- localContainerRegistry will create if enabled a container registry in the kindenv using the kubeconfig which path
-#    is defined by {.kindenv.kubeconfigPath}.
-localContainerRegistry:
-  # -- autoPushImages defines whether to automatically push images from artifact store on setup.
-  autoPushImages: true
-  # -- enabled defines whether the local container registry must be created or not.
-  enabled: true
-  # -- creadentialPath defines the output file containing the container registry credentials.
-  credentialPath: .ignore.local-container-registry.yaml
-  # -- path to CA certificate.
-  caCrtPath: .ignore.ca.crt
-  # -- namespace where the local container registry will be deployed.
-  namespace: local-container-registry
+  # Containers
+  - name: for-testing-purposes
+    src: ./containers/for-testing-purposes/Containerfile
+    engine: go://build-container
 
 # -- generateOpenAPI defines the configuration for generating OpenAPI client and server code
 # generateOpenAPI:

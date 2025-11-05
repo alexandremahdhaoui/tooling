@@ -12,6 +12,7 @@ import (
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -29,16 +30,6 @@ func init() {
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
-}
-
-type FormatInput struct {
-	Path string `json:"path,omitempty"` // Path to format (defaults to ".")
-	Src  string `json:"src,omitempty"`  // Source path (alias for Path, used by BuildSpec)
-
-	// BuildSpec fields (ignored but accepted for compatibility)
-	Name   string `json:"name,omitempty"`
-	Dest   string `json:"dest,omitempty"`
-	Engine string `json:"engine,omitempty"`
 }
 
 func main() {
@@ -94,7 +85,7 @@ func runMCPServer() error {
 func handleBuild(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
-	input FormatInput,
+	input mcptypes.BuildInput,
 ) (*mcp.CallToolResult, any, error) {
 	path := input.Path
 	if path == "" && input.Src != "" {

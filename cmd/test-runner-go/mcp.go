@@ -6,14 +6,10 @@ import (
 	"log"
 
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
+	"github.com/alexandremahdhaoui/forge/pkg/mcputil"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
-
-// RunInput represents the input parameters for the run tool.
-type RunInput struct {
-	Stage string `json:"stage"`
-	Name  string `json:"name"`
-}
 
 // runMCPServerImpl starts the test-runner-go MCP server with stdio transport.
 // It creates an MCP server, registers tools, and runs the server until stdin closes.
@@ -35,38 +31,32 @@ func runMCPServerImpl() error {
 func handleRunTool(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
-	input RunInput,
+	input mcptypes.RunInput,
 ) (*mcp.CallToolResult, any, error) {
 	log.Printf("Running tests: stage=%s name=%s", input.Stage, input.Name)
 
 	// Validate inputs
-	if input.Stage == "" {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Test run failed: missing required field 'stage'"},
-			},
-			IsError: true,
-		}, nil, nil
+	if result := mcputil.ValidateRequiredWithPrefix("Test run failed", map[string]string{
+		"stage": input.Stage,
+		"name":  input.Name,
+	}); result != nil {
+		return result, nil, nil
 	}
 
-	if input.Name == "" {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Test run failed: missing required field 'name'"},
-			},
-			IsError: true,
-		}, nil, nil
+	// Run tests (pass tmpDir if provided, otherwise use current directory)
+	tmpDir := input.TmpDir
+	if tmpDir == "" {
+		tmpDir = "." // Fallback to current directory for backward compatibility
 	}
-
-	// Run tests
-	report, err := runTests(input.Stage, input.Name)
+	report, junitFile, coverageFile, err := runTests(input.Stage, input.Name, tmpDir)
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Test run failed: %v", err)},
-			},
-			IsError: true,
-		}, nil, nil
+		return mcputil.ErrorResult(fmt.Sprintf("Test run failed: %v", err)), nil, nil
+	}
+
+	// Store report in artifact store
+	if err := storeTestReport(report, junitFile, coverageFile); err != nil {
+		// Log warning but don't fail
+		log.Printf("Warning: failed to store test report: %v", err)
 	}
 
 	// Create success message
@@ -80,12 +70,11 @@ func handleRunTool(
 		report.Coverage.Percentage,
 	)
 
-	// Return result with TestReport as artifact
-	isError := report.Status == "failed"
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: statusMsg},
-		},
-		IsError: isError,
-	}, report, nil
+	// Return result with TestReport as artifact based on status
+	if report.Status == "failed" {
+		result := mcputil.ErrorResult(statusMsg)
+		return result, report, nil
+	}
+	result, returnedArtifact := mcputil.SuccessResultWithArtifact(statusMsg, report)
+	return result, returnedArtifact, nil
 }

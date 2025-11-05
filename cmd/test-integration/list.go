@@ -10,16 +10,10 @@ import (
 
 // cmdList lists all test environments, optionally filtered by stage.
 func cmdList(stageFilter string) error {
-	// Read forge.yaml to get artifact store path
-	config, err := forge.ReadSpec()
+	// Get artifact store path
+	artifactStorePath, err := forge.GetArtifactStorePath(".forge/artifacts.json")
 	if err != nil {
-		return fmt.Errorf("failed to read forge.yaml: %w", err)
-	}
-
-	// Load artifact store
-	artifactStorePath := config.ArtifactStorePath
-	if artifactStorePath == "" {
-		artifactStorePath = ".forge/artifacts.json"
+		return fmt.Errorf("failed to get artifact store path: %w", err)
 	}
 
 	store, err := forge.ReadArtifactStore(artifactStorePath)

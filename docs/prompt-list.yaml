@@ -1,0 +1,54 @@
+# Forge Prompt Store
+# This file contains a list of available prompts that can be fetched using `forge prompt get <name>`
+
+version: "1.0"
+baseURL: "https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/prompts"
+
+prompts:
+  - name: "migrate-makefile"
+    title: "Migrate from Makefile to Forge"
+    description: "Guide for migrating an existing Makefile-based build system to forge"
+    url: "migrate-makefile.md"
+    tags: ["migration", "makefile", "getting-started"]
+
+  - name: "create-test-engine"
+    title: "Create a Custom Test Engine"
+    description: "Step-by-step guide for implementing a custom test engine"
+    url: "create-test-engine.md"
+    tags: ["test-engine", "implementation", "custom"]
+
+  - name: "create-test-runner"
+    title: "Create a Custom Test Runner"
+    description: "Step-by-step guide for implementing a custom test runner"
+    url: "create-test-runner.md"
+    tags: ["test-runner", "implementation", "custom"]
+
+  - name: "use-generic-engine"
+    title: "Use Generic Engine"
+    description: "Guide for using generic-engine to wrap CLI tools without writing Go code"
+    url: "use-generic-engine.md"
+    tags: ["generic-engine", "quick-start", "no-code"]
+
+  - name: "use-generic-test-runner"
+    title: "Use Generic Test Runner"
+    description: "Guide for using generic-test-runner to integrate test tools as runners"
+    url: "use-generic-test-runner.md"
+    tags: ["generic-test-runner", "testing", "no-code"]
+
+  - name: "create-build-engine"
+    title: "Create a Custom Build Engine"
+    description: "Guide for implementing a custom build engine for compiling/transforming code"
+    url: "create-build-engine.md"
+    tags: ["build-engine", "implementation", "custom"]
+
+  - name: "setup-ci-cd"
+    title: "Setup CI/CD with Forge"
+    description: "Guide for integrating forge into CI/CD pipelines (GitHub Actions, GitLab CI, etc.)"
+    url: "setup-ci-cd.md"
+    tags: ["ci-cd", "automation", "integration"]
+
+  - name: "best-practices"
+    title: "Forge Best Practices"
+    description: "Collection of best practices for organizing forge projects"
+    url: "best-practices.md"
+    tags: ["best-practices", "patterns", "organization"]

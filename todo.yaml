@@ -1,2 +1,7 @@
-- Allow specifying prepend cmd and container engine as flags ?
-- Run go get -u
+todo:
+  - Allow specifying prepend cmd to custom engines ?
+
+  - |-
+    Artifact management is a bit random currently
+    Forge should pass a tmp directory located in ./tmp/tmp-<SOMETHING> to engines and runners such that they create their non-build artifacts to this repo. Build artifacts must be built into ./build e.g. ./build/bin for binaries. For special build like code generation they write to files in this repo, they need to know about the abspath of the root of this repo. All in all we need to pass 3 directories/path: 1. tmp dir (abspath to a tmp dir inside ./tmp/) 2. build dir (abspath to ./build itself) 3. root dir (abspath to this directory)
+

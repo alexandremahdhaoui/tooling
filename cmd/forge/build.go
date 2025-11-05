@@ -3,6 +3,8 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
@@ -29,7 +31,7 @@ func runBuild(args []string) error {
 	// Group specs by engine
 	engineSpecs := make(map[string][]map[string]any)
 
-	for _, spec := range config.Build.Specs {
+	for _, spec := range config.Build {
 		// Filter by artifact name if provided
 		if artifactName != "" && spec.Name != artifactName {
 			continue
@@ -54,15 +56,63 @@ func runBuild(args []string) error {
 		return nil
 	}
 
+	// Create forge directories for build operations
+	dirs, err := createForgeDirs()
+	if err != nil {
+		return fmt.Errorf("failed to create forge directories: %w", err)
+	}
+
+	// Clean up old tmp directories (keep last 10 runs)
+	if err := cleanupOldTmpDirs(10); err != nil {
+		// Log warning but don't fail
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup old tmp directories: %v\n", err)
+	}
+
 	// Build each group using the appropriate engine
 	totalBuilt := 0
 	for engineURI, specs := range engineSpecs {
 		fmt.Printf("Building %d artifact(s) with %s...\n", len(specs), engineURI)
 
-		// Parse engine URI
-		_, binaryPath, err := parseEngine(engineURI)
+		// Resolve engine URI (handles aliases)
+		binaryPath, err := resolveEngine(engineURI, &config)
 		if err != nil {
-			return fmt.Errorf("failed to parse engine %s: %w", engineURI, err)
+			return fmt.Errorf("failed to resolve engine %s: %w", engineURI, err)
+		}
+
+		// Get engine config if this is an alias
+		var engineConfig *forge.EngineConfig
+		if strings.HasPrefix(engineURI, "alias://") {
+			aliasName := strings.TrimPrefix(engineURI, "alias://")
+			engineConfig = getEngineConfig(aliasName, &config)
+		}
+
+		// Inject directories into all specs
+		for i := range specs {
+			specs[i]["tmpDir"] = dirs.TmpDir
+			specs[i]["buildDir"] = dirs.BuildDir
+			specs[i]["rootDir"] = dirs.RootDir
+		}
+
+		// Inject engine config into specs if present
+		if engineConfig != nil && engineConfig.Config.Command != "" {
+			for i := range specs {
+				// Inject command, args, env, envFile, workDir from engine config
+				if engineConfig.Config.Command != "" {
+					specs[i]["command"] = engineConfig.Config.Command
+				}
+				if len(engineConfig.Config.Args) > 0 {
+					specs[i]["args"] = engineConfig.Config.Args
+				}
+				if len(engineConfig.Config.Env) > 0 {
+					specs[i]["env"] = engineConfig.Config.Env
+				}
+				if engineConfig.Config.EnvFile != "" {
+					specs[i]["envFile"] = engineConfig.Config.EnvFile
+				}
+				if engineConfig.Config.WorkDir != "" {
+					specs[i]["workDir"] = engineConfig.Config.WorkDir
+				}
+			}
 		}
 
 		// Use buildBatch if multiple specs, otherwise use build

@@ -1,12 +1,16 @@
+//go:build unit
+
 package main
 
 import (
 	"testing"
+
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
-// TestFormatInputAcceptsBuildSpecFields tests that FormatInput accepts all BuildSpec fields
+// TestFormatInputAcceptsBuildSpecFields tests that BuildInput accepts all BuildSpec fields
 func TestFormatInputAcceptsBuildSpecFields(t *testing.T) {
-	input := FormatInput{
+	input := mcptypes.BuildInput{
 		Path:   ".",
 		Src:    "./test",
 		Name:   "test-artifact",
@@ -36,12 +40,12 @@ func TestFormatInputAcceptsBuildSpecFields(t *testing.T) {
 func TestHandleBuildUsesSrcWhenPathEmpty(t *testing.T) {
 	tests := []struct {
 		name     string
-		input    FormatInput
+		input    mcptypes.BuildInput
 		expected string
 	}{
 		{
 			name: "Path set, Src empty",
-			input: FormatInput{
+			input: mcptypes.BuildInput{
 				Path: "/custom/path",
 				Src:  "",
 			},
@@ -49,7 +53,7 @@ func TestHandleBuildUsesSrcWhenPathEmpty(t *testing.T) {
 		},
 		{
 			name: "Path empty, Src set",
-			input: FormatInput{
+			input: mcptypes.BuildInput{
 				Path: "",
 				Src:  "/from/src",
 			},
@@ -57,7 +61,7 @@ func TestHandleBuildUsesSrcWhenPathEmpty(t *testing.T) {
 		},
 		{
 			name: "Both Path and Src set - Path takes precedence",
-			input: FormatInput{
+			input: mcptypes.BuildInput{
 				Path: "/path/wins",
 				Src:  "/src/loses",
 			},
@@ -65,7 +69,7 @@ func TestHandleBuildUsesSrcWhenPathEmpty(t *testing.T) {
 		},
 		{
 			name: "Both empty - defaults to current directory",
-			input: FormatInput{
+			input: mcptypes.BuildInput{
 				Path: "",
 				Src:  "",
 			},
@@ -93,10 +97,10 @@ func TestHandleBuildUsesSrcWhenPathEmpty(t *testing.T) {
 
 // TestFormatInputJSONMarshaling tests that FormatInput can be unmarshaled from JSON
 func TestFormatInputJSONMarshaling(t *testing.T) {
-	// This test verifies that MCP can unmarshal BuildSpec parameters into FormatInput
+	// This test verifies that MCP can unmarshal BuildSpec parameters into BuildInput
 	// The actual unmarshaling is done by the MCP SDK, but we verify the struct tags are correct
 
-	input := FormatInput{
+	input := mcptypes.BuildInput{
 		Path:   ".",
 		Src:    "./cmd/format-go",
 		Name:   "format-code",
@@ -114,7 +118,7 @@ func TestFormatInputJSONMarshaling(t *testing.T) {
 // TestBuildSpecCompatibility simulates BuildSpec parameters being passed to format-go
 func TestBuildSpecCompatibility(t *testing.T) {
 	// Create a mock input that would come from forge build command
-	input := FormatInput{
+	input := mcptypes.BuildInput{
 		Name:   "format-code",
 		Src:    ".",
 		Dest:   "", // Not used by formatter but accepted for compatibility

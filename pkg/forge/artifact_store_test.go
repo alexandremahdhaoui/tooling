@@ -1,3 +1,5 @@
+//go:build unit
+
 package forge
 
 import (
@@ -5,6 +7,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"sigs.k8s.io/yaml"
 )
 
 func TestAddOrUpdateTestEnvironment(t *testing.T) {
@@ -687,5 +691,101 @@ func TestWriteArtifactStore_AutomaticPruning(t *testing.T) {
 		if !foundVersions[v] {
 			t.Errorf("Expected to find version %s after automatic pruning", v)
 		}
+	}
+}
+
+func TestGetArtifactStorePath_WithConfiguredPath(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	// Create forge.yaml with custom artifact store path
+	spec := Spec{
+		ArtifactStorePath: "/custom/path/artifacts.yaml",
+	}
+
+	data, err := yaml.Marshal(spec)
+	if err != nil {
+		t.Fatalf("Failed to marshal spec: %v", err)
+	}
+
+	if err := os.WriteFile("forge.yaml", data, 0644); err != nil {
+		t.Fatalf("Failed to write forge.yaml: %v", err)
+	}
+
+	// Test GetArtifactStorePath
+	path, err := GetArtifactStorePath(".forge/artifacts.yaml")
+	if err != nil {
+		t.Fatalf("GetArtifactStorePath failed: %v", err)
+	}
+
+	if path != "/custom/path/artifacts.yaml" {
+		t.Errorf("Expected configured path '/custom/path/artifacts.yaml', got %s", path)
+	}
+}
+
+func TestGetArtifactStorePath_WithDefaultPath(t *testing.T) {
+	// Create temporary directory
+	tmpDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	// Create forge.yaml without artifact store path
+	spec := Spec{
+		Name: "test-project",
+	}
+
+	data, err := yaml.Marshal(spec)
+	if err != nil {
+		t.Fatalf("Failed to marshal spec: %v", err)
+	}
+
+	if err := os.WriteFile("forge.yaml", data, 0644); err != nil {
+		t.Fatalf("Failed to write forge.yaml: %v", err)
+	}
+
+	// Test GetArtifactStorePath - should return default
+	path, err := GetArtifactStorePath(".forge/artifacts.yaml")
+	if err != nil {
+		t.Fatalf("GetArtifactStorePath failed: %v", err)
+	}
+
+	if path != ".forge/artifacts.yaml" {
+		t.Errorf("Expected default path '.forge/artifacts.yaml', got %s", path)
+	}
+}
+
+func TestGetArtifactStorePath_NoForgeYaml(t *testing.T) {
+	// Create temporary directory without forge.yaml
+	tmpDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get working directory: %v", err)
+	}
+	defer os.Chdir(originalDir)
+
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+
+	// Test GetArtifactStorePath - should return error
+	_, err = GetArtifactStorePath(".forge/artifacts.yaml")
+	if err == nil {
+		t.Error("Expected error when forge.yaml doesn't exist, got nil")
 	}
 }

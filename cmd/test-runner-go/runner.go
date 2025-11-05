@@ -5,16 +5,29 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
+
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
+	"github.com/google/uuid"
 )
 
 // run executes tests for the given stage and generates a structured report.
 // Test output goes to stderr, JSON report goes to stdout.
 func run(stage, name string) error {
+	// Use current directory as tmpDir for backward compatibility
+	tmpDir := "."
+
 	// Execute tests and generate report
-	report, err := runTests(stage, name)
+	report, junitFile, coverageFile, err := runTests(stage, name, tmpDir)
 	if err != nil {
 		return fmt.Errorf("test execution failed: %w", err)
+	}
+
+	// Store report in artifact store
+	if err := storeTestReport(report, junitFile, coverageFile); err != nil {
+		// Log error but don't fail - storing is best effort
+		fmt.Fprintf(os.Stderr, "Warning: failed to store test report in artifact store: %v\n", err)
 	}
 
 	// Output JSON report to stdout
@@ -30,13 +43,13 @@ func run(stage, name string) error {
 	return nil
 }
 
-// runTests executes the test suite using gotestsum and returns a structured report.
-func runTests(stage, name string) (*TestReport, error) {
+// runTests executes the test suite using gotestsum and returns a structured report along with artifact file paths.
+func runTests(stage, name, tmpDir string) (*TestReport, string, string, error) {
 	startTime := time.Now()
 
-	// Generate output file paths
-	junitFile := fmt.Sprintf(".ignore.test-%s-%s.xml", stage, name)
-	coverageFile := fmt.Sprintf(".ignore.test-%s-%s-coverage.out", stage, name)
+	// Generate output file paths in tmpDir
+	junitFile := filepath.Join(tmpDir, fmt.Sprintf("test-%s-%s.xml", stage, name))
+	coverageFile := filepath.Join(tmpDir, fmt.Sprintf("test-%s-%s-coverage.out", stage, name))
 
 	// Build gotestsum command
 	args := []string{
@@ -103,5 +116,60 @@ func runTests(stage, name string) (*TestReport, error) {
 		ErrorMessage: errorMessage,
 	}
 
-	return report, nil
+	return report, junitFile, coverageFile, nil
+}
+
+// storeTestReport stores the test report in the artifact store.
+func storeTestReport(report *TestReport, junitFile, coverageFile string) error {
+	// Get artifact store path (environment variable takes precedence)
+	artifactStorePath := os.Getenv("FORGE_ARTIFACT_STORE_PATH")
+	if artifactStorePath == "" {
+		var err error
+		artifactStorePath, err = forge.GetArtifactStorePath(".forge/artifacts.yaml")
+		if err != nil {
+			return fmt.Errorf("failed to get artifact store path: %w", err)
+		}
+	}
+
+	// Read or create artifact store
+	store, err := forge.ReadOrCreateArtifactStore(artifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to read artifact store: %w", err)
+	}
+
+	// Generate report ID (UUID)
+	reportID := uuid.New().String()
+
+	// Build list of artifact files
+	var artifactFiles []string
+	if junitFile != "" {
+		artifactFiles = append(artifactFiles, junitFile)
+	}
+	if coverageFile != "" {
+		artifactFiles = append(artifactFiles, coverageFile)
+	}
+
+	// Create TestReport for artifact store
+	storeReport := &forge.TestReport{
+		ID:            reportID,
+		Stage:         report.Stage,
+		Status:        report.Status,
+		StartTime:     report.StartTime,
+		Duration:      report.Duration,
+		TestStats:     forge.TestStats(report.TestStats),
+		Coverage:      forge.Coverage(report.Coverage),
+		ArtifactFiles: artifactFiles,
+		OutputPath:    report.OutputPath,
+		ErrorMessage:  report.ErrorMessage,
+	}
+
+	// Add or update test report
+	forge.AddOrUpdateTestReport(&store, storeReport)
+
+	// Write artifact store
+	if err := forge.WriteArtifactStore(artifactStorePath, store); err != nil {
+		return fmt.Errorf("failed to write artifact store: %w", err)
+	}
+
+	return nil
 }

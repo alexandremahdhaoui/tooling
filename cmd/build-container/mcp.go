@@ -4,27 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os/exec"
-	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/internal/gitutil"
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
+	"github.com/alexandremahdhaoui/forge/pkg/mcputil"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// BuildInput represents the input parameters for the build tool.
-type BuildInput struct {
-	Name   string `json:"name"`
-	Src    string `json:"src"`
-	Dest   string `json:"dest,omitempty"`
-	Engine string `json:"engine"`
-}
-
 // runMCPServer starts the build-container MCP server with stdio transport.
 func runMCPServer() error {
-	v, _, _ := versionInfo.Get()
-	server := mcpserver.New("build-container", v)
+	server := mcpserver.New(Name, Version)
 
 	// Register build tool
 	mcpserver.RegisterTool(server, &mcp.Tool{
@@ -46,38 +38,22 @@ func runMCPServer() error {
 func handleBuildTool(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
-	input BuildInput,
+	input mcptypes.BuildInput,
 ) (*mcp.CallToolResult, any, error) {
 	log.Printf("Building container: %s from %s", input.Name, input.Src)
 
 	// Validate inputs
-	if input.Name == "" {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Build failed: missing required field 'name'"},
-			},
-			IsError: true,
-		}, nil, nil
-	}
-
-	if input.Src == "" {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: "Build failed: missing required field 'src'"},
-			},
-			IsError: true,
-		}, nil, nil
+	if result := mcputil.ValidateRequiredWithPrefix("Build failed", map[string]string{
+		"name": input.Name,
+		"src":  input.Src,
+	}); result != nil {
+		return result, nil, nil
 	}
 
 	// Get git version
-	version, err := getGitVersionForMCP()
+	version, err := gitutil.GetCurrentCommitSHA()
 	if err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Build failed: could not get git version: %v", err)},
-			},
-			IsError: true,
-		}, nil, nil
+		return mcputil.ErrorResult(fmt.Sprintf("Build failed: could not get git version: %v", err)), nil, nil
 	}
 
 	// Create BuildSpec from input
@@ -98,12 +74,7 @@ func handleBuildTool(
 	var dummyStore forge.ArtifactStore
 	// Pass isMCPMode=true to suppress stdout output that would corrupt JSON-RPC
 	if err := buildContainer(envs, spec, version, timestamp, &dummyStore, true); err != nil {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Build failed: %v", err)},
-			},
-			IsError: true,
-		}, nil, nil
+		return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v", err)), nil, nil
 	}
 
 	// Create artifact response
@@ -115,78 +86,28 @@ func handleBuildTool(
 		Version:   version,
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Built container: %s successfully (version: %s)", input.Name, version)},
-		},
-	}, artifact, nil
-}
-
-// BatchBuildInput represents the input for building multiple containers.
-type BatchBuildInput struct {
-	Specs []BuildInput `json:"specs"`
+	result, returnedArtifact := mcputil.SuccessResultWithArtifact(
+		fmt.Sprintf("Built container: %s successfully (version: %s)", input.Name, version),
+		artifact,
+	)
+	return result, returnedArtifact, nil
 }
 
 // handleBuildBatchTool handles batch building of multiple containers.
 func handleBuildBatchTool(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
-	input BatchBuildInput,
+	input mcptypes.BatchBuildInput,
 ) (*mcp.CallToolResult, any, error) {
 	log.Printf("Building %d containers in batch", len(input.Specs))
 
-	artifacts := []forge.Artifact{}
-	errors := []string{}
+	// Use generic batch handler
+	artifacts, errorMsgs := mcputil.HandleBatchBuild(ctx, input.Specs, func(ctx context.Context, spec mcptypes.BuildInput) (*mcp.CallToolResult, any, error) {
+		return handleBuildTool(ctx, req, spec)
+	})
 
-	for _, spec := range input.Specs {
-		result, artifact, err := handleBuildTool(ctx, req, spec)
-		if err != nil || (result != nil && result.IsError) {
-			errorMsg := "unknown error"
-			if err != nil {
-				errorMsg = err.Error()
-			} else if len(result.Content) > 0 {
-				if textContent, ok := result.Content[0].(*mcp.TextContent); ok {
-					errorMsg = textContent.Text
-				}
-			}
-			errors = append(errors, fmt.Sprintf("%s: %s", spec.Name, errorMsg))
-			continue
-		}
-		if artifact != nil {
-			if art, ok := artifact.(forge.Artifact); ok {
-				artifacts = append(artifacts, art)
-			}
-		}
-	}
-
-	if len(errors) > 0 {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Batch build completed with errors: %v", errors)},
-			},
-			IsError: true,
-		}, artifacts, nil
-	}
-
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully built %d containers", len(artifacts))},
-		},
-	}, artifacts, nil
+	// Format the result
+	result, returnedArtifacts := mcputil.FormatBatchResult("containers", artifacts, errorMsgs)
+	return result, returnedArtifacts, nil
 }
 
-// getGitVersionForMCP gets the git version for MCP builds.
-func getGitVersionForMCP() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "HEAD")
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	version := strings.TrimSpace(string(output))
-	if version == "" {
-		return "", fmt.Errorf("empty git version")
-	}
-
-	return version, nil
-}

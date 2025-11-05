@@ -3,14 +3,13 @@ package main
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/internal/cli"
 	"github.com/alexandremahdhaoui/forge/internal/util"
-	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/caarlos0/env/v11"
@@ -25,47 +24,19 @@ var (
 	BuildTimestamp = "unknown"
 )
 
-// versionInfo holds build-container's version information
-var versionInfo *version.Info
-
-func init() {
-	versionInfo = version.New(Name)
-	versionInfo.Version = Version
-	versionInfo.CommitSHA = CommitSHA
-	versionInfo.BuildTimestamp = BuildTimestamp
-}
-
 // ----------------------------------------------------- MAIN ------------------------------------------------------- //
 
 func main() {
-	// Check for version flag
-	for _, arg := range os.Args[1:] {
-		if arg == "version" || arg == "--version" || arg == "-v" {
-			versionInfo.Print()
-			return
-		}
-	}
-
-	// Check for --mcp flag to run as MCP server
-	for _, arg := range os.Args[1:] {
-		if arg == "--mcp" {
-			if err := runMCPServer(); err != nil {
-				log.Printf("MCP server error: %v", err)
-				os.Exit(1)
-			}
-			return
-		}
-	}
-
-	// Normal CLI mode
-	if err := run(); err != nil {
-		printFailure(err)
-		os.Exit(1)
-		return
-	}
-
-	printSuccess()
-	os.Exit(0)
+	cli.Bootstrap(cli.Config{
+		Name:           Name,
+		Version:        Version,
+		CommitSHA:      CommitSHA,
+		BuildTimestamp: BuildTimestamp,
+		RunCLI:         run,
+		RunMCP:         runMCPServer,
+		SuccessHandler: printSuccess,
+		FailureHandler: printFailure,
+	})
 }
 
 // ----------------------------------------------------- RUN -------------------------------------------------------- //
@@ -104,7 +75,7 @@ func run() error {
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 
 	// V. Build each container spec
-	for _, spec := range config.Build.Specs {
+	for _, spec := range config.Build {
 		// Skip if spec name is empty or engine doesn't match
 		if spec.Name == "" || spec.Engine != "go://build-container" {
 			continue

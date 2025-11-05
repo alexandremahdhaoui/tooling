@@ -68,10 +68,10 @@ func cmdCreate(stageName string) error {
 		env.ManagedResources = append(env.ManagedResources, resources...)
 	}
 
-	// Load artifact store
-	artifactStorePath := config.ArtifactStorePath
-	if artifactStorePath == "" {
-		artifactStorePath = ".forge/artifacts.json"
+	// Get artifact store path
+	artifactStorePath, err := forge.GetArtifactStorePath(".forge/artifacts.json")
+	if err != nil {
+		return fmt.Errorf("failed to get artifact store path: %w", err)
 	}
 
 	store, err := forge.ReadOrCreateArtifactStore(artifactStorePath)

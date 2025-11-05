@@ -17,14 +17,25 @@ func isForgeRepoEngine(packagePath string) bool {
 }
 
 // parseEngine parses an engine URI and returns the engine type and binary path.
-// Supports go:// protocol with auto-install:
+// Supports go:// and alias:// protocols:
 //   - go://build-go -> installs github.com/alexandremahdhaoui/forge/cmd/build-go@<forge-version>
 //   - go://build-go@v1.0.0 -> installs github.com/alexandremahdhaoui/forge/cmd/build-go@v1.0.0
 //   - go://github.com/alexandremahdhaoui/forge/cmd/build-go -> installs with forge's version
 //   - go://github.com/user/repo/cmd/tool@v1.0.0 -> installs as-is
+//   - alias://my-engine -> resolves alias from forge.yaml engines section
 func parseEngine(engineURI string) (engineType, binaryPath string, err error) {
+	// Check for alias:// protocol - return special marker
+	if strings.HasPrefix(engineURI, "alias://") {
+		aliasName := strings.TrimPrefix(engineURI, "alias://")
+		if aliasName == "" {
+			return "", "", fmt.Errorf("empty alias name after alias://")
+		}
+		// Return special marker - caller will handle resolution
+		return "alias", aliasName, nil
+	}
+
 	if !strings.HasPrefix(engineURI, "go://") {
-		return "", "", fmt.Errorf("unsupported engine protocol: %s (must start with go://)", engineURI)
+		return "", "", fmt.Errorf("unsupported engine protocol: %s (must start with go:// or alias://)", engineURI)
 	}
 
 	// Remove go:// prefix

@@ -195,7 +195,7 @@ func setup() error {
 	}
 
 	// IX. Wait for registry deployment to be ready before auto-pushing
-	if config.LocalContainerRegistry.AutoPushImages && len(config.Build.Specs) > 0 {
+	if config.LocalContainerRegistry.AutoPushImages && len(config.Build) > 0 {
 		_, _ = fmt.Fprintln(os.Stdout, "⏳ Waiting for registry to be ready")
 		waitCmd := exec.Command(
 			"kubectl",

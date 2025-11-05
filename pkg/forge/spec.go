@@ -36,6 +36,9 @@ type Spec struct {
 
 	// Test holds the test stage configurations
 	Test []TestSpec `json:"test"`
+
+	// Engines holds custom engine configurations with aliases
+	Engines []EngineConfig `json:"engines,omitempty"`
 }
 
 var errReadingProjectConfig = errors.New("error reading project config")

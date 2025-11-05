@@ -1,10 +1,7 @@
 package forge
 
-// Build holds the build configuration
-type Build struct {
-	// Specs holds the list of artifacts to build
-	Specs []BuildSpec `json:"specs"`
-}
+// Build holds the list of artifacts to build
+type Build []BuildSpec
 
 // BuildSpec represents a single artifact to build
 type BuildSpec struct {
@@ -21,5 +18,5 @@ type BuildSpec struct {
 	// Engine that will build this artifact, e.g.:
 	// - go://build-container (go://github.com/alexandremahdhaoui/forge/cmd/build-container)
 	// - go://build-go        (go://github.com/alexandremahdhaoui/forge/cmd/build-go)
-	Engine string `json:"builder"`
+	Engine string `json:"engine"`
 }

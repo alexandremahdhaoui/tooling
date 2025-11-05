@@ -69,10 +69,12 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 		return nil, fmt.Errorf("build failed: %s", errMsg)
 	}
 
-	// Return the structured content if available, otherwise return the result
+	// Return the structured content if available
 	if result.StructuredContent != nil {
 		return result.StructuredContent, nil
 	}
 
-	return result, nil
+	// If no structured content, return nil (caller should handle this)
+	// This avoids returning the raw mcp.CallToolResult which would print as "&{...}"
+	return nil, nil
 }
