@@ -90,18 +90,19 @@ func findTestSpec(specs []forge.TestSpec, name string) *forge.TestSpec {
 // testCreate creates a test environment via the engine.
 func testCreate(testSpec *forge.TestSpec) error {
 	// Handle "noop" engine (no environment management)
-	if testSpec.Engine == "" || testSpec.Engine == "noop" {
+	if testSpec.Testenv == "" || testSpec.Testenv == "noop" {
 		return fmt.Errorf("test stage %s has no engine configured (engine is 'noop')", testSpec.Name)
 	}
 
-	// Parse engine URI and resolve binary
-	engineType, enginePath, err := parseEngine(testSpec.Engine)
+	// Load config and resolve engine path
+	config, err := forge.ReadSpec()
 	if err != nil {
-		return fmt.Errorf("failed to parse engine URI: %w", err)
+		return fmt.Errorf("failed to read forge.yaml: %w", err)
 	}
 
-	if engineType != "mcp" {
-		return fmt.Errorf("unsupported engine type: %s (only 'mcp' is supported)", engineType)
+	enginePath, err := resolveEngine(testSpec.Testenv, &config)
+	if err != nil {
+		return fmt.Errorf("failed to resolve engine: %w", err)
 	}
 
 	// Call engine create tool
@@ -128,7 +129,7 @@ func testCreate(testSpec *forge.TestSpec) error {
 	return nil
 }
 
-// testGet retrieves and displays test environment/report details by calling the engine.
+// testGet retrieves and displays test environment/report details from the artifact store.
 func testGet(testSpec *forge.TestSpec, args []string) error {
 	// Parse output format flag
 	format, remainingArgs := parseOutputFormat(args)
@@ -139,43 +140,40 @@ func testGet(testSpec *forge.TestSpec, args []string) error {
 
 	testID := remainingArgs[0]
 
-	// Resolve engine path
+	// Read forge configuration to get artifact store path
 	config, err := forge.ReadSpec()
 	if err != nil {
 		return fmt.Errorf("failed to read forge.yaml: %w", err)
 	}
 
-	enginePath, err := resolveEngine(testSpec.Engine, &config)
+	// Read artifact store DIRECTLY - NO MCP
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
 	if err != nil {
-		return fmt.Errorf("failed to resolve engine: %w", err)
+		return fmt.Errorf("failed to get artifact store path: %w", err)
 	}
 
-	// Determine the parameter name based on engine
-	paramName := "testID"
-	if strings.Contains(testSpec.Engine, "test-report") {
-		paramName = "reportID"
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to read artifact store: %w", err)
 	}
 
-	// Call engine get tool
-	result, err := callMCPEngine(enginePath, "get", map[string]any{
-		paramName: testID,
-	})
+	// Get test environment
+	env, err := forge.GetTestEnvironment(&store, testID)
 	if err != nil {
-		return fmt.Errorf("failed to get test details: %w", err)
+		return fmt.Errorf("test environment not found: %s", testID)
 	}
+
+	// Convert to map for display
+	resultMap := testEnvironmentToMap(env)
 
 	// Print result in requested format
-	if resultMap, ok := result.(map[string]any); ok {
-		switch format {
-		case outputFormatJSON:
-			printJSON(resultMap)
-		case outputFormatYAML:
-			printYAML(resultMap)
-		default:
-			printTestReportTable(resultMap)
-		}
-	} else {
-		fmt.Printf("%v\n", result)
+	switch format {
+	case outputFormatJSON:
+		printJSON(resultMap)
+	case outputFormatYAML:
+		printYAML(resultMap)
+	default:
+		printTestEnvironmentTable(resultMap)
 	}
 
 	return nil
@@ -190,7 +188,7 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 	testID := args[0]
 
 	// Handle noop engine (just remove from artifact store)
-	if testSpec.Engine == "" || testSpec.Engine == "noop" {
+	if testSpec.Testenv == "" || testSpec.Testenv == "noop" {
 		artifactStorePath, err := forge.GetArtifactStorePath(".forge/artifacts.json")
 		if err != nil {
 			return fmt.Errorf("failed to get artifact store path: %w", err)
@@ -219,14 +217,14 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 		return fmt.Errorf("failed to read forge.yaml: %w", err)
 	}
 
-	enginePath, err := resolveEngine(testSpec.Engine, &config)
+	enginePath, err := resolveEngine(testSpec.Testenv, &config)
 	if err != nil {
 		return fmt.Errorf("failed to resolve engine: %w", err)
 	}
 
 	// Determine the parameter name based on engine
 	paramName := "testID"
-	if strings.Contains(testSpec.Engine, "test-report") {
+	if strings.Contains(testSpec.Testenv, "test-report") {
 		paramName = "reportID"
 	}
 
@@ -262,46 +260,39 @@ func testList(testSpec *forge.TestSpec, args []string) error {
 		return fmt.Errorf("failed to read forge.yaml: %w", err)
 	}
 
-	enginePath, err := resolveEngine(testSpec.Engine, &config)
+	// Read artifact store DIRECTLY - NO MCP
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
 	if err != nil {
-		return fmt.Errorf("failed to resolve engine: %w", err)
+		return fmt.Errorf("failed to get artifact store path: %w", err)
 	}
 
-	// Call engine list tool
-	result, err := callMCPEngine(enginePath, "list", map[string]any{
-		"stage": testSpec.Name,
-	})
+	store, err := forge.ReadArtifactStore(artifactStorePath)
 	if err != nil {
-		return fmt.Errorf("failed to list: %w", err)
+		return fmt.Errorf("failed to read artifact store: %w", err)
 	}
+
+	// List test environments (filter by stage name)
+	envs := forge.ListTestEnvironments(&store, testSpec.Name)
 
 	// Print result in requested format
-	if result == nil {
-		fmt.Printf("No items found for stage: %s\n", testSpec.Name)
-	} else if resultSlice, ok := result.([]any); ok {
-		if len(resultSlice) == 0 {
-			fmt.Printf("No items found for stage: %s\n", testSpec.Name)
-		} else {
-			switch format {
-			case outputFormatJSON:
-				printJSON(resultSlice)
-			case outputFormatYAML:
-				printYAML(resultSlice)
-			default:
-				printTestReportsTable(resultSlice)
-			}
-		}
-	} else if resultMap, ok := result.(map[string]any); ok {
-		switch format {
-		case outputFormatJSON:
-			printJSON(resultMap)
-		case outputFormatYAML:
-			printYAML(resultMap)
-		default:
-			fmt.Printf("%v\n", resultMap)
-		}
-	} else {
-		fmt.Printf("%v\n", result)
+	if len(envs) == 0 {
+		fmt.Printf("No test environments found for stage: %s\n", testSpec.Name)
+		return nil
+	}
+
+	// Convert to slice of maps for display
+	resultSlice := make([]any, len(envs))
+	for i, env := range envs {
+		resultSlice[i] = testEnvironmentToMap(env)
+	}
+
+	switch format {
+	case outputFormatJSON:
+		printJSON(resultSlice)
+	case outputFormatYAML:
+		printYAML(resultSlice)
+	default:
+		printTestEnvironmentsTable(resultSlice)
 	}
 
 	return nil
@@ -316,9 +307,9 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 		testID = args[0]
 	} else {
 		// Auto-create environment if engine is configured
-		if testSpec.Engine != "" && testSpec.Engine != "noop" {
+		if testSpec.Testenv != "" && testSpec.Testenv != "noop" {
 			// Parse engine and create environment
-			engineType, enginePath, err := parseEngine(testSpec.Engine)
+			engineType, enginePath, err := parseEngine(testSpec.Testenv)
 			if err != nil {
 				return fmt.Errorf("failed to parse engine URI: %w", err)
 			}
@@ -389,6 +380,20 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 		"tmpDir":   dirs.TmpDir,
 		"buildDir": dirs.BuildDir,
 		"rootDir":  dirs.RootDir,
+	}
+
+	// If testID is provided, get artifact files from test environment
+	if testID != "" {
+		artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+		if err == nil {
+			store, err := forge.ReadArtifactStore(artifactStorePath)
+			if err == nil {
+				env, err := forge.GetTestEnvironment(&store, testID)
+				if err == nil && len(env.Files) > 0 {
+					params["artifactFiles"] = env.Files
+				}
+			}
+		}
 	}
 
 	// Inject runner config if present (for alias:// runners)
@@ -694,4 +699,61 @@ func truncate(s string, maxLen int) string {
 		return s[:maxLen]
 	}
 	return s[:maxLen-3] + "..."
+}
+
+// testEnvironmentToMap converts a TestEnvironment to a map for display.
+func testEnvironmentToMap(env *forge.TestEnvironment) map[string]any {
+	return map[string]any{
+		"id":               env.ID,
+		"name":             env.Name,
+		"status":           env.Status,
+		"createdAt":        env.CreatedAt.Format(time.RFC3339),
+		"updatedAt":        env.UpdatedAt.Format(time.RFC3339),
+		"tmpDir":           env.TmpDir,
+		"files":            env.Files,
+		"managedResources": env.ManagedResources,
+		"metadata":         env.Metadata,
+	}
+}
+
+// printTestEnvironmentTable prints a test environment in table format.
+func printTestEnvironmentTable(env map[string]any) {
+	fmt.Println("\n=== Test Environment ===")
+	fmt.Printf("ID:          %s\n", getStringField(env, "id"))
+	fmt.Printf("Name:        %s\n", getStringField(env, "name"))
+	fmt.Printf("Status:      %s\n", getStringField(env, "status"))
+	fmt.Printf("Created:     %s\n", getStringField(env, "createdAt"))
+	fmt.Printf("Updated:     %s\n", getStringField(env, "updatedAt"))
+	fmt.Printf("TmpDir:      %s\n", getStringField(env, "tmpDir"))
+
+	if files, ok := env["files"].(map[string]string); ok && len(files) > 0 {
+		fmt.Println("\nFiles:")
+		for key, path := range files {
+			fmt.Printf("  %s: %s\n", key, path)
+		}
+	}
+
+	if metadata, ok := env["metadata"].(map[string]string); ok && len(metadata) > 0 {
+		fmt.Println("\nMetadata:")
+		for key, value := range metadata {
+			fmt.Printf("  %s: %s\n", key, value)
+		}
+	}
+}
+
+// printTestEnvironmentsTable prints a list of test environments in table format.
+func printTestEnvironmentsTable(envs []any) {
+	fmt.Println("\n=== Test Environments ===")
+	fmt.Printf("%-40s %-15s %-10s %-20s\n", "ID", "NAME", "STATUS", "CREATED")
+	fmt.Println(strings.Repeat("-", 90))
+
+	for _, item := range envs {
+		if env, ok := item.(map[string]any); ok {
+			id := truncate(getStringField(env, "id"), 40)
+			name := truncate(getStringField(env, "name"), 15)
+			status := truncate(getStringField(env, "status"), 10)
+			created := truncate(getStringField(env, "createdAt"), 20)
+			fmt.Printf("%-40s %-15s %-10s %-20s\n", id, name, status, created)
+		}
+	}
 }

@@ -7,11 +7,24 @@ type EngineConfig struct {
 	// Can be used as: alias://my-formatter
 	Alias string `json:"alias"`
 
-	// Engine is the underlying engine URI (e.g., "go://generic-engine")
+	// Type specifies the engine type: "build", "test-runner", or "testenv"
+	Type string `json:"type,omitempty"`
+
+	// Engine is the underlying engine URI (e.g., "go://generic-builder")
 	Engine string `json:"engine"`
 
 	// Config contains the engine-specific configuration
 	Config EngineConfigDetails `json:"config,omitempty"`
+
+	// Build configuration (only used when Type="build")
+	Build *BuildEngineConfig `json:"build,omitempty"`
+
+	// TestRunner configuration (only used when Type="test-runner")
+	TestRunner *TestRunnerConfig `json:"testRunner,omitempty"`
+
+	// Testenv configuration (only used when Type="testenv")
+	// List of testenv-subengines to compose
+	Testenv []TestenvEngineConfig `json:"testenv,omitempty"`
 }
 
 // EngineConfigDetails contains the configuration details for an engine.
@@ -33,4 +46,26 @@ type EngineConfigDetails struct {
 
 	// WorkDir is the working directory for command execution (optional)
 	WorkDir string `json:"workDir,omitempty"`
+}
+
+// BuildEngineConfig defines configuration for build-type engines
+type BuildEngineConfig struct {
+	Engine string              `json:"engine"`
+	Config EngineConfigDetails `json:"config,omitempty"`
+}
+
+// TestRunnerConfig defines configuration for test-runner-type engines
+type TestRunnerConfig struct {
+	Engine string              `json:"engine"`
+	Config EngineConfigDetails `json:"config,omitempty"`
+}
+
+// TestenvEngineConfig defines configuration for a testenv-subengine component
+// Note: "testenv-subengine" is an interface/role, not a formal type
+type TestenvEngineConfig struct {
+	// Engine is the testenv-subengine URI (e.g., "go://testenv-kind")
+	Engine string `json:"engine"`
+
+	// Spec contains engine-specific configuration (free-form)
+	Spec map[string]interface{} `json:"spec,omitempty"`
 }

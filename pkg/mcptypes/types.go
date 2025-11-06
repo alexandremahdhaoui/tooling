@@ -19,12 +19,15 @@ type RunInput struct {
 	EnvFile string            `json:"envFile,omitempty"` // Path to environment file (optional, for generic runner)
 	WorkDir string            `json:"workDir,omitempty"` // Working directory (optional, for generic runner)
 
+	// Artifact files from testenv (e.g., kubeconfig, registry credentials)
+	ArtifactFiles map[string]string `json:"artifactFiles,omitempty"` // Map of file key to absolute path
+
 	// Directory parameters (injected by forge)
 	DirectoryParams
 }
 
 // BuildInput represents the standard input parameters for build engine tools.
-// This is used across all build engines (build-go, build-container, generic-engine, etc.).
+// This is used across all build engines (build-go, build-container, generic-builder, etc.).
 type BuildInput struct {
 	Name   string `json:"name"`           // Artifact name (required)
 	Src    string `json:"src,omitempty"`  // Source path

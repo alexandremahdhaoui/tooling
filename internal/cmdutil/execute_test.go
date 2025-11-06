@@ -139,7 +139,7 @@ func TestExecuteCommand_WithEnvFile(t *testing.T) {
 	envContent := `TEST_VAR1=value1
 TEST_VAR2=value2
 `
-	if err := os.WriteFile(envFile, []byte(envContent), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(envContent), 0o644); err != nil {
 		t.Fatalf("Failed to create env file: %v", err)
 	}
 
@@ -179,7 +179,7 @@ func TestExecuteCommand_EnvFileTakesPrecedenceOverSystem(t *testing.T) {
 	// Override in env file
 	envContent := `CMDUTIL_TEST_VAR=file_value
 `
-	if err := os.WriteFile(envFile, []byte(envContent), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(envContent), 0o644); err != nil {
 		t.Fatalf("Failed to create env file: %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestExecuteCommand_InlineEnvTakesPrecedence(t *testing.T) {
 
 	envContent := `CMDUTIL_TEST_VAR2=file_value
 `
-	if err := os.WriteFile(envFile, []byte(envContent), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(envContent), 0o644); err != nil {
 		t.Fatalf("Failed to create env file: %v", err)
 	}
 

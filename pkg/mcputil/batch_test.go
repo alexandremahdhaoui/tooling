@@ -11,7 +11,7 @@ import (
 )
 
 type testSpec struct {
-	Name      string
+	Name       string
 	ShouldFail bool
 }
 

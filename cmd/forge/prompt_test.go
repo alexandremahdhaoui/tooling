@@ -15,7 +15,7 @@ func TestFetchPromptStore_Local(t *testing.T) {
 	// Create temporary directory structure
 	tmpDir := t.TempDir()
 	docsDir := filepath.Join(tmpDir, "docs")
-	if err := os.MkdirAll(docsDir, 0755); err != nil {
+	if err := os.MkdirAll(docsDir, 0o755); err != nil {
 		t.Fatalf("Failed to create temp docs dir: %v", err)
 	}
 
@@ -40,7 +40,7 @@ func TestFetchPromptStore_Local(t *testing.T) {
 	}
 
 	promptListPath := filepath.Join(docsDir, "prompt-list.yaml")
-	if err := os.WriteFile(promptListPath, content, 0644); err != nil {
+	if err := os.WriteFile(promptListPath, content, 0o644); err != nil {
 		t.Fatalf("Failed to write test prompt-list.yaml: %v", err)
 	}
 
@@ -189,7 +189,7 @@ func TestPromptGet_LocalFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	docsDir := filepath.Join(tmpDir, "docs")
 	promptsDir := filepath.Join(docsDir, "prompts")
-	if err := os.MkdirAll(promptsDir, 0755); err != nil {
+	if err := os.MkdirAll(promptsDir, 0o755); err != nil {
 		t.Fatalf("Failed to create temp prompts dir: %v", err)
 	}
 
@@ -210,12 +210,12 @@ func TestPromptGet_LocalFile(t *testing.T) {
 
 	content, _ := yaml.Marshal(store)
 	promptListPath := filepath.Join(docsDir, "prompt-list.yaml")
-	os.WriteFile(promptListPath, content, 0644)
+	os.WriteFile(promptListPath, content, 0o644)
 
 	// Create test prompt file
 	promptContent := "# Test Prompt\n\nYou are helping a user test the prompt system.\n"
 	promptPath := filepath.Join(promptsDir, "test-prompt.md")
-	os.WriteFile(promptPath, []byte(promptContent), 0644)
+	os.WriteFile(promptPath, []byte(promptContent), 0o644)
 
 	// Change to temp directory
 	originalDir, _ := os.Getwd()

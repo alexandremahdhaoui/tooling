@@ -97,7 +97,7 @@ func TestGetCurrentCommitSHA_InSubdirectory(t *testing.T) {
 	// Create a subdirectory and test from there
 	// Git should still work from subdirectories
 	tmpSubDir := filepath.Join(t.TempDir(), "subdir")
-	if err := os.MkdirAll(tmpSubDir, 0755); err != nil {
+	if err := os.MkdirAll(tmpSubDir, 0o755); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 

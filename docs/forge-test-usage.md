@@ -20,7 +20,7 @@ test:
 
   # Integration tests - requires test environment
   - name: integration
-    engine: "go://test-integration"
+    engine: "go://testenv"
     runner: "go://test-runner-go"
 
   # E2E tests - custom environment
@@ -88,13 +88,20 @@ forge test integration get test-integration-20241103-abc12345
 ```
 
 **Output:**
-```
-Test Environment: test-integration-20241103-abc12345
-Stage: integration
-Status: created
-Created: 2024-11-03 14:30:00
-Updated: 2024-11-03 14:30:00
-Kubeconfig: .forge/kindenvs/test-integration-20241103-abc12345/kubeconfig
+```json
+{
+  "testID": "integration-20241103-143000",
+  "createdAt": "2024-11-03T14:30:00Z",
+  "files": {
+    "kubeconfig": ".forge/integration-20241103-143000/kubeconfig.yaml",
+    "ca.crt": ".forge/integration-20241103-143000/ca.crt",
+    "credentials.yaml": ".forge/integration-20241103-143000/credentials.yaml"
+  },
+  "metadata": {
+    "clusterName": "test-integration-20241103-143000",
+    "registryURL": "registry.local:5000"
+  }
+}
 ```
 
 **Status Values:**
@@ -226,10 +233,10 @@ Engines use the `go://` protocol:
 
 ```yaml
 # Short name (expands to github.com/alexandremahdhaoui/forge/cmd/...)
-engine: "go://test-integration"
+engine: "go://testenv"
 
 # With version
-engine: "go://test-integration@v1.0.0"
+engine: "go://testenv@v1.0.0"
 
 # Full package path
 engine: "go://github.com/myorg/my-engine"
@@ -311,7 +318,7 @@ forge test integration delete $TEST_ID
 # With forge.yaml
 test:
   - name: integration
-    engine: "go://test-integration"
+    engine: "go://testenv"
     runner: "go://test-runner-go"
 ```
 
@@ -353,7 +360,7 @@ forge test integration run $TEST_ID
 
 ### Custom Test Engine
 
-See [`docs/test-engine-guide.md`](./test-engine-guide.md) for detailed implementation guide.
+See [`docs/prompts/create-test-engine.md`](./prompts/create-test-engine.md) for detailed implementation guide.
 
 **Minimal engine:**
 ```go
@@ -372,7 +379,7 @@ test:
 
 ### Custom Test Runner
 
-See [`docs/test-runner-guide.md`](./test-runner-guide.md) for detailed implementation guide.
+See [`docs/prompts/create-test-runner.md`](./prompts/create-test-runner.md) for detailed implementation guide.
 
 **Minimal runner:**
 ```go
@@ -386,7 +393,7 @@ See [`docs/test-runner-guide.md`](./test-runner-guide.md) for detailed implement
 ```yaml
 test:
   - name: integration
-    engine: "go://test-integration"
+    engine: "go://testenv"
     runner: "go://github.com/myorg/my-runner"
 ```
 
@@ -439,12 +446,12 @@ Error: failed to write artifact store: permission denied
 ### Version Mismatch
 
 ```
-Warning: engine test-integration version mismatch: forge=v0.2.2, engine=v0.1.0
+Warning: engine testenv version mismatch: forge=v0.2.2, engine=v0.1.0
 ```
 
 **Solution:**
-- Update engine: `go install github.com/alexandremahdhaoui/forge/cmd/test-integration@v0.2.2`
-- Or specify version in forge.yaml: `engine: "go://test-integration@v0.2.2"`
+- Update engine: `go install github.com/alexandremahdhaoui/forge/cmd/testenv@v0.2.2`
+- Or specify version in forge.yaml: `engine: "go://testenv@v0.2.2"`
 
 ## Best Practices
 
@@ -463,7 +470,7 @@ test:
 ```yaml
 test:
   - name: integration
-    engine: "go://test-integration@v1.0.0"  # ✅ Explicit
+    engine: "go://testenv@v1.0.0"  # ✅ Explicit
     runner: "go://test-runner-go@v1.0.0"
 ```
 
@@ -499,7 +506,7 @@ See `.ai/plan/test-command-refactor/examples.md` for more comprehensive examples
 
 ## Reference
 
-- **Test Engine Guide**: [`docs/test-engine-guide.md`](./test-engine-guide.md)
-- **Test Runner Guide**: [`docs/test-runner-guide.md`](./test-runner-guide.md)
-- **Architecture**: `.ai/plan/test-command-refactor/architecture.md`
-- **Reference Implementation**: `cmd/test-integration`, `cmd/test-runner-go`
+- **Test Engine Guide**: [`docs/prompts/create-test-engine.md`](./prompts/create-test-engine.md)
+- **Test Runner Guide**: [`docs/prompts/create-test-runner.md`](./prompts/create-test-runner.md)
+- **Architecture**: [ARCHITECTURE.md](../ARCHITECTURE.md#test-infrastructure)
+- **Reference Implementation**: `cmd/testenv`, `cmd/test-runner-go`

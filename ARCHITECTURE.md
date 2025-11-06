@@ -18,61 +18,76 @@ This document provides a comprehensive overview of the tooling repository archit
 
 ## Overview
 
-This is a Go development tooling repository that provides a comprehensive set of command-line tools for streamlining Go development workflows, with a particular focus on:
+Go development tooling repository providing CLI tools for streamlined workflows with focus on:
 
 - Container and Kubernetes development
-- Local development environments
+- Local test environments with MCP orchestration
 - CI/CD operations
 - Code generation
 
 **Key Statistics:**
 
-- 25 Go source files
-- 3,373 lines of Go code
+- **123 Go source files**
+- **21,829 lines of Go code**
+- **20 command-line tools**
+- **5 public packages**
+- **10 MCP servers**
 - Go version: 1.24.1
 - License: Apache 2.0
 
-**Philosophy:** The repository follows a "dogfooding" approach where the tools are used to build and test themselves, ensuring they work in real-world scenarios.
+**Philosophy:** Dogfooding approach - tools build and test themselves, ensuring real-world reliability.
 
 ## Project Structure
 
 ```
 /
-├── cmd/                    # Command-line tools (11 tools)
-├── pkg/                    # Public reusable packages
-├── internal/              # Internal utilities and mocks
-├── containers/            # Container definitions
+├── cmd/                    # Command-line tools (20 tools)
+│   ├── forge/             # Main CLI orchestrator
+│   ├── build-*/           # Build engines (3)
+│   ├── test*/             # Test engines and runners (7)
+│   ├── generic-*/         # Generic engines (2)
+│   └── */                 # Other tools (8)
+├── pkg/                    # Public packages (5)
+│   ├── forge/             # Core types and specs
+│   ├── mcptypes/          # MCP protocol types
+│   ├── mcputil/           # MCP utilities
+│   ├── eventualconfig/    # Async config management
+│   └── flaterrors/        # Error handling
+├── internal/              # Internal utilities
 ├── docs/                  # Documentation
-├── hack/                  # Build and generation scripts
-├── .githooks/            # Git hooks for quality control
-├── forge.yaml         # Central project configuration
-└── Makefile              # Build automation
+├── forge.yaml             # Central configuration
+└── .ai/                   # AI assistant context
 ```
 
 ### Directory Responsibilities
 
-#### `/cmd` - Command-Line Tools
+#### `/cmd` - Command-Line Tools (20 tools)
 
-Each subdirectory contains a standalone CLI tool. Tools are designed to be:
-
-- Environment-variable driven for CI/CD compatibility
+Standalone CLI tools, each in its own subdirectory:
+- Environment-variable driven for CI/CD
 - Self-contained with minimal dependencies
-- Composable and scriptable
+- Composable via MCP protocol
 
-#### `/pkg` - Public Packages
+See [Command-Line Tools](#command-line-tools) section for complete list.
 
-Reusable library code that can be imported by other Go projects:
+#### `/pkg` - Public Packages (5 packages)
 
-- `eventualconfig` - Async configuration management
-- `flaterrors` - Error flattening utilities
-- `project` - Project configuration management
+Reusable libraries importable by other Go projects:
+
+- `forge` - Core types, BuildSpec, TestReport, artifact store
+- `mcptypes` - MCP protocol types (BuildInput, RunInput, etc.)
+- `mcputil` - MCP utilities (validation, batch handling, result formatting)
+- `eventualconfig` - Async configuration with eventual consistency
+- `flaterrors` - Error tree flattening
 
 #### `/internal` - Internal Utilities
 
-Private implementation details not exposed as public API:
+Private implementation details:
 
-- `util` - Command execution and environment formatting
-- `util/mocks` - Generated mocks for testing
+- `cmdutil` - Command execution utilities
+- `gitutil` - Git operations (commit SHA, etc.)
+- `mcpserver` - MCP server framework
+- `enginetest` - Test helpers for engine development
 
 ## Core Packages
 
@@ -91,7 +106,7 @@ Private implementation details not exposed as public API:
 - Pre-declared keys at initialization time
 - Blocks until value is available (ensures coordination)
 
-**Use Case:** The local-container-registry uses this to coordinate between different setup phases (TLS, credentials, registry) that run concurrently but depend on each other's outputs.
+**Use Case:** testenv-lcr uses this to coordinate between different setup phases (TLS, credentials, registry) that run concurrently but depend on each other's outputs.
 
 **Example:**
 
@@ -125,7 +140,7 @@ cert := eventualconfig.AwaitValue[string](cfg, "TLSCert")
 - Compatible with `errors.Is()` and `errors.As()`
 - Provides cleaner error output in multi-step operations
 
-**Use Case:** Throughout the codebase where multiple operations may fail independently (e.g., cleanup operations in local-container-registry teardown).
+**Use Case:** Throughout the codebase where multiple operations may fail independently (e.g., cleanup operations in testenv-lcr teardown).
 
 **Example:**
 
@@ -162,121 +177,71 @@ type Config struct {
 
 ## Command-Line Tools
 
-### Forge CLI
+All 20 tools are standalone binaries in `cmd/`. Tools marked with ⚡ provide MCP servers.
 
-**Location:** `cmd/forge/`
+### Tool Categories
 
-**Purpose:** Make-like build orchestrator that uses MCP (Model Context Protocol) servers to build artifacts and manage integration environments.
+```
+Build Engines (3):
+  ⚡ build-go              - Go binary builder
+  ⚡ build-container       - Container image builder (Kaniko)
+  ⚡ generic-builder       - Generic command executor
 
-**Architecture:** See [Forge Architecture](#forge-architecture) section below.
+Test Engines (3):
+  ⚡ testenv              - Test environment orchestrator
+  ⚡ testenv-kind         - Kind cluster manager
+  ⚡ testenv-lcr          - Local container registry manager
 
-### Local Container Registry
+Test Runners (3):
+  ⚡ test-runner-go       - Go test runner with JUnit/coverage
+  ⚡ test-runner-go-verify-tags - Build tag verifier
+  ⚡ generic-test-runner  - Generic test command executor
 
-**Location:** `cmd/local-container-registry/`
+Test Management (1):
+  ⚡ test-report          - Test report aggregator
 
-**Purpose:** Creates a fully functional, TLS-enabled container registry inside a Kind cluster for local development.
+Code Quality (3):
+  format-go              - Go code formatter
+  lint-go                - Go linter wrapper
+  test-go                - Legacy Go test runner
 
-**Architecture:** See [Local Container Registry](#local-container-registry) section below.
+Code Generation (3):
+  generate-mocks         - Mock generator
+  generate-openapi-go    - OpenAPI code generator
+  oapi-codegen-helper    - OpenAPI codegen helper
 
-### kindenv
+Orchestration (2):
+  forge                  - Main CLI orchestrator
+  forge-e2e              - Forge E2E tests
 
-**Location:** `cmd/kindenv/`
+Planning (2):
+  chart-prereq           - Helm chart dependencies
+  ci-orchestrator        - CI/CD orchestration (planning phase)
+```
 
-**Purpose:** Manages Kind (Kubernetes in Docker) cluster lifecycle.
+### Core Tools
 
-**Features:**
+**forge** (`cmd/forge/`)
+- Make-like build orchestrator using MCP protocol
+- Manages builds, tests, and test environments
+- See [Forge Architecture](#forge-architecture) section
 
-- Creates Kind clusters with custom configuration
-- Generates kubeconfig at specified path
-- Teardown and cleanup
+**testenv** (`cmd/testenv/`)
+- Orchestrates test environment creation/deletion
+- Coordinates testenv-kind and testenv-lcr via MCP
+- Manages TestEnvironment lifecycle in artifact store
 
-### e2e
+**testenv-kind** (`cmd/testenv-kind/`)
+- Creates/deletes Kind clusters for test environments
+- Generates kubeconfig files per test
+- MCP server for forge integration
 
-**Location:** `cmd/e2e/`
+**testenv-lcr** (`cmd/testenv-lcr/`)
+- Deploys TLS-enabled container registry in Kind clusters
+- Generates certificates and credentials
+- Manages host file entries and registry access
 
-**Purpose:** End-to-end test runner that validates the entire toolchain.
-
-**Test Flow:**
-
-1. Setup local-container-registry
-2. Port-forward registry service (5000:5000)
-3. Login to registry with generated credentials
-4. Tag and push test image
-5. Pull image back
-6. Teardown infrastructure
-7. Report results
-
-**Container Engine Support:** Docker and Podman
-
-### build-binary
-
-**Location:** `cmd/build-binary/`
-
-**Purpose:** Wrapper around `go build` with standardized build flags.
-
-**Features:**
-
-- Injects version, commit SHA, and timestamp via ldflags
-- Consistent build metadata across all binaries
-
-### build-container
-
-**Location:** `cmd/build-container/`
-
-**Purpose:** Builds container images using Kaniko (rootless, secure).
-
-**Features:**
-
-- Supports multiple Containerfiles
-- Configurable context directory
-- Build arguments support
-
-### test-go
-
-**Location:** `cmd/test-go/`
-
-**Purpose:** Go test runner with enhanced output formatting.
-
-**Features:**
-
-- Uses gotestsum for pretty output
-- Generates JUnit XML reports
-- Coverage reporting
-- Support for test tags (unit, integration, functional, e2e)
-
-### oapi-codegen-helper
-
-**Location:** `cmd/oapi-codegen-helper/`
-
-**Purpose:** Helper for generating Go code from OpenAPI specifications.
-
-**Features:**
-
-- Wraps oapi-codegen with project conventions
-- Configurable via `forge.yaml`
-
-### chart-prereq
-
-**Location:** `cmd/chart-prereq/`
-
-**Purpose:** Manages Helm chart dependencies and prerequisites.
-
-**Status:** Minimal implementation
-
-### ci-orchestrator
-
-**Location:** `cmd/ci-orchestrator/`
-
-**Purpose:** Vision for vendor-agnostic CI/CD orchestration.
-
-**Goals:**
-
-- Accessibility (run CI/CD anywhere)
-- Security (proper secret management)
-- Reproducibility (local = CI)
-- Quality gates and artifact management
-
-**Status:** Design/brainstorming phase
+See [Testing Infrastructure](#testing-infrastructure) for testenv architecture diagram.
 
 ## Build System
 
@@ -329,6 +294,70 @@ GO_BUILD_LDFLAGS # Linker flags for build metadata
 - Parallel test execution
 - Self-referencing (uses own tools)
 
+## MCP Architecture
+
+Forge uses Model Context Protocol (MCP) for communication between the orchestrator and tool engines.
+
+### Communication Flow
+
+```
+┌─────────────┐
+│    forge    │  Main orchestrator
+│  (client)   │
+└──────┬──────┘
+       │ MCP over stdio
+       ├────────────────┬────────────────┬────────────────┐
+       │                │                │                │
+┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐
+│  build-go   │  │   testenv   │  │ test-runner │  │   generic   │
+│  (server)   │  │  (server)   │  │   (server)  │  │  (server)   │
+└─────────────┘  └──────┬──────┘  └─────────────┘  └─────────────┘
+                        │ Orchestrates sub-engines
+                 ┌──────┴──────┐
+                 │             │
+          ┌──────▼──────┐ ┌────▼────────┐
+          │ testenv-kind│ │ testenv-lcr │
+          │  (server)   │ │  (server)   │
+          └─────────────┘ └─────────────┘
+```
+
+### MCP Servers (10 total)
+
+**Build Engines** (communicate via `build` tool):
+- `build-go --mcp` - Returns Artifact
+- `build-container --mcp` - Returns Artifact
+- `generic-builder --mcp` - Returns Artifact
+
+**Test Runners** (communicate via `run` tool):
+- `test-runner-go --mcp` - Returns TestReport
+- `test-runner-go-verify-tags --mcp` - Returns TestReport
+- `generic-test-runner --mcp` - Returns TestReport
+
+**Test Engines** (complex orchestration):
+- `testenv --mcp` - Orchestrates testenv-kind + testenv-lcr
+- `testenv-kind --mcp` - Manages Kind clusters
+- `testenv-lcr --mcp` - Manages container registry
+
+**Test Management**:
+- `test-report --mcp` - Manages test reports (get/list/delete)
+
+### Tool Registration in forge.yaml
+
+```yaml
+build:
+  specs:
+    - name: my-app
+      src: ./cmd/my-app
+      builder: go://build-go      # References MCP server
+
+test:
+  - name: unit
+    engine: go://testenv          # References MCP server
+    runner: go://test-runner-go   # References MCP server
+```
+
+The `go://` protocol indicates forge should spawn the binary with `--mcp` flag and communicate via stdio.
+
 ## Testing Infrastructure
 
 ### Test Organization
@@ -346,62 +375,80 @@ GO_BUILD_LDFLAGS # Linker flags for build metadata
 - Coverage: `.ignore.test-{tag}-coverage.out`
 - Pretty output via gotestsum
 
+### Test Environment Architecture
+
+```
+forge test create <stage>
+       │
+       ▼
+   ┌──────────┐
+   │ testenv  │ Main orchestrator
+   └─────┬────┘
+         │
+    ┌────┴────┐
+    │         │
+    ▼         ▼
+┌─────────┐ ┌──────────┐
+│testenv- │ │testenv-  │
+│kind     │ │lcr       │
+└─────────┘ └──────────┘
+Creates:      Creates:
+- Kind        - Registry
+  cluster     - TLS certs
+- Kubeconfig  - Credentials
+```
+
+**TestEnvironment Lifecycle:**
+
+1. **Create**: `forge test create <stage>` → Returns testID
+2. **Get**: `forge test get <testID>` → Returns TestEnvironment details
+3. **List**: `forge test list [--stage=<stage>]` → Lists all environments
+4. **Delete**: `forge test delete <testID>` → Cleans up all resources
+
+**TestEnvironment Storage:**
+
+Stored in artifact store (`.forge/artifacts.yaml`):
+
+```go
+type TestEnvironment struct {
+    ID        string            // e.g., "test-unit-20250106-abc123"
+    Name      string            // Stage name
+    Status    string            // "created", "running", "failed"
+    CreatedAt time.Time
+    UpdatedAt time.Time
+    TmpDir    string            // Temp directory for files
+    Files     map[string]string // Relative paths in tmpDir
+    Metadata  map[string]string // Component metadata
+    ManagedResources []string   // Resources to clean up
+}
+```
+
 ### Test Execution Flow
 
 ```
-make test-setup          # Create Kind cluster
-├── make test-unit       # Fast unit tests
-├── make test-integration # Integration tests (requires cluster)
-├── make test-functional  # Functional tests
-└── make test-e2e        # Full system validation
-make test-teardown       # Destroy Kind cluster
+forge test create unit      # Create test environment with testenv
+forge test run unit         # Run tests with test-runner-go
+forge test delete <testID>  # Clean up test environment
 ```
 
-### E2E Test Architecture
+## Test Environment Components (testenv-*)
 
-**Location:** `cmd/e2e/main.sh`
+### testenv-lcr Architecture
 
-**Test Sequence:**
-
-1. **Setup Phase:**
-   - Create local-container-registry
-   - Port-forward registry service (5000:5000)
-   - Extract credentials from generated file
-
-2. **Validation Phase:**
-   - Login to registry (with TLS verification handling)
-   - Pull test image (registry:2)
-   - Tag for local registry
-   - Push to local registry
-   - Pull from local registry
-
-3. **Teardown Phase:**
-   - Kill port-forward process
-   - Teardown local-container-registry
-   - Clean up
-
-**Error Handling:**
-
-- Automatic cleanup on failure
-- Process management for background port-forwarding
-- Supports both Docker and Podman with different TLS configurations
-
-## Local Container Registry
-
-The local-container-registry is the most sophisticated component in the repository.
-
-### Architecture Overview
+**Location:** `cmd/testenv-lcr/`
 
 **Design Pattern:** Adapter pattern with eventual consistency coordination.
 
-**Purpose:** Create a production-like container registry in a Kind cluster with:
+**Purpose:** Deploys production-like container registry in Kind clusters with:
 
 - TLS encryption (via cert-manager)
 - htpasswd authentication
 - Persistent storage
 - Service exposure
 
-### Components (Setup Adapters)
+See `docs/testenv-architecture.md` for complete testenv system architecture.
+
+### testenv-lcr Components (Setup Adapters)
 
 #### 1. K8s Adapter (`setup_k8s.go`)
 
@@ -432,7 +479,7 @@ type SetupK8s struct {
 
 - Issuer: Self-signed
 - Certificate: Server cert for registry service
-- DNS names: `local-container-registry.local-container-registry.svc.cluster.local`
+- DNS names: `testenv-lcr.testenv-lcr.svc.cluster.local`
 - CA cert exported to: `.ignore.ca.crt`
 
 **EventualConfig Keys Set:**
@@ -449,7 +496,7 @@ type SetupK8s struct {
 - Generate random username/password (32 characters each)
 - Create htpasswd hash using httpd:2 container
 - Store credentials in Kubernetes Secret
-- Write credentials to local file (`.ignore.local-container-registry.yaml`)
+- Write credentials to test environment tmpDir
 
 **Process:**
 
@@ -731,28 +778,27 @@ type Component struct {
 ```
 
 **Supported Components:**
-- `kindenv` - Kind cluster
-- `local-container-registry` - Local registry with TLS
+- `testenv-kind` - Kind cluster
+- `testenv-lcr` - Local registry with TLS
 
-**Environment Store Example:**
+**TestEnvironment Example:**
 
 ```yaml
-environments:
-  - id: abc123-def456
-    name: my-dev-env
-    created: "2025-01-03T10:00:00Z"
-    components:
-      kindenv:
-        enabled: true
-        ready: true
-        connectionInfo:
-          kubeconfig: .ignore.kindenv.kubeconfig.yaml
-      local-container-registry:
-        enabled: true
-        ready: true
-        connectionInfo:
-          namespace: local-container-registry
-          credentialsFile: .ignore.local-container-registry.yaml
+testEnvironments:
+  - id: test-unit-20250106-abc123
+    name: unit
+    stage: unit
+    status: created
+    created: "2025-01-06T10:00:00Z"
+    tmpDir: .forge/tmp/test-unit-20250106-abc123
+    files:
+      testenv-kind.kubeconfig: kubeconfig
+      testenv-lcr.ca.crt: ca.crt
+      testenv-lcr.credentials.yaml: registry-credentials.yaml
+    metadata:
+      testenv-kind.clusterName: forge-test-unit-20250106-abc123
+      testenv-kind.kubeconfigPath: .forge/tmp/test-unit-20250106-abc123/kubeconfig
+      testenv-lcr.registryFQDN: testenv-lcr.testenv-lcr.svc.cluster.local:5000
 ```
 
 ### Configuration: forge.yaml
@@ -840,12 +886,14 @@ forge integration list
 
 **Output Format:**
 ```
-Integration Environments:
-- my-dev-env (ID: abc123-def456)
-  Created: 2025-01-03T10:00:00Z
+Test Environments:
+- test-unit-20250106-abc123
+  Stage: unit
+  Status: created
+  Created: 2025-01-06T10:00:00Z
   Components:
-    - kindenv: enabled, ready
-    - local-container-registry: enabled, ready
+    - testenv-kind: enabled
+    - testenv-lcr: enabled
 ```
 
 **forge integration get** - Get details about an environment
@@ -1238,35 +1286,57 @@ Central configuration file for the entire project.
 ```yaml
 name: tooling
 
-kindenv:
-  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+# Build specifications
+build:
+  artifactStorePath: .forge/artifacts.yaml
+  specs:
+    - name: forge
+      src: ./cmd/forge
+      dest: ./build/bin
+      builder: go://build-go
 
+# Test specifications
+test:
+  - name: unit
+    stage: unit
+    engine: go://testenv
+    runner: go://test-runner-go
+
+# Kind cluster configuration
+kindenv:
+  kubeconfigPath: .forge/kubeconfig
+
+# Local container registry configuration
 localContainerRegistry:
   enabled: true
-  credentialPath: .ignore.local-container-registry.yaml
-  caCrtPath: .ignore.ca.crt
-  namespace: local-container-registry
-
-oapiCodegenHelper: {}
+  namespace: testenv-lcr
+  credentialPath: .forge/registry-credentials.yaml
+  caCrtPath: .forge/ca.crt
 ```
 
 **Configuration Loading:**
 
 1. Parse `forge.yaml` file
-2. Override with environment variables (using `github.com/caarlos0/env`)
+2. Override with environment variables
 3. Validate configuration
 
 ### Environment Variables
 
-All tools support environment variable configuration with standardized naming:
+Tools support environment variable configuration with standardized naming:
 
-**Format:** `{TOOL_NAME}_{FIELD_NAME}`
+**Format:** `{TOOL_NAME}_{FIELD_NAME}` or direct overrides
 
-**Example:**
+**Common Variables:**
 
 ```bash
-KINDENV_KUBECONFIG_PATH=./my-kubeconfig.yaml
-LOCAL_CONTAINER_REGISTRY_NAMESPACE=my-registry
+# Forge
+FORGE_ARTIFACT_STORE_PATH=.forge/artifacts.yaml
+
+# Container engine
+CONTAINER_ENGINE=docker  # or podman
+
+# Test environment
+KUBECONFIG=.forge/kubeconfig
 ```
 
 **Benefits:**

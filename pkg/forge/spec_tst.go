@@ -7,10 +7,11 @@ type TestSpec struct {
 	// Name is the test stage name (e.g., "unit", "integration", "e2e")
 	Name string `json:"name"`
 
-	// Engine implements create/get/delete/list methods for test environments
-	// Can be "noop" or "" to indicate no environment management needed
-	// Examples: "go://test-integration", "noop"
-	Engine string `json:"engine"`
+	// Testenv orchestrates test environment setup (create/delete)
+	// Defaults to "go://test-report" if not specified
+	// Can be "noop" or "" to use default
+	// Examples: "alias://k8senv", "go://testenv"
+	Testenv string `json:"testenv,omitempty"`
 
 	// Runner implements the run method to execute tests
 	// Examples: "go://test-runner-go", "shell://bash ./scripts/run-test.sh"
@@ -35,20 +36,21 @@ type TestEnvironment struct {
 	// UpdatedAt is when the environment was last updated
 	UpdatedAt time.Time `json:"updatedAt"`
 
-	// ArtifactPath is the root directory for test artifacts
-	ArtifactPath string `json:"artifactPath,omitempty"`
+	// TmpDir is the temporary directory for this test environment
+	// All testenv-subengines write their files here
+	// Format: /tmp/forge-test-{stage}-{testID}/
+	TmpDir string `json:"tmpDir,omitempty"`
 
-	// KubeconfigPath is the path to the kubeconfig file (for kindenv-based tests)
-	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
-
-	// RegistryConfig holds local container registry configuration
-	RegistryConfig map[string]string `json:"registryConfig,omitempty"`
+	// Files maps file keys to relative paths (relative to TmpDir)
+	// Keys are namespaced by engine name (e.g., "testenv-kind.kubeconfig")
+	Files map[string]string `json:"files,omitempty"`
 
 	// ManagedResources lists all files/directories created for this environment
 	// Used for cleanup on delete
 	ManagedResources []string `json:"managedResources"`
 
-	// Metadata holds engine-specific data
+	// Metadata holds engine-specific data, namespaced by engine name
+	// Keys are in format "engineName.key" (e.g., "testenv-kind.clusterName")
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 

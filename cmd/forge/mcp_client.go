@@ -15,6 +15,9 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 	// Create command to spawn MCP server
 	cmd := exec.Command(binaryPath, "--mcp")
 
+	// Inherit environment variables from parent process
+	cmd.Env = os.Environ()
+
 	// Forward stderr from the MCP server to show build logs
 	// Stdin/Stdout are used for JSON-RPC, but stderr is free for logs
 	cmd.Stderr = os.Stderr

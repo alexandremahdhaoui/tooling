@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	promptListURL     = "https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/prompt-list.yaml"
-	localPromptList   = "docs/prompt-list.yaml"
-	localPromptsDir   = "docs/prompts"
-	httpTimeout       = 10 * time.Second
+	promptListURL   = "https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/prompt-list.yaml"
+	localPromptList = "docs/prompt-list.yaml"
+	localPromptsDir = "docs/prompts"
+	httpTimeout     = 10 * time.Second
 )
 
 // PromptStore represents the prompt-list.yaml structure

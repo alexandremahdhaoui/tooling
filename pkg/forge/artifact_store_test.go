@@ -717,7 +717,7 @@ func TestGetArtifactStorePath_WithConfiguredPath(t *testing.T) {
 		t.Fatalf("Failed to marshal spec: %v", err)
 	}
 
-	if err := os.WriteFile("forge.yaml", data, 0644); err != nil {
+	if err := os.WriteFile("forge.yaml", data, 0o644); err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
 
@@ -755,7 +755,7 @@ func TestGetArtifactStorePath_WithDefaultPath(t *testing.T) {
 		t.Fatalf("Failed to marshal spec: %v", err)
 	}
 
-	if err := os.WriteFile("forge.yaml", data, 0644); err != nil {
+	if err := os.WriteFile("forge.yaml", data, 0o644); err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}
 

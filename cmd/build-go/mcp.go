@@ -116,4 +116,3 @@ func handleBuildBatchTool(
 	result, returnedArtifacts := mcputil.FormatBatchResult("binaries", artifacts, errorMsgs)
 	return result, returnedArtifacts, nil
 }
-

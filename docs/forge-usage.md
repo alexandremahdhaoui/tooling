@@ -84,7 +84,7 @@ forge --help
 
 # Command-specific help
 forge build --help
-forge integration --help
+forge test --help
 ```
 
 ## Building Artifacts
@@ -416,7 +416,7 @@ test:
 
   # Integration tests - creates Kind cluster automatically
   - name: integration
-    engine: "go://test-integration"
+    engine: "go://testenv"
     runner: "go://test-runner-go"
 
   # E2E tests
@@ -531,142 +531,115 @@ Integration environments are complete development environments with Kind cluster
 
 ### Create Environment
 
-Create a new integration environment:
+Create a new test environment for a stage:
 
 ```bash
-forge integration create my-dev-env
+forge test integration create
 ```
 
 **What it does:**
-1. Generates unique environment ID
-2. Creates Kind cluster (if kindenv is configured)
-3. Sets up local container registry (if enabled)
-4. Generates credentials and certificates
-5. Records environment in `.ignore.integration-envs.yaml`
+1. Generates unique test ID
+2. Creates Kind cluster (via testenv-kind)
+3. Sets up local container registry with TLS (via testenv-lcr if configured)
+4. Generates kubeconfig, credentials, and certificates
+5. Records environment in artifact store
 
 **Output:**
 ```
-🔧 Creating integration environment: my-dev-env
-📦 Setting up kindenv...
-✅ Kind cluster created
-📦 Setting up local-container-registry...
-✅ Registry deployed
-✅ Environment created (ID: abc123-def456)
-
-Environment Details:
-- Name: my-dev-env
-- ID: abc123-def456
-- Kubeconfig: .ignore.kindenv.kubeconfig.yaml
-- Registry: local-container-registry.local-container-registry.svc.cluster.local:5000
-- Credentials: .ignore.local-container-registry.yaml
+✅ Test environment created: integration-20251104-123456
 ```
 
 ### List Environments
 
-View all integration environments:
+View all test environments for a stage:
 
 ```bash
-forge integration list
+forge test integration list
 ```
 
 **Output:**
-```
-Integration Environments:
-
-1. my-dev-env (ID: abc123-def456)
-   Created: 2025-01-03T10:00:00Z
-   Components:
-     - kindenv: enabled, ready
-     - local-container-registry: enabled, ready
-
-2. testing-env (ID: xyz789-uvw012)
-   Created: 2025-01-03T11:00:00Z
-   Components:
-     - kindenv: enabled, ready
-     - local-container-registry: disabled
+```json
+{
+  "environments": [
+    {
+      "testID": "integration-20251104-123456",
+      "createdAt": "2025-11-04T12:34:56Z",
+      "files": {
+        "kubeconfig": ".forge/integration-20251104-123456/kubeconfig.yaml",
+        "ca.crt": ".forge/integration-20251104-123456/ca.crt"
+      }
+    }
+  ]
+}
 ```
 
 ### Get Environment Details
 
-Get detailed information about a specific environment:
+Get detailed information about a test environment:
 
 ```bash
-# By ID
-forge integration get abc123-def456
-
-# By name
-forge integration get my-dev-env
+forge test integration get integration-20251104-123456
 ```
 
 **Output:**
-```
-Environment: my-dev-env
-ID: abc123-def456
-Created: 2025-01-03T10:00:00Z
-
-Components:
-  kindenv:
-    Enabled: true
-    Ready: true
-    Connection Info:
-      - kubeconfig: .ignore.kindenv.kubeconfig.yaml
-
-  local-container-registry:
-    Enabled: true
-    Ready: true
-    Connection Info:
-      - namespace: local-container-registry
-      - credentialsFile: .ignore.local-container-registry.yaml
-      - caCertFile: .ignore.ca.crt
+```json
+{
+  "testID": "integration-20251104-123456",
+  "createdAt": "2025-11-04T12:34:56Z",
+  "files": {
+    "kubeconfig": ".forge/integration-20251104-123456/kubeconfig.yaml",
+    "ca.crt": ".forge/integration-20251104-123456/ca.crt",
+    "credentials.yaml": ".forge/integration-20251104-123456/credentials.yaml"
+  },
+  "metadata": {
+    "clusterName": "test-integration-20251104-123456",
+    "registryURL": "registry.local:5000"
+  }
+}
 ```
 
 ### Delete Environment
 
-Tear down an integration environment:
+Tear down a test environment:
 
 ```bash
-# By ID
-forge integration delete abc123-def456
-
-# By name
-forge integration delete my-dev-env
+forge test integration delete integration-20251104-123456
 ```
 
 **What it does:**
 1. Tears down Kind cluster
 2. Tears down local container registry
 3. Deletes generated files (kubeconfig, credentials, CA cert)
-4. Removes entry from environment store
+4. Removes entry from artifact store
 
 **Output:**
 ```
-🗑️  Deleting integration environment: my-dev-env
-🗑️  Tearing down local-container-registry...
-✅ Registry removed
-🗑️  Tearing down kindenv...
-✅ Kind cluster deleted
-🧹 Cleaning up files...
-✅ Environment deleted
+✅ Test environment deleted: integration-20251104-123456
 ```
 
-### Use Integration Environment
+### Use Test Environment
 
 Once created, use the environment for development and testing:
 
 ```bash
+# Get environment details to find kubeconfig
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+
 # Set kubeconfig
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
+export KUBECONFIG=$KUBECONFIG_PATH
 
 # Verify cluster
 kubectl cluster-info
 kubectl get nodes
 
 # Port-forward to registry (for pushing from host)
-kubectl port-forward -n local-container-registry svc/local-container-registry 5000:5000 &
+kubectl port-forward -n registry svc/registry 5000:5000 &
 
-# Load credentials
-REGISTRY_USER=$(yq .username .ignore.local-container-registry.yaml)
-REGISTRY_PASS=$(yq .password .ignore.local-container-registry.yaml)
+# Load credentials from environment details
+CREDS_PATH=$(forge test integration get $TEST_ID | jq -r '.files["credentials.yaml"]')
+REGISTRY_USER=$(yq .username $CREDS_PATH)
+REGISTRY_PASS=$(yq .password $CREDS_PATH)
 
 # Login to registry
 docker login localhost:5000 -u "$REGISTRY_USER" -p "$REGISTRY_PASS"
@@ -726,27 +699,35 @@ forge test integration run
 Build and push container images:
 
 ```bash
-# 1. Create environment with registry
-forge integration create dev
+# 1. Create test environment with registry
+forge test integration create
 
 # 2. Build containers
 CONTAINER_ENGINE=docker forge build
 
-# 3. Port-forward registry
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
-kubectl port-forward -n local-container-registry svc/local-container-registry 5000:5000 &
+# 3. Get environment details
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+CREDS_PATH=$(forge test integration get $TEST_ID | jq -r '.files["credentials.yaml"]')
 
-# 4. Login to registry
-REGISTRY_USER=$(yq .username .ignore.local-container-registry.yaml)
-REGISTRY_PASS=$(yq .password .ignore.local-container-registry.yaml)
+# 4. Port-forward registry
+export KUBECONFIG=$KUBECONFIG_PATH
+kubectl port-forward -n registry svc/registry 5000:5000 &
+
+# 5. Login to registry
+REGISTRY_USER=$(yq .username $CREDS_PATH)
+REGISTRY_PASS=$(yq .password $CREDS_PATH)
 docker login localhost:5000 -u "$REGISTRY_USER" -p "$REGISTRY_PASS"
 
-# 5. Tag and push
+# 6. Tag and push
 docker tag my-api:latest localhost:5000/my-api:dev
 docker push localhost:5000/my-api:dev
 
-# 6. Deploy
+# 7. Deploy
 kubectl apply -f k8s/deployment.yaml
+
+# 8. Clean up when done
+forge test integration delete $TEST_ID
 ```
 
 ### Workflow 4: CI/CD Pipeline
@@ -767,16 +748,19 @@ forge build
 
 # Test phase
 echo "Creating test environment..."
-forge integration create ci-test-$CI_JOB_ID
+forge test integration create
 
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
+# Get test environment details
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+export KUBECONFIG=$KUBECONFIG_PATH
 
 echo "Running tests..."
-make test-integration
+forge test integration run $TEST_ID
 
 # Cleanup
 echo "Cleaning up..."
-forge integration delete ci-test-$CI_JOB_ID
+forge test integration delete $TEST_ID
 ```
 
 ### Workflow 5: Multi-Environment Testing
@@ -784,21 +768,23 @@ forge integration delete ci-test-$CI_JOB_ID
 Test across different configurations:
 
 ```bash
-# Create multiple environments
-forge integration create env-basic
-forge integration create env-advanced
-forge integration create env-minimal
+# Create multiple test environments
+forge test integration create  # Creates env 1
+forge test integration create  # Creates env 2
+forge test integration create  # Creates env 3
+
+# List all environments
+TEST_IDS=$(forge test integration list | jq -r '.environments[].testID')
 
 # Run tests in each
-for env in env-basic env-advanced env-minimal; do
-    echo "Testing in $env..."
-    forge integration get $env
-    # Run your tests here
+for test_id in $TEST_IDS; do
+    echo "Testing in $test_id..."
+    forge test integration run $test_id
 done
 
 # Clean up all
-for env in env-basic env-advanced env-minimal; do
-    forge integration delete $env
+for test_id in $TEST_IDS; do
+    forge test integration delete $test_id
 done
 ```
 
@@ -833,7 +819,7 @@ Forge respects several environment variables:
 |----------|-------------|---------|---------|
 | `KIND_BINARY` | Kind binary name | `kind` | `/usr/local/bin/kind` |
 | `KIND_BINARY_PREFIX` | Kind command prefix | None | `sudo` |
-| `KUBECONFIG` | Kubernetes config | `~/.kube/config` | `.ignore.kindenv.kubeconfig.yaml` |
+| `KUBECONFIG` | Kubernetes config | `~/.kube/config` | `.forge/<test-id>/kubeconfig.yaml` |
 
 ### Example with All Variables
 
@@ -870,15 +856,20 @@ build:
       builder: go://build-go
 ```
 
-### Auto-Push Images on Environment Setup
+### Custom Test Environment Configuration
 
-Configure automatic image pushing:
+Configure test stages in forge.yaml:
 
 ```yaml
 # forge.yaml
-localContainerRegistry:
-  enabled: true
-  autoPushImages: true  # Automatically push artifacts on create
+test:
+  - name: integration
+    engine: "go://testenv"
+    runner: "go://test-runner-go"
+    config:
+      registry:
+        enabled: true
+        autoPush: true  # Automatically push images after build
 ```
 
 **Workflow:**
@@ -886,11 +877,10 @@ localContainerRegistry:
 # 1. Build images
 forge build
 
-# 2. Create environment (automatically pushes images)
-forge integration create dev
+# 2. Create environment and run tests
+forge test integration run
 
-# 3. Images are already in registry
-kubectl run my-app --image=localhost:5000/my-api:v1.0.0
+# 3. Images are automatically available in cluster registry
 ```
 
 ### Makefile Integration
@@ -907,31 +897,33 @@ FORGE := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" \
 build:
 	$(FORGE) build
 
-.PHONY: test-setup
-test-setup: build
-	$(FORGE) integration create test
-	@echo "Run: export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml"
+.PHONY: test-unit
+test-unit:
+	$(FORGE) test unit run
 
-.PHONY: test-teardown
-test-teardown:
-	$(FORGE) integration delete test
+.PHONY: test-integration
+test-integration: build
+	$(FORGE) test integration run
 ```
 
 **Usage:**
 ```bash
 make build
-make test-setup
-# Run your tests
-make test-teardown
+make test-unit
+make test-integration
 ```
 
-### JSON Output (Future Feature)
+### JSON Output
 
-For programmatic access:
+Test environment commands return JSON for programmatic access:
 
 ```bash
-# Future feature - not yet implemented
-forge integration list --output=json | jq .
+# List test environments (returns JSON)
+forge test integration list | jq .
+
+# Get environment details (returns JSON)
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+forge test integration get $TEST_ID | jq .
 ```
 
 ## Troubleshooting
@@ -1009,24 +1001,28 @@ kind get clusters
 kind create cluster --name test-cluster
 
 # If successful, try forge again
-forge integration create test-env
+forge test integration create
 ```
 
-#### "local-container-registry deployment failed"
+#### "registry deployment failed"
 
-**Problem:** Registry pod not starting.
+**Problem:** Registry pod not starting in test environment.
 
 **Solution:**
 ```bash
+# Get test environment kubeconfig
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+export KUBECONFIG=$KUBECONFIG_PATH
+
 # Check cluster
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
 kubectl cluster-info
 
 # Check registry namespace
-kubectl get all -n local-container-registry
+kubectl get all -n registry
 
 # Check registry pod logs
-kubectl logs -n local-container-registry deployment/local-container-registry
+kubectl logs -n registry deployment/registry
 
 # Check cert-manager (required for TLS)
 kubectl get pods -n cert-manager
@@ -1041,19 +1037,24 @@ kubectl get pods -n cert-manager
 
 **Solution:**
 ```bash
+# Get test environment details
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+export KUBECONFIG=$KUBECONFIG_PATH
+
 # Port-forward to registry
-kubectl port-forward -n local-container-registry svc/local-container-registry 5000:5000 &
+kubectl port-forward -n registry svc/registry 5000:5000 &
 
 # Test connection
 curl -k https://localhost:5000/v2/
 
-# Check credentials
-cat .ignore.local-container-registry.yaml
+# Get credentials from test environment
+CREDS_PATH=$(forge test integration get $TEST_ID | jq -r '.files["credentials.yaml"]')
 
 # Login
 docker login localhost:5000 \
-    -u $(yq .username .ignore.local-container-registry.yaml) \
-    -p $(yq .password .ignore.local-container-registry.yaml)
+    -u $(yq .username $CREDS_PATH) \
+    -p $(yq .password $CREDS_PATH)
 ```
 
 ### File and Permission Issues
@@ -1099,14 +1100,18 @@ vim .ignore.artifact-store.yaml
 
 **Solution:**
 ```bash
+# Get kubeconfig path from test environment
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+
 # Set KUBECONFIG
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
+export KUBECONFIG=$KUBECONFIG_PATH
 
 # Verify
 kubectl cluster-info
 
 # Or use inline
-kubectl --kubeconfig=.ignore.kindenv.kubeconfig.yaml get nodes
+kubectl --kubeconfig=$KUBECONFIG_PATH get nodes
 ```
 
 #### "GO_BUILD_LDFLAGS not working"
@@ -1135,12 +1140,8 @@ GO_BUILD_LDFLAGS="-X main.Version=v1.0.0" forge build
 
 **Add to .gitignore:**
 ```gitignore
-# Forge artifacts
-.ignore.artifact-store.yaml
-.ignore.kindenv.kubeconfig.yaml
-.ignore.local-container-registry.yaml
-.ignore.ca.crt
-.ignore.integration-envs.yaml
+# Forge artifacts and test environments
+.forge/
 
 # Build outputs
 build/
@@ -1154,14 +1155,15 @@ git commit -m "Add forge configuration"
 
 ### 2. Environment Lifecycle
 
-**Always clean up environments:**
+**Always clean up test environments:**
 ```bash
-# List before deleting
-forge integration list
+# List integration test environments
+forge test integration list
 
-# Delete all test environments
-for env in $(forge integration list | grep test- | awk '{print $1}'); do
-    forge integration delete $env
+# Delete all integration test environments
+TEST_IDS=$(forge test integration list | jq -r '.environments[].testID')
+for test_id in $TEST_IDS; do
+    forge test integration delete $test_id
 done
 ```
 
@@ -1183,39 +1185,50 @@ export GO_BUILD_LDFLAGS
 
 ### 4. CI/CD Integration
 
-**Create dedicated CI environment:**
+**Create dedicated CI test script:**
 ```bash
 #!/bin/bash
-# ci-build.sh
+# ci-test.sh
 set -e
 
-ENV_NAME="ci-${CI_JOB_ID:-local}"
+# Create test environment
+forge test integration create
+
+# Get environment details
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
 
 # Cleanup on exit
-trap "forge integration delete $ENV_NAME" EXIT
-
-# Create environment
-forge integration create $ENV_NAME
+trap "forge test integration delete $TEST_ID" EXIT
 
 # Run tests
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
-make test-integration
+export KUBECONFIG=$KUBECONFIG_PATH
+forge test integration run $TEST_ID
 ```
 
 ### 5. Development Workflow
 
 **Use persistent dev environment:**
 ```bash
-# Setup once
-forge integration create dev
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
+# Create test environment once
+forge test integration create
+
+# Get and save environment ID
+TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
+echo "export TEST_ID=$TEST_ID" >> ~/.dev-env
+
+# Get kubeconfig path
+KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
 
 # Add to ~/.bashrc or ~/.zshrc
-alias dev-env='export KUBECONFIG=/path/to/repo/.ignore.kindenv.kubeconfig.yaml'
+echo "export KUBECONFIG=$KUBECONFIG_PATH" >> ~/.bashrc
 
 # Use throughout development
-dev-env
+source ~/.bashrc
 kubectl get pods
+
+# Clean up when done developing
+forge test integration delete $TEST_ID
 ```
 
 ### 6. Documentation

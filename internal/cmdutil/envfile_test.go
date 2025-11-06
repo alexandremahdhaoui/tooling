@@ -32,7 +32,7 @@ KEY4='single quoted'
 # Another comment
 KEY5=value5
 `
-	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -70,7 +70,7 @@ func TestLoadEnvFile_InvalidFormat(t *testing.T) {
 INVALID_LINE_WITHOUT_EQUALS
 KEY2=value2
 `
-	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -84,7 +84,7 @@ func TestLoadEnvFile_EmptyFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, "empty.env")
 
-	if err := os.WriteFile(envFile, []byte(""), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(""), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -105,7 +105,7 @@ func TestLoadEnvFile_OnlyComments(t *testing.T) {
 # Comment 2
 # Comment 3
 `
-	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -126,7 +126,7 @@ func TestLoadEnvFile_WhitespaceHandling(t *testing.T) {
 KEY2="  spaces inside  "
   export   KEY3  =  value3
 `
-	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(envFile, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 

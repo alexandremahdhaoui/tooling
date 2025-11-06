@@ -10,8 +10,8 @@ This document provides comprehensive documentation for the `forge.yaml` configur
 - [Build Configuration](#build-configuration)
 - [BuildSpec Specification](#buildspec-specification)
 - [Engine Protocol](#engine-protocol)
-- [Kindenv Configuration](#kindenv-configuration)
-- [Local Container Registry Configuration](#local-container-registry-configuration)
+- [Test Configuration](#test-configuration)
+- [TestSpec Specification](#testspec-specification)
 - [Complete Example](#complete-example)
 - [Artifact Store Schema](#artifact-store-schema)
 
@@ -20,8 +20,8 @@ This document provides comprehensive documentation for the `forge.yaml` configur
 The `forge.yaml` file defines:
 - **Build artifacts** to be created (binaries, containers)
 - **Build engines** to use for each artifact
-- **Integration environment** components (kindenv, local-container-registry)
-- **Artifact tracking** configuration
+- **Test stages** and environments (unit, integration, e2e)
+- **Artifact and test environment tracking** configuration
 
 ## File Location
 
@@ -36,8 +36,7 @@ The `forge.yaml` file defines:
 ```yaml
 name: string                              # Project name
 build: Build                              # Build configuration
-kindenv: Kindenv                          # Kind cluster configuration
-localContainerRegistry: LocalContainerRegistry  # Local registry configuration
+test: []TestSpec                          # Test stages configuration
 oapiCodegenHelper: OAPICodegenHelper      # OpenAPI codegen configuration
 ```
 
@@ -56,13 +55,20 @@ name: tooling
 
 Build configuration defining all artifacts to build. See [Build Configuration](#build-configuration).
 
-#### `kindenv` (Kindenv, optional)
+#### `test` (array of TestSpec, optional)
 
-Kind cluster configuration for integration environments. See [Kindenv Configuration](#kindenv-configuration).
+Test stages configuration. See [Test Configuration](#test-configuration).
 
-#### `localContainerRegistry` (LocalContainerRegistry, optional)
-
-Local container registry configuration. See [Local Container Registry Configuration](#local-container-registry-configuration).
+**Example:**
+```yaml
+test:
+  - name: unit
+    engine: "noop"
+    runner: "go://test-runner-go"
+  - name: integration
+    engine: "go://testenv"
+    runner: "go://test-runner-go"
+```
 
 #### `oapiCodegenHelper` (OAPICodegenHelper, optional)
 
@@ -384,149 +390,172 @@ tool := mcp.Tool{
   builder: go://my-custom-engine
 ```
 
-## Kindenv Configuration
+## Test Configuration
 
-Configuration for Kind (Kubernetes in Docker) clusters.
+The `test` section defines test stages with their environments and runners.
 
 ### Schema
 
 ```yaml
-kindenv:
-  kubeconfigPath: string    # Path to generated kubeconfig
+test:
+  - name: string       # Test stage name
+    engine: string     # Test environment engine
+    runner: string     # Test runner engine
 ```
 
 ### Fields
 
-#### `kubeconfigPath` (string, required)
+#### Test Array (array of TestSpec, optional)
 
-Path where the Kind cluster kubeconfig will be written.
-
-**Default:** `.ignore.kindenv.kubeconfig.yaml`
+List of test stages. Each stage can have its own environment and runner.
 
 **Example:**
 ```yaml
-kindenv:
-  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+test:
+  - name: unit
+    engine: "noop"
+    runner: "go://test-runner-go"
+
+  - name: integration
+    engine: "go://testenv"
+    runner: "go://test-runner-go"
+
+  - name: e2e
+    engine: "noop"
+    runner: "go://test-runner-go"
+
+  - name: lint
+    engine: "noop"
+    runner: "go://lint-go"
+```
+
+## TestSpec Specification
+
+The `TestSpec` defines a single test stage.
+
+### Schema
+
+```yaml
+name: string      # Stage identifier
+engine: string    # Environment engine URI
+runner: string    # Test runner engine URI
+```
+
+### Fields
+
+#### `name` (string, required)
+
+Test stage identifier. Used in commands like `forge test <name> run`.
+
+**Common Names:**
+- `unit` - Unit tests
+- `integration` - Integration tests requiring test environment
+- `e2e` - End-to-end tests
+- `lint` - Code linting
+
+**Example:**
+```yaml
+name: integration
+```
+
+#### `engine` (string, required)
+
+Test environment engine URI. Use `"noop"` for tests that don't need an environment.
+
+**Format:** `<protocol>://<engine-name>` or `"noop"`
+
+**Available Engines:**
+- `"noop"` - No environment (for unit tests, linting)
+- `"go://testenv"` - Complete test environment (Kind cluster + registry)
+
+**Example:**
+```yaml
+# No environment needed
+engine: "noop"
+
+# Full test environment with cluster
+engine: "go://testenv"
+```
+
+#### `runner` (string, required)
+
+Test runner engine URI specifying which test runner to use.
+
+**Format:** `<protocol>://<runner-name>`
+
+**Available Runners:**
+- `"go://test-runner-go"` - Go test runner with JUnit/coverage
+- `"go://lint-go"` - Golangci-lint runner
+- `"go://test-runner-go-verify-tags"` - Verify build tags on test files
+- `"go://generic-test-runner"` - Execute arbitrary commands as tests
+
+**Example:**
+```yaml
+# Run Go tests
+runner: "go://test-runner-go"
+
+# Run linter
+runner: "go://lint-go"
+```
+
+### Complete TestSpec Examples
+
+#### Unit Tests (No Environment)
+
+```yaml
+- name: unit
+  engine: "noop"
+  runner: "go://test-runner-go"
 ```
 
 **Usage:**
 ```bash
-# Create integration environment with kind cluster
-forge integration create my-dev-env
-
-# Use the kubeconfig
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
-kubectl cluster-info
+forge test unit run
 ```
 
-## Local Container Registry Configuration
+**What happens:**
+- No environment created
+- Runs Go tests with `-tags=unit`
+- Generates JUnit XML and coverage report
 
-Configuration for the in-cluster container registry with TLS and authentication.
-
-### Schema
+#### Integration Tests (With Environment)
 
 ```yaml
-localContainerRegistry:
-  enabled: boolean           # Enable/disable registry
-  autoPushImages: boolean    # Auto-push artifacts on setup
-  credentialPath: string     # Path to credentials file
-  caCrtPath: string         # Path to CA certificate
-  namespace: string         # Kubernetes namespace
+- name: integration
+  engine: "go://testenv"
+  runner: "go://test-runner-go"
 ```
 
-### Fields
-
-#### `enabled` (boolean, required)
-
-Enable or disable the local container registry component.
-
-**Default:** `false`
-
-**Example:**
-```yaml
-localContainerRegistry:
-  enabled: true
+**Usage:**
+```bash
+forge test integration create  # Create environment
+forge test integration run     # Run tests
+forge test integration delete  # Delete environment
 ```
 
-#### `autoPushImages` (boolean, optional)
+**What happens:**
+- Creates Kind cluster via testenv-kind
+- Sets up local registry via testenv-lcr (if configured)
+- Runs Go tests with `-tags=integration`
+- Environment persists until deleted
 
-Automatically push container artifacts from the artifact store when setting up the registry.
-
-**Default:** `false`
-
-**Example:**
-```yaml
-localContainerRegistry:
-  autoPushImages: true
-```
-
-When `true`, forge will:
-1. Read artifact store
-2. Find all container artifacts
-3. Push them to the local registry on setup
-
-#### `credentialPath` (string, required if enabled)
-
-Path where registry credentials will be written.
-
-**Default:** `.ignore.local-container-registry.yaml`
-
-**Format:**
-```yaml
-username: <random-32-chars>
-password: <random-32-chars>
-registry: local-container-registry.local-container-registry.svc.cluster.local:5000
-```
-
-**Example:**
-```yaml
-localContainerRegistry:
-  credentialPath: .ignore.local-container-registry.yaml
-```
-
-#### `caCrtPath` (string, required if enabled)
-
-Path where the registry CA certificate will be written.
-
-**Default:** `.ignore.ca.crt`
-
-**Usage:** Configure container engine to trust this CA certificate for TLS connections.
-
-**Example:**
-```yaml
-localContainerRegistry:
-  caCrtPath: .ignore.ca.crt
-```
-
-#### `namespace` (string, required if enabled)
-
-Kubernetes namespace where the registry will be deployed.
-
-**Default:** `local-container-registry`
-
-**Example:**
-```yaml
-localContainerRegistry:
-  namespace: local-container-registry
-```
-
-### Complete Registry Example
+#### Linting Stage
 
 ```yaml
-localContainerRegistry:
-  enabled: true
-  autoPushImages: true
-  credentialPath: .ignore.local-container-registry.yaml
-  caCrtPath: .ignore.ca.crt
-  namespace: local-container-registry
+- name: lint
+  engine: "noop"
+  runner: "go://lint-go"
 ```
 
-**Creates:**
-- TLS-enabled registry on port 5000
-- htpasswd authentication
-- Self-signed CA certificate
-- Persistent credentials
-- Kubernetes Deployment, Service, and ConfigMap
+**Usage:**
+```bash
+forge test lint run
+```
+
+**What happens:**
+- No environment created
+- Runs golangci-lint with --fix flag
+- Returns test report with pass/fail
 
 ## Complete Example
 
@@ -539,7 +568,7 @@ name: my-project
 # Build configuration
 build:
   # Path to artifact store
-  artifactStorePath: .ignore.artifact-store.yaml
+  artifactStorePath: .forge/artifacts.yaml
 
   # Artifacts to build
   specs:
@@ -566,7 +595,7 @@ build:
       builder: go://build-go
 
     # Container images
-    - name: api-server
+    - name: api-server-image
       src: ./containers/api-server/Containerfile
       dest: localhost:5000
       builder: go://build-container
@@ -575,17 +604,27 @@ build:
       src: ./containers/worker/Containerfile
       builder: go://build-container
 
-# Kind cluster configuration
-kindenv:
-  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+# Test stages configuration
+test:
+  # Unit tests - no environment needed
+  - name: unit
+    engine: "noop"
+    runner: "go://test-runner-go"
 
-# Local container registry configuration
-localContainerRegistry:
-  enabled: true
-  autoPushImages: true
-  credentialPath: .ignore.local-container-registry.yaml
-  caCrtPath: .ignore.ca.crt
-  namespace: local-container-registry
+  # Integration tests - full test environment
+  - name: integration
+    engine: "go://testenv"
+    runner: "go://test-runner-go"
+
+  # E2E tests
+  - name: e2e
+    engine: "noop"
+    runner: "go://test-runner-go"
+
+  # Linting
+  - name: lint
+    engine: "noop"
+    runner: "go://lint-go"
 
 # OpenAPI code generation (optional)
 oapiCodegenHelper: {}
@@ -751,13 +790,13 @@ build:
 
 ### 6. File Ignoring
 
-Add artifact store and generated files to `.gitignore`:
+Add forge directory and build outputs to `.gitignore`:
 
 ```gitignore
-.ignore.artifact-store.yaml
-.ignore.kindenv.kubeconfig.yaml
-.ignore.local-container-registry.yaml
-.ignore.ca.crt
+# Forge artifacts and test environments
+.forge/
+
+# Build outputs
 build/
 ```
 
@@ -825,24 +864,27 @@ forge build
 **Solution:**
 ```bash
 # Delete and rebuild
-rm .ignore.artifact-store.yaml
+rm .forge/artifacts.yaml
 forge build
 ```
 
-### Registry Connection Issues
+### Test Environment Issues
 
-**Problem:** Cannot connect to local container registry.
+**Problem:** Cannot create test environment.
 
 **Solution:**
 ```bash
-# Verify registry is running
-kubectl get pods -n local-container-registry
+# Check if Kind is installed
+kind version
 
-# Check port-forward
-kubectl port-forward -n local-container-registry svc/local-container-registry 5000:5000
+# Check Docker/Podman is running
+docker info
 
-# Test connection
-curl -k https://localhost:5000/v2/
+# Try creating test environment
+forge test integration create
+
+# View environment details
+forge test integration list
 ```
 
 ## References

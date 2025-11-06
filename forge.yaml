@@ -16,12 +16,12 @@ engines:
   - alias: setup-integration
     type: testenv
     testenv:
-      - engine: "go://kindenv"
+      - engine: "go://testenv-kind"
       # spec:
       #   kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
       - # -- localContainerRegistry will create if enabled a container registry in the kindenv using the kubeconfig which path
         #    is defined by {.kindenv.kubeconfigPath}.
-        engine: "go://localContainerRegistry"
+        engine: "go://testenv-lcr"
         spec:
           # -- autoPushImages defines whether to automatically push images from artifact store on setup.
           autoPushImages: true
@@ -33,6 +33,19 @@ engines:
           # caCrtPath: .ignore.ca.crt
           # -- namespace where the local container registry will be deployed.
           # namespace: local-container-registry
+      # TEMPORARILY DISABLED FOR E2E TESTING - helm timeout issues
+      # - # -- testenv-helm-install installs Helm charts into the Kind cluster
+      #   engine: "go://testenv-helm-install"
+      #   spec:
+      #     charts:
+      #       # Example: Install a simple nginx chart for testing
+      #       - name: bitnami/nginx
+      #         repo: https://charts.bitnami.com/bitnami
+      #         version: "15.4.0"
+      #         namespace: test-nginx
+      #         releaseName: test-nginx
+      #         values:
+      #           replicaCount: "1"
 
 # -- test defines the test stages and their configuration
 test:
@@ -52,8 +65,8 @@ test:
 
   # -- integration tests - creates isolated test environments
   - name: integration
-    runner: "go//test-runner-go"
-    setup: "alias://setup-integration"
+    runner: "go://test-runner-go"
+    testenv: "alias://setup-integration"
 
   # -- e2e tests - comprehensive forge integration tests (no environment needed)
   - name: e2e
@@ -79,12 +92,16 @@ build:
     src: ./cmd/build-container
     dest: ./build/bin
     engine: go://build-go
-  - name: kindenv
-    src: ./cmd/kindenv
+  - name: testenv-kind
+    src: ./cmd/testenv-kind
     dest: ./build/bin
     engine: go://build-go
-  - name: local-container-registry
-    src: ./cmd/local-container-registry
+  - name: testenv-lcr
+    src: ./cmd/testenv-lcr
+    dest: ./build/bin
+    engine: go://build-go
+  - name: testenv-helm-install
+    src: ./cmd/testenv-helm-install
     dest: ./build/bin
     engine: go://build-go
   - name: test-go
@@ -99,8 +116,8 @@ build:
     src: ./cmd/test-runner-go-verify-tags
     dest: ./build/bin
     engine: go://build-go
-  - name: test-integration
-    src: ./cmd/test-integration
+  - name: testenv
+    src: ./cmd/testenv
     dest: ./build/bin
     engine: go://build-go
   - name: format-go
@@ -123,8 +140,8 @@ build:
     src: ./cmd/forge-e2e
     dest: ./build/bin
     engine: go://build-go
-  - name: generic-engine
-    src: ./cmd/generic-engine
+  - name: generic-builder
+    src: ./cmd/generic-builder
     dest: ./build/bin
     engine: go://build-go
   - name: generic-test-runner
@@ -133,6 +150,14 @@ build:
     engine: go://build-go
   - name: test-report
     src: ./cmd/test-report
+    dest: ./build/bin
+    engine: go://build-go
+  - name: ci-orchestrator
+    src: ./cmd/ci-orchestrator
+    dest: ./build/bin
+    engine: go://build-go
+  - name: oapi-codegen-helper
+    src: ./cmd/oapi-codegen-helper
     dest: ./build/bin
     engine: go://build-go
 

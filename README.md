@@ -1,452 +1,272 @@
 # Forge
 
-This repository provides a collection of tools and utilities designed to streamline Go development workflows, particularly for projects involving containers and Kubernetes.
+## Why Forge?
 
-**Key Features:**
+Go projects face common development challenges:
+- **Verbose Makefiles**: Complex build scripts become maintenance burdens
+- **Inconsistent builds**: Different tools, different conventions, hard to reproduce
+- **Manual test environments**: Setting up Kind + registry + TLS manually is error-prone
+- **No artifact tracking**: Lost track of what was built when and with what version
 
-- **Forge CLI**: Make-like build orchestrator using MCP (Model Context Protocol) servers
-- **Unified Build System**: Single configuration file (`forge.yaml`) for all artifacts
-- **Integration Environments**: Managed Kind clusters with local container registries
-- **Artifact Tracking**: Automatic versioning and metadata tracking
+Forge solves these by providing a unified, declarative approach to Go project workflows.
 
-All tools are configured via a central `forge.yaml` file, allowing for consistent and reproducible builds, tests, and deployments.
+## How It Works
 
-## Table of Contents
+Forge uses **Model Context Protocol (MCP)** to orchestrate specialized build and test engines:
 
-- [Quick Start](#quick-start)
-- [Forge CLI](#forge-cli)
-- [Available Tools](#available-tools)
-- [Project Configuration (`forge.yaml`)](#project-configuration-forgeyaml)
-  - [Example `forge.yaml`](#example-forgeyaml)
-- [Usage](#usage)
-  - [`forge`](#forge)
-  - [`build-go`](#build-go)
-  - [`build-container`](#build-container)
-  - [`kindenv`](#kindenv)
-  - [`local-container-registry`](#local-container-registry)
-  - [`oapi-codegen-helper`](#oapi-codegen-helper)
-  - [`test-go`](#test-go)
-- [Examples](#examples)
-  - [Containerfile](#containerfile)
-    - [Go](#go)
-  - [Makefile](#makefile)
-- [Documentation](#documentation)
+```
+forge.yaml (declarative config)
+      ↓
+  forge CLI (orchestrator)
+      ↓
+  MCP protocol (stdio)
+      ↓
+  Engines (build-go, testenv, etc.)
+```
 
-## Quick Start
+All tools communicate via MCP, making them composable and extensible. Configure once in `forge.yaml`, run anywhere.
+
+## What You Get
+
+### Core Features
+
+- **Unified Build System**: One `forge.yaml` for all artifacts (binaries, containers)
+- **MCP-Based Engines**: 10 specialized tools for builds, tests, and environments
+- **Test Environment Management**: Automated Kind clusters with TLS-enabled registries
+- **Artifact Tracking**: Automatic versioning with git commit SHAs
+- **20+ CLI Tools**: From code generation to E2E testing
+
+### Quick Start
 
 ```bash
-# 1. Install forge
+# Install forge
 go install github.com/alexandremahdhaoui/forge/cmd/forge@latest
 
-# Add Go bin directory to PATH (if not already)
-# This checks go env GOBIN first, then falls back to GOPATH/bin
-GOBIN_PATH=$(go env GOBIN)
-if [ -z "$GOBIN_PATH" ]; then
-  GOBIN_PATH=$(go env GOPATH)/bin
-fi
-export PATH="$GOBIN_PATH:$PATH"
-
-# 2. Verify installation
-forge version
-
-# 3. Create forge.yaml (or use existing)
+# Create forge.yaml
 cat > forge.yaml <<EOF
 name: my-project
 
 build:
-  artifactStorePath: .ignore.artifact-store.yaml
+  artifactStorePath: .forge/artifacts.yaml
+  specs:
+    - name: my-app
+      src: ./cmd/my-app
+      dest: ./build/bin
+      builder: go://build-go
+EOF
+
+# Build all artifacts
+forge build
+
+# Create test environment
+forge test create unit
+
+# Run tests
+forge test run unit
+
+# Cleanup
+forge test delete <test-id>
+```
+
+## Available Tools
+
+All 20 tools categorized by function. Tools marked ⚡ provide MCP servers.
+
+**Build Tools (3)**
+- ⚡ `build-go` - Go binary builder with git versioning
+- ⚡ `build-container` - Container image builder using Kaniko
+- ⚡ `generic-builder` - Execute any command as build step
+
+**Test Tools (7)**
+- ⚡ `testenv` - Test environment orchestrator
+- ⚡ `testenv-kind` - Kind cluster manager
+- ⚡ `testenv-lcr` - Local container registry with TLS
+- ⚡ `test-runner-go` - Go test runner with JUnit/coverage
+- ⚡ `test-runner-go-verify-tags` - Build tag verifier
+- ⚡ `generic-test-runner` - Execute any command as test
+- ⚡ `test-report` - Test report management
+
+**Code Quality (3)**
+- `format-go` - Go code formatter (gofumpt)
+- `lint-go` - Go linter (golangci-lint)
+- `test-go` - Legacy Go test runner
+
+**Code Generation (3)**
+- `generate-mocks` - Mock generator (mockery)
+- `generate-openapi-go` - OpenAPI code generator
+- `oapi-codegen-helper` - OpenAPI codegen helper
+
+**Orchestration (4)**
+- `forge` - Main CLI orchestrator
+- `forge-e2e` - Forge end-to-end tests
+- `chart-prereq` - Helm chart prerequisites
+- `ci-orchestrator` - CI/CD orchestration (planning)
+
+## Configuration: forge.yaml
+
+Central declarative configuration file.
+
+```yaml
+name: my-project
+
+# Build specifications
+build:
+  artifactStorePath: .forge/artifacts.yaml
   specs:
     - name: my-app
       src: ./cmd/my-app
       dest: ./build/bin
       builder: go://build-go
 
-kindenv:
-  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
-
-localContainerRegistry:
-  enabled: true
-  autoPushImages: true
-  credentialPath: .ignore.local-container-registry.yaml
-  caCrtPath: .ignore.ca.crt
-  namespace: local-container-registry
-EOF
-
-# 4. Build all artifacts
-forge build
-
-# 5. Create integration environment
-forge integration create dev
-
-# 6. Use the environment
-export KUBECONFIG=.ignore.kindenv.kubeconfig.yaml
-kubectl get nodes
-```
-
-See [docs/forge-usage.md](./docs/forge-usage.md) for complete usage guide.
-
-## Forge CLI
-
-**Forge** is a make-like build orchestrator that provides a unified interface for building artifacts and managing integration environments.
-
-**Key Concepts:**
-
-- **BuildSpec**: Unified specification for building any artifact (binaries, containers)
-- **MCP Servers**: Build engines that communicate via Model Context Protocol
-- **Artifact Store**: Automatic tracking of built artifacts with metadata (keeps 3 most recent per artifact)
-- **Integration Environments**: Managed Kind clusters with optional components
-
-**Commands:**
-
-- `forge build` - Build all artifacts defined in forge.yaml (automatically formats code first)
-- `forge test <stage> run` - Run tests for a specific stage (e.g., unit, integration, lint)
-- `forge test <stage> create` - Create test environment for stage
-- `forge test <stage> list` - List test environments for stage
-- `forge test <stage> get <id>` - Get test environment details
-- `forge test <stage> delete <id>` - Delete test environment
-
-**Documentation:**
-
-- [Forge CLI Usage Guide](./docs/forge-usage.md)
-- [forge.yaml Schema Documentation](./docs/forge-schema.md)
-- [Architecture Documentation](./ARCHITECTURE.md#forge-architecture)
-
-## Available Tools
-
-| Name                       | Description                                                                                                                                                                                                     |
-|----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `forge` | **Primary build orchestrator.** Builds all artifacts and manages test environments using MCP servers. Configured via `forge.yaml`. Automatically formats code when building. |
-| `build-go` | MCP server for building Go binaries. Used by forge as a build engine. Can also be invoked directly. |
-| `build-container` | MCP server for building container images using Kaniko. Used by forge as a build engine. Can also be invoked directly. |
-| `format-go` | MCP server for formatting Go code using gofumpt (v0.6.0). Runs automatically during build when configured in `forge.yaml` build specs. |
-| `lint-go` | MCP server for linting Go code using golangci-lint (v2.6.0). Run via `forge test lint run`. Configured as a test stage in `forge.yaml`. |
-| `test-runner-go` | MCP server for running Go tests. Executes tests for unit, integration, and e2e stages. Used by forge test command. |
-| `test-integration` | MCP server for managing integration test environments. Creates Kind clusters with local registries for integration testing. |
-| `kindenv`                  | Manages Kind (Kubernetes in Docker) clusters for local development and testing. Outputs kubeconfig to path specified in `forge.yaml`. |
-| `local-container-registry` | Creates a TLS-enabled container registry within Kind clusters. Configured via `forge.yaml`. |
-| `generate-mocks` | MCP server for generating Go mocks using mockery. Used by forge for code generation. |
-| `generate-openapi-go` | MCP server for generating OpenAPI client/server code using oapi-codegen. Configured via `forge.yaml`. |
-| `oapi-codegen-helper`      | Wrapper for `oapi-codegen` that generates server and client code from OpenAPI specifications. Reads configuration from `forge.yaml` and parallelizes code generation. |
-| `chart-prereq` | Helper tool to install necessary Helm charts in Kubernetes clusters for testing. |
-| `ci-orchestrator` | Tool for orchestrating CI jobs (work in progress). |
-| `forge-e2e` | End-to-end tests for the forge CLI itself. Tests the complete build and test workflow. |
-
-## Project Configuration (`forge.yaml`)
-
-The `forge.yaml` file is the central configuration file for all the tools in this repository. It allows you to declare the intent of your project and configure the behavior of the tools, including:
-
-- **Build artifacts** (binaries and containers)
-- **Integration environment** components
-- **Artifact tracking** configuration
-
-### Example `forge.yaml`
-
-```yaml
-name: my-project
-
-# Artifact store path
-artifactStorePath: .ignore.artifact-store.yaml
-
-# Test stages configuration
-test:
-  # Unit tests - no environment management needed
-  - name: unit
-    engine: "noop"
-    runner: "go://test-runner-go"
-
-  # Integration tests - creates isolated test environments
-  - name: integration
-    engine: "go://test-integration"
-    runner: "go://test-runner-go"
-
-  # Linting as a test stage (uses golangci-lint v2.6.0)
-  - name: lint
-    engine: "noop"
-    runner: "go://lint-go"
-
-# Build configuration
-build:
-  specs:
-    # Format code before building (runs gofumpt)
-    - name: format-code
-      src: .
-      builder: go://format-go
-
-    # Go binaries
-    - name: my-cli
-      src: ./cmd/my-cli
-      dest: ./build/bin
-      builder: go://build-go
-
-    - name: api-server
-      src: ./cmd/api-server
-      dest: ./build/bin
-      builder: go://build-go
-
-    # Container images
-    - name: api-server
-      src: ./containers/api-server/Containerfile
-      dest: localhost:5000
+    - name: my-app-image
+      src: ./Containerfile
+      dest: registry.local:5000
       builder: go://build-container
 
-# Kind cluster configuration
-kindenv:
-  kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+# Test specifications
+test:
+  - name: unit
+    stage: unit
+    engine: go://testenv
+    runner: go://test-runner-go
 
-# Local container registry configuration
+  - name: integration
+    stage: integration
+    engine: go://testenv
+    runner: go://test-runner-go
+
+# Test environment configuration
+kindenv:
+  kubeconfigPath: .forge/kubeconfig
+
 localContainerRegistry:
   enabled: true
-  autoPushImages: true
-  credentialPath: .ignore.local-container-registry.yaml
-  caCrtPath: .ignore.ca.crt
-  namespace: local-container-registry
-
-# OpenAPI code generation
-oapiCodegenHelper:
-  defaults:
-    sourceDir: "api"
-    destinationDir: "pkg/api"
-  specs:
-    - name: "my-api"
-      versions: ["v1"]
-      client:
-        enabled: true
-        packageName: "myapiv1"
-      server:
-        enabled: true
-        packageName: "myapiv1"
+  namespace: testenv-lcr
+  credentialPath: .forge/registry-credentials.yaml
+  caCrtPath: .forge/ca.crt
 ```
 
-See [docs/forge-schema.md](./docs/forge-schema.md) for complete schema documentation.
+## Usage Examples
 
-## Usage
+### Building Artifacts
 
-### `forge`
-
-**Primary build orchestrator** - builds all artifacts and manages integration environments.
-
-**Build all artifacts:**
-
-```sh
-# Build everything defined in forge.yaml
-# Note: Automatically formats code first if format-code build spec is configured
+```bash
+# Build all artifacts defined in forge.yaml
 forge build
 
-# Build specific artifact
-forge build my-cli
-
-# With custom flags
-GO_BUILD_LDFLAGS="-X main.Version=v1.0.0" CONTAINER_ENGINE=docker forge build
+# Artifacts are tracked in artifact store
+cat .forge/artifacts.yaml
 ```
 
-**Format and Lint:**
+### Managing Test Environments
 
-```sh
-# Format code (runs automatically during build if configured in forge.yaml)
-# Add this to your build specs:
-#   - name: format-code
-#     src: .
-#     builder: go://format-go
+```bash
+# Create test environment for unit tests
+TEST_ID=$(forge test create unit)
 
-# Run linter (uses golangci-lint v2.6.0)
-forge test lint run
+# List all test environments
+forge test list
 
-# The lint stage must be configured in forge.yaml:
-#   test:
-#     - name: lint
-#       engine: "noop"
-#       runner: "go://lint-go"
+# Get test environment details
+forge test get $TEST_ID
+
+# Run tests in the environment
+forge test run unit
+
+# Cleanup when done
+forge test delete $TEST_ID
 ```
 
-**Run Tests:**
+### Direct Engine Usage
 
-```sh
-# Run unit tests
-forge test unit run
+All MCP engines can be used standalone:
 
-# Run integration tests (creates test environment automatically)
-forge test integration run
-
-# Run tests with existing environment
-forge test integration run <test-id>
-```
-
-**Manage test environments:**
-
-```sh
-# Create test environment
-forge test integration create
-
-# List test environments
-forge test integration list
-
-# Get environment details
-forge test integration get <test-id>
-
-# Delete test environment
-forge test integration delete <test-id>
-```
-
-**See:** [docs/forge-usage.md](./docs/forge-usage.md) for complete usage guide.
-
-### `build-go`
-
-This tool builds Go binaries. It can be used as an MCP server by forge or invoked directly.
-
-**Environment Variables:**
-
-- `BINARY_NAME`: The name of the binary to build (direct invocation only)
-- `GO_BUILD_LDFLAGS`: The linker flags to pass to the `go build` command
-
-**Direct invocation example:**
-
-```sh
-BINARY_NAME="my-app" GO_BUILD_LDFLAGS="-X main.Version=1.0.0" go run ./cmd/build-go
-```
-
-**Recommended:** Use forge instead for consistent builds.
-
-### `build-container`
-
-This tool builds container images using Kaniko. It can be used as an MCP server by forge or invoked directly.
-
-**Environment Variables:**
-
-- `CONTAINER_ENGINE`: The container engine to use (e.g., `docker`, `podman`)
-- `CONTAINER_NAME`: The name of the container to build (direct invocation only)
-- `BUILD_ARGS`: A list of build arguments to pass to the container build command
-- `DESTINATIONS`: A list of destinations to push the container image to
-
-**Direct invocation example:**
-
-```sh
-CONTAINER_ENGINE="docker" \
-CONTAINER_NAME="my-app" \
-BUILD_ARGS="VERSION=1.0.0" \
-DESTINATIONS="docker.io/my-user/my-app:latest" \
-go run ./cmd/build-container
-```
-
-**Recommended:** Use forge instead for consistent builds.
-
-### `kindenv`
-
-This tool manages a local Kubernetes cluster using Kind.
-
-**Commands:**
-
-- `setup`: Creates a Kind cluster.
-- `teardown`: Deletes the Kind cluster.
-
-**Example:**
-
-```sh
-go run github.com/alexandremahdhaoui/forge/cmd/kindenv setup
-go run github.com/alexandremahdhaoui/forge/cmd/kindenv teardown
-```
-
-### `local-container-registry`
-
-This tool sets up a local container registry in the Kind cluster.
-
-**Commands:**
-
-- `setup`: Sets up the local container registry.
-- `teardown`: Tears down the local container registry.
-
-**Example:**
-
-```sh
-go run github.com/alexandremahdhaoui/forge/cmd/local-container-registry setup
-go run github.com/alexandremahdhaoui/forge/cmd/local-container-registry teardown
-```
-
-### `oapi-codegen-helper`
-
-This tool generates Go code from OpenAPI specifications.
-
-**Environment Variables:**
-
-- `OAPI_CODEGEN`: The `oapi-codegen` command to use (e.g., `go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen`).
-
-**Example:**
-
-```sh
-OAPI_CODEGEN="go run github.com/deepmap/oapi-codegen/cmd/oapi-codegen" go run github.com/alexandremahdhaoui/forge/cmd/oapi-codegen-helper
-```
-
-### `test-go`
-
-This tool runs Go tests using `gotestsum`.
-
-**Environment Variables:**
-
-- `TEST_TAG`: The build tag to use for the tests (e.g., `unit`, `integration`).
-- `GOTESTSUM`: The `gotestsum` command to use (e.g., `go run gotest.tools/gotestsum`).
-
-**Example:**
-
-```sh
-TEST_TAG="unit" GOTESTSUM="go run gotest.tools/gotestsum" go run github.com/alexandremahdhaoui/forge/cmd/test-go
+```bash
+# Build Go binary directly
+build-go --mcp <<EOF
+{
+  "method": "tools/call",
+  "params": {
+    "name": "build",
+    "arguments": {
+      "name": "my-app",
+      "src": "./cmd/my-app"
+    }
+  }
+}
+EOF
 ```
 
 ## Documentation
 
-### Forge Documentation
+- **[Forge CLI Usage](./docs/forge-usage.md)** - Complete forge command reference
+- **[Forge Schema](./docs/forge-schema.md)** - forge.yaml field documentation
+- **[Architecture](./ARCHITECTURE.md)** - System architecture and design patterns
+- **[Test Environment Guide](./docs/testenv-quick-start.md)** - Using testenv system
+- **[MCP Documentation](./docs/)** - MCP server documentation per tool
 
-- **[Forge CLI Usage Guide](./docs/forge-usage.md)** - Comprehensive usage guide with examples and workflows
-- **[forge.yaml Schema Documentation](./docs/forge-schema.md)** - Complete schema reference for forge.yaml
-- **[Architecture - Forge Section](./ARCHITECTURE.md#forge-architecture)** - Technical architecture and design
+## Development
 
-### Architecture
+### Prerequisites
 
-- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Complete architecture documentation
-  - Core packages (eventualconfig, flaterrors, project)
-  - Command-line tools
-  - Forge architecture
-  - Local container registry
-  - Configuration management
-  - Design patterns
+- Go 1.24.1+
+- Docker or Podman
+- Kind (for test environments)
 
-### Additional Resources
+### Building from Source
 
-- **[Model Context Protocol](https://modelcontextprotocol.io)** - MCP specification
-- **[Makefile](./Makefile)** - Build automation and tool orchestration
-- **[.project.yaml → forge.yaml Migration](./docs/forge-schema.md#migration-from-projectyaml)** - Migration guide
+```bash
+# Clone repository
+git clone https://github.com/alexandremahdhaoui/forge
+cd forge
 
-## Contributing
+# Build all tools using forge
+go run ./cmd/forge build
 
-1. **Install forge:**
+# Binaries in ./build/bin/
+ls build/bin/
+```
 
-   ```bash
-   go install github.com/alexandremahdhaoui/forge/cmd/forge@latest
+### Running Tests
 
-   # Add to PATH (add to ~/.bashrc or ~/.zshrc for persistence)
-   GOBIN_PATH=$(go env GOBIN)
-   if [ -z "$GOBIN_PATH" ]; then
-     GOBIN_PATH=$(go env GOPATH)/bin
-   fi
-   export PATH="$GOBIN_PATH:$PATH"
-   ```
+```bash
+# Run all test stages
+forge test run unit
+forge test run integration
+forge test run e2e
+```
 
-2. **Install pre-push hooks:**
+## Architecture
 
-   ```bash
-   make githooks
-   ```
+Forge uses MCP protocol for tool communication:
 
-3. **Run pre-push validation:**
+```
+┌─────────────┐
+│    forge    │ Orchestrator
+│  (client)   │
+└──────┬──────┘
+       │ MCP over stdio
+       ├────────────────┬────────────────┐
+       │                │                │
+┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐
+│  build-go   │  │   testenv   │  │ test-runner │
+│  (server)   │  │  (server)   │  │   (server)  │
+└─────────────┘  └──────┬──────┘  └─────────────┘
+                        │
+                 ┌──────┴──────┐
+                 │             │
+          ┌──────▼──────┐ ┌────▼────────┐
+          │ testenv-kind│ │ testenv-lcr │
+          │  (server)   │ │  (server)   │
+          └─────────────┘ └─────────────┘
+```
 
-   ```bash
-   make pre-push
-   ```
-
-4. **Build with forge:**
-
-   ```bash
-   forge build
-   ```
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for complete details.
 
 ## License
 
-Apache 2.0 - See LICENSE file for details.
+Apache 2.0
+
+## Contributing
+
+Issues and pull requests welcome at https://github.com/alexandremahdhaoui/forge

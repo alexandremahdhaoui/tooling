@@ -30,6 +30,12 @@ func resolveEngineAlias(alias string, spec *forge.Spec) (string, error) {
 		return "", fmt.Errorf("engine alias not found: %s (check forge.yaml engines section)", alias)
 	}
 
+	// For testenv type, return the testenv orchestrator
+	if config.Type == "testenv" {
+		return "go://testenv", nil
+	}
+
+	// For other types, check the Engine field
 	if config.Engine == "" {
 		return "", fmt.Errorf("engine alias %s has no engine URI configured", alias)
 	}
