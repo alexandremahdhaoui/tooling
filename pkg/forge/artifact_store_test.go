@@ -246,12 +246,15 @@ func TestArtifactStoreReadWrite(t *testing.T) {
 		},
 		TestEnvironments: map[string]*TestEnvironment{
 			"test-123": {
-				ID:               "test-123",
-				Name:             "integration",
-				Status:           TestStatusPassed,
-				CreatedAt:        now,
-				UpdatedAt:        now,
-				KubeconfigPath:   "/tmp/kubeconfig",
+				ID:        "test-123",
+				Name:      "integration",
+				Status:    TestStatusPassed,
+				CreatedAt: now,
+				UpdatedAt: now,
+				TmpDir:    "/tmp/test-dir",
+				Files: map[string]string{
+					"testenv-kind.kubeconfig": "kubeconfig",
+				},
 				ManagedResources: []string{"/tmp/test-dir"},
 				Metadata: map[string]string{
 					"key": "value",
@@ -309,8 +312,16 @@ func TestArtifactStoreReadWrite(t *testing.T) {
 		t.Errorf("Expected status %s, got %s", TestStatusPassed, env.Status)
 	}
 
-	if env.KubeconfigPath != "/tmp/kubeconfig" {
-		t.Errorf("Expected kubeconfig path /tmp/kubeconfig, got %s", env.KubeconfigPath)
+	if env.TmpDir != "/tmp/test-dir" {
+		t.Errorf("Expected tmpDir /tmp/test-dir, got %s", env.TmpDir)
+	}
+
+	if len(env.Files) != 1 {
+		t.Errorf("Expected 1 file, got %d", len(env.Files))
+	}
+
+	if env.Files["testenv-kind.kubeconfig"] != "kubeconfig" {
+		t.Errorf("Expected kubeconfig file, got %v", env.Files)
 	}
 
 	if len(env.ManagedResources) != 1 || env.ManagedResources[0] != "/tmp/test-dir" {

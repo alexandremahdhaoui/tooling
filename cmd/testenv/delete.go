@@ -47,12 +47,37 @@ func cmdDelete(testID string) error {
 
 	// Orchestrate testenv-subengine cleanup in REVERSE order
 	if testSpec != nil && testSpec.Testenv != "" {
-		// Strip "alias://" prefix if present
-		setupAlias := strings.TrimPrefix(testSpec.Testenv, "alias://")
+		if strings.HasPrefix(testSpec.Testenv, "go://") {
+			// Direct engine URI - call delete tool directly
+			fmt.Fprintf(os.Stderr, "Tearing down %s...\n", testSpec.Testenv)
 
-		if err := orchestrateDelete(config, setupAlias, env); err != nil {
-			// Log error but continue with cleanup (best effort)
-			fmt.Fprintf(os.Stderr, "Warning: failed to orchestrate cleanup: %v\n", err)
+			binaryPath, err := resolveEngineURI(testSpec.Testenv)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to resolve engine %s: %v\n", testSpec.Testenv, err)
+			} else {
+				// Prepare parameters - test-report uses reportID, others use testID
+				params := map[string]any{}
+				if testSpec.Testenv == "go://test-report" {
+					params["reportID"] = testID
+				} else {
+					params["testID"] = testID
+				}
+
+				_, err = callMCPEngine(binaryPath, "delete", params)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to delete with %s: %v\n", testSpec.Testenv, err)
+				} else {
+					fmt.Fprintf(os.Stderr, "  ✓ %s teardown complete\n", testSpec.Testenv)
+				}
+			}
+		} else {
+			// Alias reference - orchestrate subengines
+			setupAlias := strings.TrimPrefix(testSpec.Testenv, "alias://")
+
+			if err := orchestrateDelete(config, setupAlias, env); err != nil {
+				// Log error but continue with cleanup (best effort)
+				fmt.Fprintf(os.Stderr, "Warning: failed to orchestrate cleanup: %v\n", err)
+			}
 		}
 	}
 

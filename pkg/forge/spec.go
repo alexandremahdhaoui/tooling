@@ -63,5 +63,12 @@ func ReadSpecFromPath(path string) (Spec, error) {
 		return Spec{}, flaterrors.Join(err, errReadingProjectConfig)
 	}
 
+	// Apply defaults to test specs
+	for i := range out.Test {
+		if out.Test[i].Testenv == "" {
+			out.Test[i].Testenv = "go://test-report"
+		}
+	}
+
 	return out, nil
 }

@@ -69,7 +69,7 @@ func TestBuildIntegration(t *testing.T) {
 	t.Logf("Found %d artifacts in store", len(store.Artifacts))
 
 	// Verify expected binaries exist
-	expectedBinaries := []string{"forge", "build-go", "build-container", "kindenv", "local-container-registry", "test-go"}
+	expectedBinaries := []string{"forge", "build-go", "build-container", "testenv-kind", "testenv-lcr", "testenv-helm-install", "test-runner-go"}
 	for _, name := range expectedBinaries {
 		found := false
 		for _, artifact := range store.Artifacts {

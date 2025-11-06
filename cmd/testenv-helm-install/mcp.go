@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/pkg/mcputil"
@@ -325,16 +326,26 @@ func extractRepoName(chartName, repoURL string) string {
 func addHelmRepo(name, repoURL string) error {
 	log.Printf("Adding helm repo: %s -> %s", name, repoURL)
 
-	cmd := exec.Command("helm", "repo", "add", name, repoURL)
+	// Add timeout for repo operations (2 minutes should be plenty)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "helm", "repo", "add", name, repoURL)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("helm repo add timed out after 2 minutes")
+		}
 		return fmt.Errorf("helm repo add failed: %w, output: %s", err, string(output))
 	}
 
-	// Update repo
-	cmd = exec.Command("helm", "repo", "update")
+	// Update repo with same context
+	cmd = exec.CommandContext(ctx, "helm", "repo", "update")
 	output, err = cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("helm repo update timed out after 2 minutes")
+		}
 		return fmt.Errorf("helm repo update failed: %w, output: %s", err, string(output))
 	}
 
@@ -354,6 +365,7 @@ func installChart(chart ChartSpec, kubeconfigPath string) error {
 		chart.Name,
 		"--kubeconfig", kubeconfigPath,
 		"--wait",
+		"--timeout", "3m", // Helm-level timeout for pod readiness
 	}
 
 	if chart.Version != "" {
@@ -371,9 +383,16 @@ func installChart(chart ChartSpec, kubeconfigPath string) error {
 
 	log.Printf("Running: helm %v", args)
 
-	cmd := exec.Command("helm", args...)
+	// Add context timeout (4 minutes to allow helm's internal 3m timeout plus buffer)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "helm", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("helm install timed out after 4 minutes")
+		}
 		return fmt.Errorf("helm install failed: %w, output: %s", err, string(output))
 	}
 
@@ -387,6 +406,7 @@ func uninstallChart(releaseName, namespace, kubeconfigPath string) error {
 		"uninstall",
 		releaseName,
 		"--kubeconfig", kubeconfigPath,
+		"--timeout", "2m", // Helm-level timeout
 	}
 
 	if namespace != "" {
@@ -395,9 +415,16 @@ func uninstallChart(releaseName, namespace, kubeconfigPath string) error {
 
 	log.Printf("Running: helm %v", args)
 
-	cmd := exec.Command("helm", args...)
+	// Add context timeout (3 minutes to allow helm's internal 2m timeout plus buffer)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "helm", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("helm uninstall timed out after 3 minutes")
+		}
 		return fmt.Errorf("helm uninstall failed: %w, output: %s", err, string(output))
 	}
 

@@ -385,14 +385,31 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 	// If testID is provided, get artifact files from test environment
 	if testID != "" {
 		artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
-		if err == nil {
-			store, err := forge.ReadArtifactStore(artifactStorePath)
-			if err == nil {
-				env, err := forge.GetTestEnvironment(&store, testID)
-				if err == nil && len(env.Files) > 0 {
-					params["artifactFiles"] = env.Files
-				}
-			}
+		if err != nil {
+			return fmt.Errorf("failed to get artifact store path: %w", err)
+		}
+
+		store, err := forge.ReadArtifactStore(artifactStorePath)
+		if err != nil {
+			return fmt.Errorf("failed to read artifact store: %w", err)
+		}
+
+		env, err := forge.GetTestEnvironment(&store, testID)
+		if err != nil {
+			return fmt.Errorf("test environment not found: %s", testID)
+		}
+
+		// Pass artifact files (relative paths)
+		if len(env.Files) > 0 {
+			params["artifactFiles"] = env.Files
+		}
+		// Pass testenv tmpDir so runner can construct full paths
+		if env.TmpDir != "" {
+			params["testenvTmpDir"] = env.TmpDir
+		}
+		// Pass testenv metadata
+		if len(env.Metadata) > 0 {
+			params["testenvMetadata"] = env.Metadata
 		}
 	}
 

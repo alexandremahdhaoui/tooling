@@ -20,7 +20,13 @@ type RunInput struct {
 	WorkDir string            `json:"workDir,omitempty"` // Working directory (optional, for generic runner)
 
 	// Artifact files from testenv (e.g., kubeconfig, registry credentials)
-	ArtifactFiles map[string]string `json:"artifactFiles,omitempty"` // Map of file key to absolute path
+	ArtifactFiles map[string]string `json:"artifactFiles,omitempty"` // Map of file key to relative path (relative to testenvTmpDir)
+
+	// Testenv tmpDir (where artifact files are located)
+	TestenvTmpDir string `json:"testenvTmpDir,omitempty"` // Absolute path to testenv's tmpDir
+
+	// Testenv metadata (e.g., cluster name, registry URL)
+	TestenvMetadata map[string]string `json:"testenvMetadata,omitempty"` // Map of metadata key to value
 
 	// Directory parameters (injected by forge)
 	DirectoryParams

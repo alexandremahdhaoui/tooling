@@ -48,7 +48,36 @@ func handleRunTool(
 	if tmpDir == "" {
 		tmpDir = "." // Fallback to current directory for backward compatibility
 	}
-	report, junitFile, coverageFile, err := runTests(input.Stage, input.Name, tmpDir)
+
+	// Pass testenv information to tests via environment variables
+	testEnv := make(map[string]string)
+	if input.TestenvTmpDir != "" {
+		testEnv["FORGE_TESTENV_TMPDIR"] = input.TestenvTmpDir
+	}
+	if len(input.ArtifactFiles) > 0 {
+		// Pass each artifact file as an environment variable
+		for key, relPath := range input.ArtifactFiles {
+			// Construct absolute path if testenvTmpDir is available
+			var absPath string
+			if input.TestenvTmpDir != "" {
+				absPath = fmt.Sprintf("%s/%s", input.TestenvTmpDir, relPath)
+			} else {
+				absPath = relPath
+			}
+			// Convert key to env var name (e.g., "testenv-kind.kubeconfig" -> "FORGE_ARTIFACT_TESTENV_KIND_KUBECONFIG")
+			envKey := fmt.Sprintf("FORGE_ARTIFACT_%s", normalizeEnvKey(key))
+			testEnv[envKey] = absPath
+		}
+	}
+	if len(input.TestenvMetadata) > 0 {
+		// Pass metadata as environment variables
+		for key, value := range input.TestenvMetadata {
+			envKey := fmt.Sprintf("FORGE_METADATA_%s", normalizeEnvKey(key))
+			testEnv[envKey] = value
+		}
+	}
+
+	report, junitFile, coverageFile, err := runTests(input.Stage, input.Name, tmpDir, testEnv)
 	if err != nil {
 		return mcputil.ErrorResult(fmt.Sprintf("Test run failed: %v", err)), nil, nil
 	}
@@ -77,4 +106,23 @@ func handleRunTool(
 	}
 	result, returnedArtifact := mcputil.SuccessResultWithArtifact(statusMsg, report)
 	return result, returnedArtifact, nil
+}
+
+// normalizeEnvKey converts a key to an environment variable friendly format.
+// Example: "testenv-kind.kubeconfig" -> "TESTENV_KIND_KUBECONFIG"
+func normalizeEnvKey(key string) string {
+	result := ""
+	for i := 0; i < len(key); i++ {
+		c := key[i]
+		if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			if c >= 'a' && c <= 'z' {
+				result += string(c - 32) // Convert to uppercase
+			} else {
+				result += string(c)
+			}
+		} else {
+			result += "_"
+		}
+	}
+	return result
 }

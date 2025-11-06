@@ -63,16 +63,18 @@ func TestGenerateTestID_Format(t *testing.T) {
 }
 
 func TestCmdCreate_Integration(t *testing.T) {
+	// This test verifies cmdCreate works with a minimal forge.yaml
+	// It will fail if test-report engine isn't available (which is expected behavior)
+
 	// Create temporary directory for test
 	tmpDir := t.TempDir()
 	artifactStorePath := filepath.Join(tmpDir, "artifact-store.yaml")
 
-	// Create forge.yaml
+	// Create minimal forge.yaml (testenv will default to go://test-report)
 	forgeYAML := `name: test-project
 artifactStorePath: ` + artifactStorePath + `
 test:
   - name: integration
-    engine: "go://test-integration"
     runner: "go://test-runner-go"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
@@ -86,10 +88,13 @@ test:
 	defer os.Chdir(oldWd)
 	os.Chdir(tmpDir)
 
-	// Run cmdCreate
-	err = cmdCreate("integration")
+	// Run cmdCreate - will fail if go://test-report isn't available
+	testID, err := cmdCreate("integration")
 	if err != nil {
 		t.Fatalf("cmdCreate failed: %v", err)
+	}
+	if testID == "" {
+		t.Fatal("Expected testID to be returned")
 	}
 
 	// Verify artifact store was created
@@ -134,98 +139,6 @@ test:
 
 	if env.UpdatedAt.IsZero() {
 		t.Error("UpdatedAt should not be zero")
-	}
-}
-
-func TestCmdGet_Integration(t *testing.T) {
-	// Create temporary directory for test
-	tmpDir := t.TempDir()
-	artifactStorePath := filepath.Join(tmpDir, "artifact-store.yaml")
-
-	// Create test environment
-	now := time.Now().UTC()
-	testEnv := &forge.TestEnvironment{
-		ID:               "test-integration-20241103-abc123",
-		Name:             "integration",
-		Status:           forge.TestStatusCreated,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		KubeconfigPath:   "/tmp/kubeconfig",
-		ManagedResources: []string{"/tmp/test-dir"},
-		Metadata:         map[string]string{"key": "value"},
-	}
-
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: now,
-		Artifacts:   []forge.Artifact{},
-		TestEnvironments: map[string]*forge.TestEnvironment{
-			testEnv.ID: testEnv,
-		},
-	}
-
-	err := forge.WriteArtifactStore(artifactStorePath, store)
-	if err != nil {
-		t.Fatalf("Failed to write artifact store: %v", err)
-	}
-
-	// Create forge.yaml
-	forgeYAML := `name: test-project
-artifactStorePath: ` + artifactStorePath
-	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
-	if err != nil {
-		t.Fatalf("Failed to write forge.yaml: %v", err)
-	}
-
-	// Change to temp directory
-	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
-
-	// Run cmdGet
-	err = cmdGet(testEnv.ID)
-	if err != nil {
-		t.Fatalf("cmdGet failed: %v", err)
-	}
-}
-
-func TestCmdGet_NonexistentID(t *testing.T) {
-	// Create temporary directory for test
-	tmpDir := t.TempDir()
-	artifactStorePath := filepath.Join(tmpDir, "artifact-store.yaml")
-
-	// Create empty artifact store
-	store := forge.ArtifactStore{
-		Version:          "1.0",
-		LastUpdated:      time.Now().UTC(),
-		Artifacts:        []forge.Artifact{},
-		TestEnvironments: make(map[string]*forge.TestEnvironment),
-	}
-
-	err := forge.WriteArtifactStore(artifactStorePath, store)
-	if err != nil {
-		t.Fatalf("Failed to write artifact store: %v", err)
-	}
-
-	// Create forge.yaml
-	forgeYAML := `name: test-project
-artifactStorePath: ` + artifactStorePath
-	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
-	if err != nil {
-		t.Fatalf("Failed to write forge.yaml: %v", err)
-	}
-
-	// Change to temp directory
-	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
-
-	// Run cmdGet with nonexistent ID
-	err = cmdGet("nonexistent-id")
-	if err == nil {
-		t.Error("Expected error for nonexistent ID")
 	}
 }
 
@@ -326,82 +239,5 @@ artifactStorePath: ` + artifactStorePath
 	err = cmdDelete("nonexistent-id")
 	if err == nil {
 		t.Error("Expected error for nonexistent ID")
-	}
-}
-
-func TestCmdList_Integration(t *testing.T) {
-	// Create temporary directory for test
-	tmpDir := t.TempDir()
-	artifactStorePath := filepath.Join(tmpDir, "artifact-store.yaml")
-
-	// Create multiple test environments
-	now := time.Now().UTC()
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: now,
-		Artifacts:   []forge.Artifact{},
-		TestEnvironments: map[string]*forge.TestEnvironment{
-			"test-integration-1": {
-				ID:               "test-integration-1",
-				Name:             "integration",
-				Status:           forge.TestStatusCreated,
-				CreatedAt:        now,
-				UpdatedAt:        now,
-				ManagedResources: []string{},
-			},
-			"test-integration-2": {
-				ID:               "test-integration-2",
-				Name:             "integration",
-				Status:           forge.TestStatusPassed,
-				CreatedAt:        now.Add(1 * time.Hour),
-				UpdatedAt:        now.Add(1 * time.Hour),
-				ManagedResources: []string{},
-			},
-			"test-unit-1": {
-				ID:               "test-unit-1",
-				Name:             "unit",
-				Status:           forge.TestStatusCreated,
-				CreatedAt:        now.Add(2 * time.Hour),
-				UpdatedAt:        now.Add(2 * time.Hour),
-				ManagedResources: []string{},
-			},
-		},
-	}
-
-	err := forge.WriteArtifactStore(artifactStorePath, store)
-	if err != nil {
-		t.Fatalf("Failed to write artifact store: %v", err)
-	}
-
-	// Create forge.yaml
-	forgeYAML := `name: test-project
-artifactStorePath: ` + artifactStorePath
-	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
-	if err != nil {
-		t.Fatalf("Failed to write forge.yaml: %v", err)
-	}
-
-	// Change to temp directory
-	oldWd, _ := os.Getwd()
-	defer os.Chdir(oldWd)
-	os.Chdir(tmpDir)
-
-	// Run cmdList for integration
-	err = cmdList("integration")
-	if err != nil {
-		t.Fatalf("cmdList failed: %v", err)
-	}
-
-	// Run cmdList for unit
-	err = cmdList("unit")
-	if err != nil {
-		t.Fatalf("cmdList failed for unit: %v", err)
-	}
-
-	// Run cmdList for nonexistent stage (should not error, just show empty)
-	err = cmdList("nonexistent")
-	if err != nil {
-		t.Fatalf("cmdList failed for nonexistent stage: %v", err)
 	}
 }

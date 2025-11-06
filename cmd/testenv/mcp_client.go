@@ -5,11 +5,42 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// projectRoot is determined at package initialization to handle cases
+// where tests or code changes the working directory.
+var projectRoot string
+
+func init() {
+	// Find project root at startup
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+
+	// Walk up to find forge.yaml or go.mod
+	for cwd != "/" && cwd != "." {
+		if _, err := os.Stat(filepath.Join(cwd, "forge.yaml")); err == nil {
+			projectRoot = cwd
+			return
+		}
+		if _, err := os.Stat(filepath.Join(cwd, "go.mod")); err == nil {
+			projectRoot = cwd
+			return
+		}
+		parent := filepath.Dir(cwd)
+		if parent == cwd {
+			break
+		}
+		cwd = parent
+	}
+}
 
 // callMCPEngine calls an MCP engine with the specified tool and parameters.
 // It spawns the engine process with --mcp flag, sets up stdio transport, and calls the tool.
@@ -35,8 +66,11 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 		Command: cmd,
 	}
 
-	// Connect to the MCP server
-	ctx := context.Background()
+	// Connect to the MCP server with timeout
+	// Use 5 minutes for operations that may involve cluster creation/deletion
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MCP server %s: %w", binaryPath, err)
@@ -54,12 +88,15 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 		arguments = params.(map[string]any)
 	}
 
-	// Call the tool
+	// Call the tool with the same timeout context
 	result, err := session.CallTool(ctx, &mcp.CallToolParams{
 		Name:      toolName,
 		Arguments: arguments,
 	})
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("MCP tool call timed out after 5 minutes: %w", err)
+		}
 		return nil, fmt.Errorf("MCP tool call failed: %w", err)
 	}
 
@@ -84,7 +121,7 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 }
 
 // resolveEngineURI resolves an engine URI (go://package) to a binary path.
-// For now, it uses the simple pattern: ./build/bin/<package-name>
+// It returns an absolute path to handle cases where tests change working directory.
 func resolveEngineURI(engineURI string) (string, error) {
 	if !strings.HasPrefix(engineURI, "go://") {
 		return "", fmt.Errorf("unsupported engine protocol: %s (must start with go://)", engineURI)
@@ -101,10 +138,13 @@ func resolveEngineURI(engineURI string) (string, error) {
 		packagePath = packagePath[:idx]
 	}
 
-	// Build binary path: ./build/bin/<package-name>
-	binaryPath := fmt.Sprintf("./build/bin/%s", packagePath)
+	// If we have projectRoot from init, use it
+	if projectRoot != "" {
+		return filepath.Join(projectRoot, "build", "bin", packagePath), nil
+	}
 
-	return binaryPath, nil
+	// Fallback: use relative path from current directory
+	return fmt.Sprintf("./build/bin/%s", packagePath), nil
 }
 
 // getEngineConfig retrieves an engine configuration by alias from the spec.

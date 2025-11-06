@@ -7,11 +7,14 @@ import (
 	"log"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/internal/version"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -85,12 +88,16 @@ type DetailedTestReport struct {
 }
 
 type RunInput struct {
-	Stage string `json:"stage"`
-	Name  string `json:"name"`
+	ID       string `json:"id,omitempty"`
+	Stage    string `json:"stage"`
+	Name     string `json:"name"`
+	TmpDir   string `json:"tmpDir,omitempty"`
+	BuildDir string `json:"buildDir,omitempty"`
+	RootDir  string `json:"rootDir,omitempty"`
 }
 
-// TestFunc represents a test function
-type TestFunc func() error
+// TestFunc represents a test function that receives the test suite for context
+type TestFunc func(*TestSuite) error
 
 // Test represents a single test case
 type Test struct {
@@ -99,6 +106,9 @@ type Test struct {
 	Run        TestFunc
 	Skip       bool
 	SkipReason string
+	// Parallel indicates if this test can run in parallel with other parallel tests
+	// Tests that use shared resources (like shared test environment) should NOT be parallel
+	Parallel bool
 }
 
 // TestSuite manages and executes tests
@@ -108,6 +118,7 @@ type TestSuite struct {
 	categories        map[TestCategory]*CategoryStats
 	filterCategory    string
 	filterNamePattern string
+	sharedTestEnvID   string // Shared test environment ID for testenv-dependent tests
 }
 
 // NewTestSuite creates a new test suite
@@ -147,15 +158,20 @@ func (ts *TestSuite) Setup() error {
 		fmt.Fprintf(os.Stderr, "✓ Built forge binary\n")
 	}
 
-	// Check for leftover test environments and warn
-	kindBinary := os.Getenv("KIND_BINARY")
-	if kindBinary != "" {
-		cmd := exec.Command(kindBinary, "get", "clusters")
-		if output, err := cmd.CombinedOutput(); err == nil {
-			if strings.Contains(string(output), "forge-test-") {
-				fmt.Fprintf(os.Stderr, "Warning: Found leftover test clusters. Run cleanup before tests.\n")
-			}
+	// Force cleanup of any leftover test environments
+	if err := forceCleanupLeftovers(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup leftover resources: %v\n", err)
+	}
+
+	// Check if we need to create a shared test environment
+	if ts.needsSharedTestEnv() {
+		fmt.Fprintf(os.Stderr, "\n=== Creating Shared Test Environment ===\n")
+		testID, err := ts.createSharedTestEnv()
+		if err != nil {
+			return fmt.Errorf("failed to create shared test environment: %w", err)
 		}
+		ts.sharedTestEnvID = testID
+		fmt.Fprintf(os.Stderr, "✓ Shared test environment created: %s\n\n", testID)
 	}
 
 	return nil
@@ -169,38 +185,19 @@ func (ts *TestSuite) Teardown() {
 		return
 	}
 
-	// Check for leftover test clusters
-	kindBinary := os.Getenv("KIND_BINARY")
-	if kindBinary != "" {
-		cmd := exec.Command(kindBinary, "get", "clusters")
-		if output, err := cmd.CombinedOutput(); err == nil {
-			clusters := strings.Split(strings.TrimSpace(string(output)), "\n")
-			leftoverCount := 0
-			for _, cluster := range clusters {
-				if strings.HasPrefix(cluster, "forge-test-") {
-					leftoverCount++
-					fmt.Fprintf(os.Stderr, "⚠️  Leftover cluster found: %s\n", cluster)
-				}
-			}
-			if leftoverCount > 0 {
-				fmt.Fprintf(os.Stderr, "\nTo clean up leftover clusters, run:\n")
-				fmt.Fprintf(os.Stderr, "  %s get clusters | grep forge-test | xargs -I {} %s delete cluster --name {}\n", kindBinary, kindBinary)
-			}
+	// Cleanup shared test environment if it was created
+	if ts.sharedTestEnvID != "" {
+		fmt.Fprintf(os.Stderr, "\n=== Cleaning Up Shared Test Environment ===\n")
+		if err := forceCleanupTestEnv(ts.sharedTestEnvID); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup shared environment: %v\n", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "✓ Shared test environment cleaned up\n")
 		}
 	}
 
-	// Check for leftover tmpDirs
-	tmpDirs, _ := os.ReadDir("/tmp")
-	leftoverDirs := 0
-	for _, entry := range tmpDirs {
-		if strings.HasPrefix(entry.Name(), "forge-test-") && entry.IsDir() {
-			leftoverDirs++
-			fmt.Fprintf(os.Stderr, "⚠️  Leftover tmpDir found: /tmp/%s\n", entry.Name())
-		}
-	}
-	if leftoverDirs > 0 {
-		fmt.Fprintf(os.Stderr, "\nTo clean up leftover tmpDirs, run:\n")
-		fmt.Fprintf(os.Stderr, "  rm -rf /tmp/forge-test-*\n")
+	// Force cleanup any remaining leftovers
+	if err := forceCleanupLeftovers(); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup leftover resources: %v\n", err)
 	}
 }
 
@@ -260,8 +257,24 @@ func (ts *TestSuite) RunAll() *DetailedTestReport {
 
 		fmt.Fprintf(os.Stderr, "\n=== Category: %s (%d tests) ===\n", category, len(tests))
 
+		// Separate parallel and sequential tests
+		var parallelTests, sequentialTests []Test
 		for _, test := range tests {
+			if test.Parallel && !test.Skip {
+				parallelTests = append(parallelTests, test)
+			} else {
+				sequentialTests = append(sequentialTests, test)
+			}
+		}
+
+		// Run sequential tests first
+		for _, test := range sequentialTests {
 			ts.runTest(test)
+		}
+
+		// Run parallel tests concurrently
+		if len(parallelTests) > 0 {
+			ts.runTestsParallel(parallelTests)
 		}
 	}
 
@@ -291,8 +304,8 @@ func (ts *TestSuite) runTest(test Test) {
 		return
 	}
 
-	// Run the test
-	err := test.Run()
+	// Run the test with test suite context
+	err := test.Run(ts)
 	result.Duration = time.Since(testStart).Seconds()
 
 	if err != nil {
@@ -307,6 +320,49 @@ func (ts *TestSuite) runTest(test Test) {
 		ts.updateCategoryStats(test.Category, result)
 		fmt.Fprintf(os.Stderr, " ✅ PASSED (%.2fs)\n", result.Duration)
 	}
+}
+
+// runTestsParallel executes multiple tests in parallel
+func (ts *TestSuite) runTestsParallel(tests []Test) {
+	var wg sync.WaitGroup
+	var mu sync.Mutex // Protect shared state (results, categories)
+
+	for _, test := range tests {
+		wg.Add(1)
+		go func(t Test) {
+			defer wg.Done()
+
+			testStart := time.Now()
+			fmt.Fprintf(os.Stderr, "🔹 %s [parallel]", t.Name)
+
+			var result TestResult
+			result.Name = t.Name
+			result.Category = t.Category
+
+			// Run the test
+			err := t.Run(ts)
+			result.Duration = time.Since(testStart).Seconds()
+
+			// Lock for updating shared state
+			mu.Lock()
+			defer mu.Unlock()
+
+			if err != nil {
+				result.Status = "failed"
+				result.Error = err.Error()
+				ts.results = append(ts.results, result)
+				ts.updateCategoryStats(t.Category, result)
+				fmt.Fprintf(os.Stderr, " ❌ FAILED (%.2fs): %v\n", result.Duration, err)
+			} else {
+				result.Status = "passed"
+				ts.results = append(ts.results, result)
+				ts.updateCategoryStats(t.Category, result)
+				fmt.Fprintf(os.Stderr, " ✅ PASSED (%.2fs)\n", result.Duration)
+			}
+		}(test)
+	}
+
+	wg.Wait()
 }
 
 // updateCategoryStats updates statistics for a category
@@ -564,18 +620,39 @@ func runTests(stage, name string) *DetailedTestReport {
 }
 
 // registerAllTests registers all test cases with the suite
+//
+// Test Classification:
+//
+//   - E2E Tests: Test the entire forge workflow as a user would, no infrastructure setup
+//     Examples: forge build, forge version, forge help
+//
+//   - Integration Tests: Test components together with real dependencies (KIND clusters, etc.)
+//     Examples: testenv create/delete, integration test runner
+//
+// - Unit Tests: Test individual components in isolation (run via forge test unit)
+//
+// Parallel Execution Strategy:
+// - Tests marked Parallel:true can run concurrently with other parallel tests
+// - Tests that use shared resources (shared testenv) must be Parallel:false
+// - Tests that create/destroy their own resources can be Parallel:true
 func registerAllTests(suite *TestSuite) {
-	// Phase 2: Build system tests
+	// ====================================================================
+	// E2E TESTS - Test complete forge workflows without infrastructure
+	// ====================================================================
+
+	// Phase 2: Build system tests (E2E)
 	suite.AddTest(Test{
 		Name:     "forge build",
 		Category: CategoryBuild,
 		Run:      testForgeBuild,
+		Parallel: true, // Can run in parallel
 	})
 
 	suite.AddTest(Test{
 		Name:     "forge build specific artifact",
 		Category: CategoryBuild,
 		Run:      testForgeBuildSpecific,
+		Parallel: true,
 	})
 
 	suite.AddTest(Test{
@@ -584,53 +661,65 @@ func registerAllTests(suite *TestSuite) {
 		Run:        testForgeBuildContainer,
 		Skip:       shouldSkipContainerTests(),
 		SkipReason: "CONTAINER_ENGINE not available",
+		Parallel:   true,
 	})
 
 	suite.AddTest(Test{
 		Name:     "forge build format",
 		Category: CategoryBuild,
 		Run:      testForgeBuildFormat,
+		Parallel: false, // Modifies code, should be sequential
 	})
 
 	suite.AddTest(Test{
 		Name:     "incremental build",
 		Category: CategoryBuild,
 		Run:      testIncrementalBuild,
+		Parallel: false, // Depends on build state
 	})
 
-	// Phase 10: System tests
+	// Phase 10: System tests (E2E - all parallel, read-only operations)
 	suite.AddTest(Test{
 		Name:     "forge version",
 		Category: CategorySystem,
 		Run:      testForgeVersion,
+		Parallel: true,
 	})
 
 	suite.AddTest(Test{
 		Name:     "forge help",
 		Category: CategorySystem,
 		Run:      testForgeHelp,
+		Parallel: true,
 	})
 
 	suite.AddTest(Test{
 		Name:     "forge no args",
 		Category: CategorySystem,
 		Run:      testForgeNoArgs,
+		Parallel: true,
 	})
 
-	// Phase 6: Artifact store tests
+	// Phase 6: Artifact store tests (E2E)
 	suite.AddTest(Test{
 		Name:     "artifact store validation",
 		Category: CategoryArtifactStore,
 		Run:      testArtifactStore,
+		Parallel: true, // Read-only validation
 	})
 
-	// Phase 3: TestEnv lifecycle tests
+	// ====================================================================
+	// INTEGRATION TESTS - Test with real infrastructure (KIND clusters)
+	// ====================================================================
+
+	// Phase 3: TestEnv lifecycle tests (Integration)
 	suite.AddTest(Test{
 		Name:       "test environment create",
 		Category:   CategoryTestEnv,
 		Run:        testTestEnvCreate,
 		Skip:       shouldSkipTestEnvTests(),
 		SkipReason: "KIND_BINARY not available",
+		Parallel:   true, // Creates own environment, can run in parallel
 	})
 
 	suite.AddTest(Test{
@@ -639,6 +728,7 @@ func registerAllTests(suite *TestSuite) {
 		Run:        testTestEnvList,
 		Skip:       shouldSkipTestEnvTests(),
 		SkipReason: "KIND_BINARY not available",
+		Parallel:   false, // Uses shared environment - sequential
 	})
 
 	suite.AddTest(Test{
@@ -647,6 +737,7 @@ func registerAllTests(suite *TestSuite) {
 		Run:        testTestEnvGet,
 		Skip:       shouldSkipTestEnvTests(),
 		SkipReason: "KIND_BINARY not available",
+		Parallel:   false, // Uses shared environment - sequential
 	})
 
 	suite.AddTest(Test{
@@ -655,6 +746,7 @@ func registerAllTests(suite *TestSuite) {
 		Run:        testTestEnvGetJSON,
 		Skip:       shouldSkipTestEnvTests(),
 		SkipReason: "KIND_BINARY not available",
+		Parallel:   false, // Uses shared environment - sequential
 	})
 
 	suite.AddTest(Test{
@@ -663,6 +755,7 @@ func registerAllTests(suite *TestSuite) {
 		Run:        testTestEnvDelete,
 		Skip:       shouldSkipTestEnvTests(),
 		SkipReason: "KIND_BINARY not available",
+		Parallel:   true, // Creates own environment, can run in parallel
 	})
 
 	suite.AddTest(Test{
@@ -671,6 +764,7 @@ func registerAllTests(suite *TestSuite) {
 		Run:        testTestEnvIsolation,
 		Skip:       shouldSkipTestEnvTests(),
 		SkipReason: "KIND_BINARY not available",
+		Parallel:   true, // Creates own environments, can run in parallel
 	})
 
 	suite.AddTest(Test{
@@ -974,7 +1068,10 @@ func cleanupTestEnv(testID string) {
 
 // verifyArtifactStoreHasTestEnv checks if artifact store contains a test environment
 func verifyArtifactStoreHasTestEnv(testID string) error {
-	storePath := ".forge/artifacts.json"
+	storePath, err := forge.GetArtifactStorePath(".forge/artifacts.json")
+	if err != nil {
+		return fmt.Errorf("failed to get artifact store path: %w", err)
+	}
 	data, err := os.ReadFile(storePath)
 	if err != nil {
 		return fmt.Errorf("failed to read artifact store: %w", err)
@@ -995,7 +1092,10 @@ func verifyArtifactStoreHasTestEnv(testID string) error {
 
 // verifyArtifactStoreMissingTestEnv checks that artifact store doesn't contain a test environment
 func verifyArtifactStoreMissingTestEnv(testID string) error {
-	storePath := ".forge/artifacts.json"
+	storePath, err := forge.GetArtifactStorePath(".forge/artifacts.json")
+	if err != nil {
+		return fmt.Errorf("failed to get artifact store path: %w", err)
+	}
 	data, err := os.ReadFile(storePath)
 	if err != nil {
 		return fmt.Errorf("failed to read artifact store: %w", err)
@@ -1009,7 +1109,143 @@ func verifyArtifactStoreMissingTestEnv(testID string) error {
 	return nil
 }
 
-func testForgeBuild() error {
+// forceCleanupLeftovers cleans up leftover resources without depending on artifact store
+func forceCleanupLeftovers() error {
+	var errors []error
+
+	// Cleanup KIND clusters
+	kindBinary := os.Getenv("KIND_BINARY")
+	if kindBinary == "" {
+		kindBinary = "kind"
+	}
+
+	cmd := exec.Command(kindBinary, "get", "clusters")
+	output, err := cmd.CombinedOutput()
+	if err == nil {
+		clusters := strings.Split(strings.TrimSpace(string(output)), "\n")
+		for _, cluster := range clusters {
+			cluster = strings.TrimSpace(cluster)
+			if strings.HasPrefix(cluster, "forge-test-") && cluster != "" {
+				fmt.Fprintf(os.Stderr, "Cleaning up leftover cluster: %s\n", cluster)
+				deleteCmd := exec.Command(kindBinary, "delete", "cluster", "--name", cluster)
+				if err := deleteCmd.Run(); err != nil {
+					errors = append(errors, fmt.Errorf("failed to delete cluster %s: %w", cluster, err))
+				}
+			}
+		}
+	}
+
+	// Cleanup tmp directories
+	rootDir, err := os.Getwd()
+	if err == nil {
+		tmpBase := filepath.Join(rootDir, "tmp")
+		entries, err := os.ReadDir(tmpBase)
+		if err == nil {
+			for _, entry := range entries {
+				if strings.HasPrefix(entry.Name(), "test-integration-") || strings.HasPrefix(entry.Name(), "tmp-") {
+					dirPath := filepath.Join(tmpBase, entry.Name())
+					if err := os.RemoveAll(dirPath); err != nil {
+						errors = append(errors, fmt.Errorf("failed to remove %s: %w", dirPath, err))
+					}
+				}
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return fmt.Errorf("cleanup errors: %v", errors)
+	}
+	return nil
+}
+
+// forceCleanupTestEnv forcefully cleans up a test environment without artifact store dependency
+func forceCleanupTestEnv(testID string) error {
+	if testID == "" {
+		return nil
+	}
+
+	var errors []error
+
+	// Delete KIND cluster
+	kindBinary := os.Getenv("KIND_BINARY")
+	if kindBinary == "" {
+		kindBinary = "kind"
+	}
+
+	clusterName := fmt.Sprintf("forge-%s", testID)
+	fmt.Fprintf(os.Stderr, "Deleting cluster: %s\n", clusterName)
+	deleteCmd := exec.Command(kindBinary, "delete", "cluster", "--name", clusterName)
+	if err := deleteCmd.Run(); err != nil {
+		// Only add error if cluster might exist (ignore "not found" errors)
+		errors = append(errors, fmt.Errorf("failed to delete cluster %s: %w", clusterName, err))
+	}
+
+	// Delete tmp directory
+	rootDir, err := os.Getwd()
+	if err == nil {
+		tmpDir := filepath.Join(rootDir, "tmp", testID)
+		if err := os.RemoveAll(tmpDir); err != nil {
+			errors = append(errors, fmt.Errorf("failed to remove tmpDir %s: %w", tmpDir, err))
+		}
+	}
+
+	// Try to remove from artifact store (best effort)
+	cleanupTestEnv(testID)
+
+	if len(errors) > 0 {
+		return fmt.Errorf("cleanup errors: %v", errors)
+	}
+	return nil
+}
+
+// needsSharedTestEnv checks if any tests in the suite need a shared test environment
+func (ts *TestSuite) needsSharedTestEnv() bool {
+	// Check if KIND_BINARY is available
+	if shouldSkipTestEnvTests() {
+		return false
+	}
+
+	// Check if any tests in the suite are testenv-dependent
+	for _, test := range ts.tests {
+		switch test.Category {
+		case CategoryTestEnv, CategoryTestRunner, CategoryPerformance, CategoryCleanup, CategoryError, CategoryArtifactStore:
+			if !test.Skip {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// createSharedTestEnv creates a shared test environment for reuse across tests
+func (ts *TestSuite) createSharedTestEnv() (string, error) {
+	cmd := exec.Command("./build/bin/forge", "test", "integration", "create")
+	cmd.Env = os.Environ()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to create shared environment: %w\nOutput: %s", err, output)
+	}
+
+	testID := extractTestID(string(output))
+	if testID == "" {
+		return "", fmt.Errorf("failed to extract testID from output: %s", output)
+	}
+
+	// Verify cluster was created successfully
+	if err := verifyClusterExists(testID); err != nil {
+		forceCleanupTestEnv(testID)
+		return "", fmt.Errorf("cluster verification failed: %w", err)
+	}
+
+	return testID, nil
+}
+
+// getSharedTestEnv returns the shared test environment ID or creates one if needed
+func (ts *TestSuite) getSharedTestEnv() string {
+	return ts.sharedTestEnvID
+}
+
+func testForgeBuild(ts *TestSuite) error {
 	cmd := exec.Command("go", "run", "./cmd/forge", "build", "forge")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1029,7 +1265,7 @@ func testForgeBuild() error {
 	return nil
 }
 
-func testForgeBuildSpecific() error {
+func testForgeBuildSpecific(ts *TestSuite) error {
 	cmd := exec.Command("go", "run", "./cmd/forge", "build", "build-go")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1049,7 +1285,7 @@ func testForgeBuildSpecific() error {
 	return nil
 }
 
-func testForgeTestUnit() error {
+func testForgeTestUnit(ts *TestSuite) error {
 	cmd := exec.Command("go", "run", "./cmd/forge", "test", "unit", "run")
 	output, _ := cmd.CombinedOutput()
 
@@ -1067,7 +1303,7 @@ func testForgeTestUnit() error {
 	return nil
 }
 
-func testArtifactStore() error {
+func testArtifactStore(ts *TestSuite) error {
 	storePath := ".ignore.artifact-store.yaml"
 
 	// Check file exists
@@ -1094,7 +1330,7 @@ func testArtifactStore() error {
 	return nil
 }
 
-func testForgeVersion() error {
+func testForgeVersion(ts *TestSuite) error {
 	cmd := exec.Command("go", "run", "./cmd/forge", "version")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1114,7 +1350,7 @@ func testForgeVersion() error {
 
 // Phase 2: Additional Build Tests
 
-func testForgeBuildContainer() error {
+func testForgeBuildContainer(ts *TestSuite) error {
 	engine := os.Getenv("CONTAINER_ENGINE")
 	if engine == "" {
 		return fmt.Errorf("CONTAINER_ENGINE not set")
@@ -1146,7 +1382,7 @@ func testForgeBuildContainer() error {
 	return nil
 }
 
-func testForgeBuildFormat() error {
+func testForgeBuildFormat(ts *TestSuite) error {
 	// This test runs the format-code artifact
 	cmd := exec.Command("go", "run", "./cmd/forge", "build", "format-code")
 	output, err := cmd.CombinedOutput()
@@ -1163,7 +1399,7 @@ func testForgeBuildFormat() error {
 	return nil
 }
 
-func testIncrementalBuild() error {
+func testIncrementalBuild(ts *TestSuite) error {
 	// Build forge binary first time
 	cmd1 := exec.Command("go", "run", "./cmd/forge", "build", "forge")
 	if _, err := cmd1.CombinedOutput(); err != nil {
@@ -1209,7 +1445,7 @@ func testIncrementalBuild() error {
 
 // Phase 10: Additional System Tests
 
-func testForgeHelp() error {
+func testForgeHelp(ts *TestSuite) error {
 	cmd := exec.Command("go", "run", "./cmd/forge", "help")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1227,7 +1463,7 @@ func testForgeHelp() error {
 	return nil
 }
 
-func testForgeNoArgs() error {
+func testForgeNoArgs(ts *TestSuite) error {
 	cmd := exec.Command("go", "run", "./cmd/forge")
 	output, err := cmd.CombinedOutput()
 
@@ -1246,7 +1482,7 @@ func testForgeNoArgs() error {
 
 // Phase 3: TestEnv Lifecycle Tests
 
-func testTestEnvCreate() error {
+func testTestEnvCreate(ts *TestSuite) error {
 	// Create test environment
 	cmd := exec.Command("./build/bin/forge", "test", "integration", "create")
 	cmd.Env = os.Environ()
@@ -1261,8 +1497,8 @@ func testTestEnvCreate() error {
 		return fmt.Errorf("no testID found in output: %s", output)
 	}
 
-	// Register for cleanup
-	defer cleanupTestEnv(testID)
+	// Cleanup immediately after test
+	defer forceCleanupTestEnv(testID)
 
 	// Verify cluster exists
 	if err := verifyClusterExists(testID); err != nil {
@@ -1277,21 +1513,12 @@ func testTestEnvCreate() error {
 	return nil
 }
 
-func testTestEnvList() error {
-	// First create a test environment so list has something to show
-	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
-	createCmd.Env = os.Environ()
-	createOutput, err := createCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("create command failed: %w\nOutput: %s", err, createOutput)
-	}
-
-	testID := extractTestID(string(createOutput))
+func testTestEnvList(ts *TestSuite) error {
+	// Use shared test environment instead of creating a new one
+	testID := ts.getSharedTestEnv()
 	if testID == "" {
-		return fmt.Errorf("failed to extract testID from create output")
+		return fmt.Errorf("shared test environment not available")
 	}
-
-	defer cleanupTestEnv(testID)
 
 	// List test environments
 	listCmd := exec.Command("./build/bin/forge", "test", "integration", "list")
@@ -1313,21 +1540,12 @@ func testTestEnvList() error {
 	return nil
 }
 
-func testTestEnvGet() error {
-	// Create test environment
-	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
-	createCmd.Env = os.Environ()
-	createOutput, err := createCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("create command failed: %w\nOutput: %s", err, createOutput)
-	}
-
-	testID := extractTestID(string(createOutput))
+func testTestEnvGet(ts *TestSuite) error {
+	// Use shared test environment
+	testID := ts.getSharedTestEnv()
 	if testID == "" {
-		return fmt.Errorf("failed to extract testID")
+		return fmt.Errorf("shared test environment not available")
 	}
-
-	defer cleanupTestEnv(testID)
 
 	// Get test environment details
 	getCmd := exec.Command("./build/bin/forge", "test", "integration", "get", testID)
@@ -1352,21 +1570,12 @@ func testTestEnvGet() error {
 	return nil
 }
 
-func testTestEnvGetJSON() error {
-	// Create test environment
-	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
-	createCmd.Env = os.Environ()
-	createOutput, err := createCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("create command failed: %w\nOutput: %s", err, createOutput)
-	}
-
-	testID := extractTestID(string(createOutput))
+func testTestEnvGetJSON(ts *TestSuite) error {
+	// Use shared test environment
+	testID := ts.getSharedTestEnv()
 	if testID == "" {
-		return fmt.Errorf("failed to extract testID")
+		return fmt.Errorf("shared test environment not available")
 	}
-
-	defer cleanupTestEnv(testID)
 
 	// Get test environment as JSON
 	getCmd := exec.Command("./build/bin/forge", "test", "integration", "get", testID, "-o", "json")
@@ -1392,7 +1601,7 @@ func testTestEnvGetJSON() error {
 	return nil
 }
 
-func testTestEnvDelete() error {
+func testTestEnvDelete(ts *TestSuite) error {
 	// Create test environment
 	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
 	createCmd.Env = os.Environ()
@@ -1441,7 +1650,7 @@ func testTestEnvDelete() error {
 	return nil
 }
 
-func testTestEnvIsolation() error {
+func testTestEnvIsolation(ts *TestSuite) error {
 	// Create two test environments in parallel
 	type result struct {
 		testID string
@@ -1485,7 +1694,7 @@ func testTestEnvIsolation() error {
 
 	// Cleanup
 	for _, testID := range testIDs {
-		defer cleanupTestEnv(testID)
+		defer forceCleanupTestEnv(testID)
 	}
 
 	// Check for errors
@@ -1512,7 +1721,7 @@ func testTestEnvIsolation() error {
 	return nil
 }
 
-func testTestEnvSpecOverride() error {
+func testTestEnvSpecOverride(ts *TestSuite) error {
 	// This test would require modifying forge.yaml to test spec override
 	// For now, we'll skip it as noted in registerAllTests
 	return fmt.Errorf("not implemented - requires forge.yaml manipulation")
@@ -1520,21 +1729,12 @@ func testTestEnvSpecOverride() error {
 
 // Phase 4: Test Runner Integration Tests
 
-func testIntegrationTestRunner() error {
-	// Create a test environment first
-	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
-	createCmd.Env = os.Environ()
-	createOutput, err := createCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("create command failed: %w\nOutput: %s", err, createOutput)
-	}
-
-	testID := extractTestID(string(createOutput))
+func testIntegrationTestRunner(ts *TestSuite) error {
+	// Use shared test environment
+	testID := ts.getSharedTestEnv()
 	if testID == "" {
-		return fmt.Errorf("failed to extract testID")
+		return fmt.Errorf("shared test environment not available")
 	}
-
-	defer cleanupTestEnv(testID)
 
 	// Run integration tests with the test environment
 	runCmd := exec.Command("./build/bin/forge", "test", "integration", "run", testID)
@@ -1553,7 +1753,7 @@ func testIntegrationTestRunner() error {
 	return nil
 }
 
-func testLintRunner() error {
+func testLintRunner(ts *TestSuite) error {
 	cmd := exec.Command("./build/bin/forge", "test", "lint", "run")
 	cmd.Env = os.Environ()
 	output, _ := cmd.CombinedOutput() // May fail due to lint errors
@@ -1568,7 +1768,7 @@ func testLintRunner() error {
 
 // Phase 5: Prompt System Tests
 
-func testPromptList() error {
+func testPromptList(ts *TestSuite) error {
 	cmd := exec.Command("./build/bin/forge", "prompt", "list")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1583,7 +1783,7 @@ func testPromptList() error {
 	return nil
 }
 
-func testPromptGet() error {
+func testPromptGet(ts *TestSuite) error {
 	// First list prompts to get a valid name
 	listCmd := exec.Command("./build/bin/forge", "prompt", "list")
 	listOutput, err := listCmd.CombinedOutput()
@@ -1612,7 +1812,7 @@ func testPromptGet() error {
 	return nil
 }
 
-func testPromptGetInvalid() error {
+func testPromptGetInvalid(ts *TestSuite) error {
 	cmd := exec.Command("./build/bin/forge", "prompt", "get", "nonexistent-prompt-name-12345")
 	output, err := cmd.CombinedOutput()
 
@@ -1631,7 +1831,7 @@ func testPromptGetInvalid() error {
 
 // Phase 6: Additional Artifact Store Tests
 
-func testArtifactStoreUpdates() error {
+func testArtifactStoreUpdates(ts *TestSuite) error {
 	// Create first test environment
 	cmd1 := exec.Command("./build/bin/forge", "test", "integration", "create")
 	cmd1.Env = os.Environ()
@@ -1645,14 +1845,14 @@ func testArtifactStoreUpdates() error {
 		return fmt.Errorf("failed to extract first testID")
 	}
 
-	defer cleanupTestEnv(testID1)
+	defer forceCleanupTestEnv(testID1)
 
 	// Create second test environment
 	cmd2 := exec.Command("./build/bin/forge", "test", "integration", "create")
 	cmd2.Env = os.Environ()
 	output2, err := cmd2.CombinedOutput()
 	if err != nil {
-		cleanupTestEnv(testID1)
+		forceCleanupTestEnv(testID1)
 		return fmt.Errorf("second create failed: %w\nOutput: %s", err, output2)
 	}
 
@@ -1661,7 +1861,7 @@ func testArtifactStoreUpdates() error {
 		return fmt.Errorf("failed to extract second testID")
 	}
 
-	defer cleanupTestEnv(testID2)
+	defer forceCleanupTestEnv(testID2)
 
 	// Verify both are in artifact store
 	if err := verifyArtifactStoreHasTestEnv(testID1); err != nil {
@@ -1675,7 +1875,7 @@ func testArtifactStoreUpdates() error {
 	return nil
 }
 
-func testArtifactStoreCleanup() error {
+func testArtifactStoreCleanup(ts *TestSuite) error {
 	// Create test environment
 	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
 	createCmd.Env = os.Environ()
@@ -1713,13 +1913,13 @@ func testArtifactStoreCleanup() error {
 
 // Phase 7: Error Handling Tests
 
-func testMissingBinaryError() error {
+func testMissingBinaryError(ts *TestSuite) error {
 	// This would require renaming a binary temporarily
 	// Skipped in registerAllTests
 	return fmt.Errorf("not implemented")
 }
 
-func testInvalidTestIDError() error {
+func testInvalidTestIDError(ts *TestSuite) error {
 	invalidID := "invalid-test-id-12345"
 
 	cmd := exec.Command("./build/bin/forge", "test", "integration", "get", invalidID)
@@ -1738,13 +1938,13 @@ func testInvalidTestIDError() error {
 	return nil
 }
 
-func testMissingEnvVarError() error {
+func testMissingEnvVarError(ts *TestSuite) error {
 	// This would require unsetting KIND_BINARY temporarily
 	// Skipped in registerAllTests
 	return fmt.Errorf("not implemented")
 }
 
-func testDeleteNonExistentError() error {
+func testDeleteNonExistentError(ts *TestSuite) error {
 	nonExistentID := "test-integration-20990101-deadbeef"
 
 	cmd := exec.Command("./build/bin/forge", "test", "integration", "delete", nonExistentID)
@@ -1766,7 +1966,7 @@ func testDeleteNonExistentError() error {
 
 // Phase 8: Cleanup Tests
 
-func testTmpDirCleanup() error {
+func testTmpDirCleanup(ts *TestSuite) error {
 	// Create test environment
 	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
 	createCmd.Env = os.Environ()
@@ -1804,7 +2004,7 @@ func testTmpDirCleanup() error {
 	return nil
 }
 
-func testManagedResourcesCleanup() error {
+func testManagedResourcesCleanup(ts *TestSuite) error {
 	// Create test environment
 	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
 	createCmd.Env = os.Environ()
@@ -1845,7 +2045,7 @@ func testManagedResourcesCleanup() error {
 
 // Phase 9: MCP Integration Tests
 
-func testMCPServerMode() error {
+func testMCPServerMode(ts *TestSuite) error {
 	// Start MCP server in background
 	cmd := exec.Command("./build/bin/forge-e2e", "--mcp")
 
@@ -1904,7 +2104,7 @@ func testMCPServerMode() error {
 
 // Phase 11: Performance Tests
 
-func testRapidCycle() error {
+func testRapidCycle(ts *TestSuite) error {
 	// Create and delete 3 test environments rapidly
 	for i := 0; i < 3; i++ {
 		// Create
@@ -1934,7 +2134,7 @@ func testRapidCycle() error {
 
 // Phase 4: Additional Test Runner Tests
 
-func testVerifyTagsRunner() error {
+func testVerifyTagsRunner(ts *TestSuite) error {
 	cmd := exec.Command("./build/bin/forge", "test", "verify-tags", "run")
 	cmd.Env = os.Environ()
 	output, _ := cmd.CombinedOutput() // May fail if no Go files have tags
@@ -1947,7 +2147,7 @@ func testVerifyTagsRunner() error {
 	return nil
 }
 
-func testAutoCreateEnv() error {
+func testAutoCreateEnv(ts *TestSuite) error {
 	// This test verifies that running integration tests without an environment auto-creates one
 	// Note: This behavior may not be implemented yet, so we test what forge actually does
 
@@ -1992,7 +2192,7 @@ func testAutoCreateEnv() error {
 
 // Phase 6: Additional Artifact Store Tests
 
-func testArtifactStoreConcurrentAccess() error {
+func testArtifactStoreConcurrentAccess(ts *TestSuite) error {
 	// Test that multiple create operations can safely write to artifact store concurrently
 	type result struct {
 		testID string
@@ -2037,7 +2237,7 @@ func testArtifactStoreConcurrentAccess() error {
 
 	// Cleanup
 	for _, testID := range testIDs {
-		defer cleanupTestEnv(testID)
+		defer forceCleanupTestEnv(testID)
 	}
 
 	// Check for errors
@@ -2057,7 +2257,7 @@ func testArtifactStoreConcurrentAccess() error {
 
 // Phase 7: Additional Error Handling Tests
 
-func testDuplicateEnvironmentError() error {
+func testDuplicateEnvironmentError(ts *TestSuite) error {
 	// Create an environment
 	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
 	createCmd.Env = os.Environ()
@@ -2071,7 +2271,7 @@ func testDuplicateEnvironmentError() error {
 		return fmt.Errorf("failed to extract testID")
 	}
 
-	defer cleanupTestEnv(testID)
+	defer forceCleanupTestEnv(testID)
 
 	// Try to create with same testID (if forge supports specifying testID)
 	// Note: Current implementation auto-generates testID, so this tests the actual behavior
@@ -2086,7 +2286,7 @@ func testDuplicateEnvironmentError() error {
 
 	testID2 := extractTestID(string(createOutput2))
 	if testID2 != "" {
-		defer cleanupTestEnv(testID2)
+		defer forceCleanupTestEnv(testID2)
 	}
 
 	// Verify they have different IDs
@@ -2097,7 +2297,7 @@ func testDuplicateEnvironmentError() error {
 	return nil
 }
 
-func testClusterExistsError() error {
+func testClusterExistsError(ts *TestSuite) error {
 	// Create an environment
 	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
 	createCmd.Env = os.Environ()
@@ -2111,7 +2311,7 @@ func testClusterExistsError() error {
 		return fmt.Errorf("failed to extract testID")
 	}
 
-	defer cleanupTestEnv(testID)
+	defer forceCleanupTestEnv(testID)
 
 	// Verify cluster exists
 	if err := verifyClusterExists(testID); err != nil {
@@ -2143,7 +2343,7 @@ func testClusterExistsError() error {
 	return nil
 }
 
-func testMalformedForgeYamlError() error {
+func testMalformedForgeYamlError(ts *TestSuite) error {
 	// This test would require temporarily modifying forge.yaml
 	// Skip for now as noted in registerAllTests
 	return fmt.Errorf("not implemented - requires forge.yaml manipulation")
@@ -2151,7 +2351,7 @@ func testMalformedForgeYamlError() error {
 
 // Phase 8: Additional Cleanup Tests
 
-func testPartialCleanupOnFailure() error {
+func testPartialCleanupOnFailure(ts *TestSuite) error {
 	// Test that if delete fails partway through, we still cleanup what we can
 	// Create a test environment
 	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
@@ -2206,7 +2406,7 @@ func testPartialCleanupOnFailure() error {
 	return nil
 }
 
-func testOldEnvironmentCleanup() error {
+func testOldEnvironmentCleanup(ts *TestSuite) error {
 	// Test that we can identify and cleanup old/stale test environments
 	// List all test environments
 	listCmd := exec.Command("./build/bin/forge", "test", "integration", "list")
@@ -2253,7 +2453,7 @@ func testOldEnvironmentCleanup() error {
 
 // Phase 9: Additional MCP Tests
 
-func testMCPRunToolCall() error {
+func testMCPRunToolCall(ts *TestSuite) error {
 	// Test calling the MCP run tool directly
 	// This would require setting up an MCP client, which is complex
 	// For now, we'll do a basic test of the tool interface
@@ -2318,7 +2518,7 @@ func testMCPRunToolCall() error {
 	return nil
 }
 
-func testMCPErrorPropagation() error {
+func testMCPErrorPropagation(ts *TestSuite) error {
 	// Test that errors from forge-e2e are properly propagated through MCP
 	// Start MCP server
 	cmd := exec.Command("./build/bin/forge-e2e", "--mcp")
@@ -2382,7 +2582,7 @@ func testMCPErrorPropagation() error {
 
 // Phase 11: Additional Performance Tests
 
-func testParallelOperations() error {
+func testParallelOperations(ts *TestSuite) error {
 	// Test running multiple operations in parallel
 	type result struct {
 		operation string
@@ -2409,7 +2609,7 @@ func testParallelOperations() error {
 			}
 
 			// Cleanup this environment
-			defer cleanupTestEnv(testID)
+			defer forceCleanupTestEnv(testID)
 
 			results <- result{operation: fmt.Sprintf("create-%d", idx)}
 		}(i)
@@ -2444,7 +2644,7 @@ func testParallelOperations() error {
 	return nil
 }
 
-func testLargeNumberOfEnvironments() error {
+func testLargeNumberOfEnvironments(ts *TestSuite) error {
 	// Test creating multiple environments (5) and verify they all work
 	const numEnvironments = 5
 	testIDs := make([]string, 0, numEnvironments)
@@ -2457,7 +2657,7 @@ func testLargeNumberOfEnvironments() error {
 		if err != nil {
 			// Cleanup any created environments
 			for _, tid := range testIDs {
-				cleanupTestEnv(tid)
+				forceCleanupTestEnv(tid)
 			}
 			return fmt.Errorf("create %d failed: %w\nOutput: %s", i, err, createOutput)
 		}
@@ -2466,7 +2666,7 @@ func testLargeNumberOfEnvironments() error {
 		if testID == "" {
 			// Cleanup
 			for _, tid := range testIDs {
-				cleanupTestEnv(tid)
+				forceCleanupTestEnv(tid)
 			}
 			return fmt.Errorf("failed to extract testID for environment %d", i)
 		}
@@ -2479,7 +2679,7 @@ func testLargeNumberOfEnvironments() error {
 		if err := verifyClusterExists(testID); err != nil {
 			// Cleanup all
 			for _, tid := range testIDs {
-				cleanupTestEnv(tid)
+				forceCleanupTestEnv(tid)
 			}
 			return fmt.Errorf("cluster verification failed for %s: %w", testID, err)
 		}
@@ -2491,7 +2691,7 @@ func testLargeNumberOfEnvironments() error {
 	if err != nil {
 		// Cleanup all
 		for _, tid := range testIDs {
-			cleanupTestEnv(tid)
+			forceCleanupTestEnv(tid)
 		}
 		return fmt.Errorf("list command failed: %w", err)
 	}
@@ -2501,7 +2701,7 @@ func testLargeNumberOfEnvironments() error {
 		if !strings.Contains(string(listOutput), testID) {
 			// Cleanup all
 			for _, tid := range testIDs {
-				cleanupTestEnv(tid)
+				forceCleanupTestEnv(tid)
 			}
 			return fmt.Errorf("testID %s not found in list output", testID)
 		}

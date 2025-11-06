@@ -19,6 +19,7 @@ engines:
       - engine: "go://testenv-kind"
       # spec:
       #   kubeconfigPath: .ignore.kindenv.kubeconfig.yaml
+
       - # -- localContainerRegistry will create if enabled a container registry in the kindenv using the kubeconfig which path
         #    is defined by {.kindenv.kubeconfigPath}.
         engine: "go://testenv-lcr"
@@ -33,19 +34,16 @@ engines:
           # caCrtPath: .ignore.ca.crt
           # -- namespace where the local container registry will be deployed.
           # namespace: local-container-registry
-      # TEMPORARILY DISABLED FOR E2E TESTING - helm timeout issues
-      # - # -- testenv-helm-install installs Helm charts into the Kind cluster
-      #   engine: "go://testenv-helm-install"
-      #   spec:
-      #     charts:
-      #       # Example: Install a simple nginx chart for testing
-      #       - name: bitnami/nginx
-      #         repo: https://charts.bitnami.com/bitnami
-      #         version: "15.4.0"
-      #         namespace: test-nginx
-      #         releaseName: test-nginx
-      #         values:
-      #           replicaCount: "1"
+
+      - # -- testenv-helm-install installs Helm charts into the Kind cluster
+        engine: "go://testenv-helm-install"
+        spec:
+          charts:
+            # Using a lightweight chart that actually exists
+            - name: podinfo/podinfo
+              repo: https://stefanprodan.github.io/podinfo
+              namespace: test-podinfo
+              releaseName: test-podinfo
 
 # -- test defines the test stages and their configuration
 test:
@@ -53,7 +51,6 @@ test:
   - name: verify-tags
     runner: "go://test-runner-go-verify-tags"
     # -- default value for setup is "go://test-report"
-    # setup: "go://test-report"
 
   # -- lint - linting as a test stage (no environment needed)
   - name: lint

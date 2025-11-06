@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/alexandremahdhaoui/forge/internal/cmdutil"
 )
 
 func TestExecuteCommand(t *testing.T) {
-	output := executeCommand(ExecuteInput{
+	output := cmdutil.ExecuteCommand(cmdutil.ExecuteInput{
 		Command: "echo",
 		Args:    []string{"hello", "world"},
 	})
@@ -25,7 +27,7 @@ func TestExecuteCommand(t *testing.T) {
 }
 
 func TestExecuteCommandWithEnv(t *testing.T) {
-	output := executeCommand(ExecuteInput{
+	output := cmdutil.ExecuteCommand(cmdutil.ExecuteInput{
 		Command: "sh",
 		Args:    []string{"-c", "echo $TEST_VAR"},
 		Env: map[string]string{
@@ -46,7 +48,7 @@ func TestExecuteCommandWithWorkDir(t *testing.T) {
 	// Create temp directory
 	tmpDir := t.TempDir()
 
-	output := executeCommand(ExecuteInput{
+	output := cmdutil.ExecuteCommand(cmdutil.ExecuteInput{
 		Command: "pwd",
 		WorkDir: tmpDir,
 	})
@@ -61,7 +63,7 @@ func TestExecuteCommandWithWorkDir(t *testing.T) {
 }
 
 func TestExecuteCommandFailure(t *testing.T) {
-	output := executeCommand(ExecuteInput{
+	output := cmdutil.ExecuteCommand(cmdutil.ExecuteInput{
 		Command: "command-that-does-not-exist-xyz123",
 	})
 
@@ -93,9 +95,9 @@ TEST_KEY4='single quoted'
 	}
 
 	// Load env file
-	envVars, err := loadEnvFile(envFile)
+	envVars, err := cmdutil.LoadEnvFile(envFile)
 	if err != nil {
-		t.Fatalf("loadEnvFile failed: %v", err)
+		t.Fatalf("LoadEnvFile failed: %v", err)
 	}
 
 	// Verify values
@@ -120,7 +122,7 @@ TEST_KEY4='single quoted'
 
 func TestLoadEnvFileNonExistent(t *testing.T) {
 	// Loading non-existent file should return empty map, not error
-	envVars, err := loadEnvFile("/path/that/does/not/exist/.envrc")
+	envVars, err := cmdutil.LoadEnvFile("/path/that/does/not/exist/.envrc")
 	if err != nil {
 		t.Errorf("Expected no error for non-existent file, got: %v", err)
 	}
@@ -148,9 +150,9 @@ KEY2=value2
 		t.Fatalf("Failed to create test .envrc: %v", err)
 	}
 
-	envVars, err := loadEnvFile(envFile)
+	envVars, err := cmdutil.LoadEnvFile(envFile)
 	if err != nil {
-		t.Fatalf("loadEnvFile failed: %v", err)
+		t.Fatalf("LoadEnvFile failed: %v", err)
 	}
 
 	if len(envVars) != 2 {

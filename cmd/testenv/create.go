@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -40,8 +41,20 @@ func cmdCreate(stageName string) (string, error) {
 	// Generate unique test ID
 	testID := generateTestID(stageName)
 
-	// Create tmpDir for this test environment
-	tmpDir := fmt.Sprintf("/tmp/forge-test-%s-%s", stageName, testID)
+	// Create tmpDir for this test environment in project's ./tmp directory
+	// Pattern: ./tmp/test-{stage}-{testID}
+	rootDir, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("failed to get working directory: %w", err)
+	}
+
+	tmpBase := filepath.Join(rootDir, "tmp")
+	if err := os.MkdirAll(tmpBase, 0o755); err != nil {
+		return "", fmt.Errorf("failed to create tmp base directory: %w", err)
+	}
+
+	// testID already includes "test-{stage}-{date}-{hash}", so just use it directly
+	tmpDir := filepath.Join(tmpBase, testID)
 	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create tmpDir: %w", err)
 	}
@@ -60,13 +73,66 @@ func cmdCreate(stageName string) (string, error) {
 	}
 
 	// Find the setup alias for this test stage
-	setupAlias := testSpec.Testenv
-	if setupAlias == "" {
+	setupSpec := testSpec.Testenv
+	if setupSpec == "" {
 		// No setup configured, just create the environment entry
 		fmt.Fprintf(os.Stderr, "No testenv configured for stage %s\n", stageName)
+	} else if strings.HasPrefix(setupSpec, "go://") {
+		// Direct engine URI (e.g., go://test-report)
+		// Call the engine's create tool directly
+		fmt.Fprintf(os.Stderr, "Setting up %s...\n", setupSpec)
+
+		binaryPath, err := resolveEngineURI(setupSpec)
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("failed to resolve engine %s: %w", setupSpec, err)
+		}
+
+		// Prepare parameters - test-report only needs stage, others need full params
+		params := map[string]any{
+			"stage": env.Name,
+		}
+
+		// For engines other than test-report, include full testenv parameters
+		if setupSpec != "go://test-report" {
+			params["testID"] = env.ID
+			params["tmpDir"] = env.TmpDir
+		}
+
+		result, err := callMCPEngine(binaryPath, "create", params)
+		if err != nil {
+			os.RemoveAll(tmpDir)
+			return "", fmt.Errorf("failed to create with %s: %w", setupSpec, err)
+		}
+
+		// Extract response from structured content
+		if resultMap, ok := result.(map[string]interface{}); ok {
+			if files, ok := resultMap["files"].(map[string]interface{}); ok {
+				for key, value := range files {
+					if strValue, ok := value.(string); ok {
+						env.Files[key] = strValue
+					}
+				}
+			}
+			if metadata, ok := resultMap["metadata"].(map[string]interface{}); ok {
+				for key, value := range metadata {
+					if strValue, ok := value.(string); ok {
+						env.Metadata[key] = strValue
+					}
+				}
+			}
+			if resources, ok := resultMap["managedResources"].([]interface{}); ok {
+				for _, resource := range resources {
+					if strResource, ok := resource.(string); ok {
+						env.ManagedResources = append(env.ManagedResources, strResource)
+					}
+				}
+			}
+		}
+		fmt.Fprintf(os.Stderr, "  ✓ %s setup complete\n", setupSpec)
 	} else {
-		// Strip "alias://" prefix if present
-		setupAlias = strings.TrimPrefix(setupAlias, "alias://")
+		// Alias reference (e.g., alias://setup-integration)
+		setupAlias := strings.TrimPrefix(setupSpec, "alias://")
 
 		// Orchestrate testenv-subengines
 		if err := orchestrateCreate(config, setupAlias, env); err != nil {

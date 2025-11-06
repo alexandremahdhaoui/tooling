@@ -18,8 +18,8 @@ func run(stage, name string) error {
 	// Use current directory as tmpDir for backward compatibility
 	tmpDir := "."
 
-	// Execute tests and generate report
-	report, junitFile, coverageFile, err := runTests(stage, name, tmpDir)
+	// Execute tests and generate report (no testenv for CLI mode)
+	report, junitFile, coverageFile, err := runTests(stage, name, tmpDir, nil)
 	if err != nil {
 		return fmt.Errorf("test execution failed: %w", err)
 	}
@@ -44,7 +44,8 @@ func run(stage, name string) error {
 }
 
 // runTests executes the test suite using gotestsum and returns a structured report along with artifact file paths.
-func runTests(stage, name, tmpDir string) (*TestReport, string, string, error) {
+// testEnv contains environment variables to pass to the test process (e.g., artifact file paths, metadata).
+func runTests(stage, name, tmpDir string, testEnv map[string]string) (*TestReport, string, string, error) {
 	startTime := time.Now()
 
 	// Generate output file paths in tmpDir
@@ -61,13 +62,20 @@ func runTests(stage, name, tmpDir string) (*TestReport, string, string, error) {
 		"-tags", stage,
 		"-race",
 		"-count=1",
-		"-short",
 		"-cover",
 		"-coverprofile", coverageFile,
 		"./...",
 	}
 
 	cmd := exec.Command("go", args...)
+
+	// Inherit current environment and add testenv variables
+	cmd.Env = os.Environ()
+	if testEnv != nil {
+		for key, value := range testEnv {
+			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
+		}
+	}
 
 	// Redirect test output to stderr so JSON report can go to stdout
 	cmd.Stdout = os.Stderr
