@@ -20,8 +20,7 @@ go build -o ./build/bin/build-go ./cmd/build-go
 go build -o ./build/bin/build-container ./cmd/build-container
 go build -o ./build/bin/kindenv ./cmd/kindenv
 go build -o ./build/bin/local-container-registry ./cmd/local-container-registry
-go build -o ./build/bin/test-go ./cmd/test-go
-go build -o ./build/bin/oapi-codegen-helper ./cmd/oapi-codegen-helper
+go build -o ./build/bin/test-runner-go ./cmd/test-runner-go
 
 # Run tests
 go test ./internal/enginetest -v
@@ -29,7 +28,7 @@ go test ./internal/enginetest -v
 
 ### Test Coverage
 
-The package tests all 7 engines:
+The package tests all engines:
 
 | Engine | Version Support | MCP Support |
 |--------|----------------|-------------|
@@ -38,13 +37,12 @@ The package tests all 7 engines:
 | build-container | ✅ | ✅ |
 | kindenv | ✅ | ❌ |
 | local-container-registry | ✅ | ❌ |
-| test-go | ✅ | ❌ |
-| oapi-codegen-helper | ✅ | ❌ |
+| test-runner-go | ✅ | ✅ |
 
 ## Test Functions
 
 ### `TestAllEnginesHaveVersionSupport`
-Tests that all 7 engines support version commands:
+Tests that all engines support version commands:
 - `tool version`
 - `tool --version`
 - `tool -v`
@@ -63,7 +61,7 @@ Tests that MCP engines (build-go, build-container) support MCP server mode:
 - Respond with JSON-RPC on stdout
 
 ### `TestEnginesList`
-Verifies that exactly 7 engines are configured in the test suite.
+Verifies that the expected number of engines are configured in the test suite.
 
 ### `TestMCPEnginesConfiguration`
 Verifies that the correct engines are configured to support MCP mode.

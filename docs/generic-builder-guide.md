@@ -647,10 +647,10 @@ build:
 
 # Test stages
 test:
-  # Unit tests (uses built-in runner)
+  # Unit tests (uses generic runner)
   - name: unit
     engine: "noop"
-    runner: go://test-runner-go
+    runner: go://generic-test-runner
 
   # Linting as test
   - name: lint
@@ -816,9 +816,9 @@ go run ./cmd/forge build generic-builder generic-test-runner
 
 ## Next Steps
 
-- Read [General Engine Implementation Guide](./engine-implementation-guide.md) for custom engines
-- Read [Test Runner Guide](./test-runner-guide.md) for advanced test patterns
-- See [Test Engine Guide](./test-engine-guide.md) for environment management
+- Read [Engine Implementation Guide](./prompts/create-build-engine.md) for custom engines
+- Read [Using Generic Test Runner](./prompts/use-generic-test-runner.md) for test patterns
+- See [Test Engine Guide](./prompts/create-test-engine.md) for environment management
 - Check `cmd/generic-builder` and `cmd/generic-test-runner` source code for implementation details
 
 ## Summary

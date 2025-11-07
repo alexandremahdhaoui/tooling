@@ -208,13 +208,13 @@ forge extracts artifactFiles:
     "testenv-lcr.credentials.yaml": "/tmp/forge-test-.../registry-credentials.yaml"
   }
   ↓
-forge calls test-runner-go via MCP:
+forge calls generic-test-runner via MCP:
   {
     id, stage, name,
     artifactFiles: {...}  ← Tests can access these files
   }
   ↓
-test-runner-go executes tests with full environment access
+generic-test-runner executes tests with full environment access
 ```
 
 ## Configuration
@@ -237,7 +237,7 @@ engines:
 # Reference alias in test stages
 test:
   - name: integration
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
     testenv: "alias://setup-integration"  # Uses the alias
 ```
 
@@ -358,8 +358,8 @@ Example: testenv-helm-install
 # Old forge.yaml
 test:
   - name: integration
-    runner: "go://test-runner-go"
-    setup: "go://test-integration"
+    runner: "go://generic-test-runner"
+    setup: "go://testenv"
 ```
 
 ### New Approach
@@ -374,7 +374,7 @@ engines:
 
 test:
   - name: integration
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
     testenv: "alias://setup-integration"
 ```
 

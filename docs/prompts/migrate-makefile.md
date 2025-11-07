@@ -37,24 +37,24 @@ Before proceeding, read these documentation files using `forge prompt get` or di
 
 **Essential Reading (in order)**:
 
-1. **Generic Engine Usage** (for simple tool wrapping):
+1. **Generic Builder Usage** (for simple tool wrapping):
    ```
-   https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/generic-engine-guide.md
+   docs/generic-builder-guide.md
    ```
 
 2. **Generic Test Runner** (for test/lint commands):
    ```
-   https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/prompts/use-generic-test-runner.md
+   docs/prompts/use-generic-test-runner.md
    ```
 
 3. **Custom Engine Implementation** (if you need custom logic):
    ```
-   https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/engine-implementation-guide.md
+   docs/prompts/create-build-engine.md
    ```
 
 4. **Test Engine Guide** (if you manage test environments):
    ```
-   https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/test-engine-guide.md
+   docs/prompts/create-test-engine.md
    ```
 
 ### Phase 3: Create forge.yaml Structure
@@ -99,7 +99,7 @@ test:
   # Unit tests (equivalent to: make test)
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   # Linting (equivalent to: make lint)
   - name: lint
@@ -203,11 +203,11 @@ test-integration:
 test:
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   - name: integration
-    engine: "go://test-integration"  # Manages test environment
-    runner: "go://test-runner-go"
+    engine: "go://testenv"  # Manages test environment
+    runner: "go://generic-test-runner"
 ```
 
 #### Pattern 5: Linting as Tests
@@ -249,12 +249,12 @@ build:
     engine: go://build-container
 ```
 
-Or with generic-engine:
+Or with generic-builder:
 
 ```yaml
 engines:
   - alias: docker-builder
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "docker"
       args: ["build", "-t", "myapp:latest", "."]
@@ -278,13 +278,13 @@ generate:
 ```yaml
 engines:
   - alias: go-generate
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "go"
       args: ["generate", "./..."]
 
   - alias: mockgen
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "mockgen"
       args: ["-source=interfaces.go", "-destination=mocks/mocks.go"]
@@ -314,12 +314,12 @@ setup:
 ```yaml
 engines:
   - alias: setup-script
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "./scripts/setup.sh"
 
   - alias: mod-download
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "go"
       args: ["mod", "download"]
@@ -357,7 +357,7 @@ If your Makefile has:
    ```
 
 2. **Write a Custom Engine**:
-   Read: `forge prompt get create-build-engine`
+   Read: `docs/prompts/create-build-engine.md`
 
    Custom engines give you full Go power for complex logic.
 
@@ -380,7 +380,7 @@ export AWS_ACCESS_KEY_ID=xxx
 ```yaml
 engines:
   - alias: deployer
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "./deploy.sh"
       envFile: ".envrc"
@@ -510,7 +510,7 @@ artifactStorePath: .forge/artifacts.yaml
 
 engines:
   - alias: formatter
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "gofmt"
       args: ["-l", "-w", "."]
@@ -534,7 +534,7 @@ build:
 test:
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   - name: lint
     engine: "noop"

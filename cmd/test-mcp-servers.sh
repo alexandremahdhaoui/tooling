@@ -34,7 +34,7 @@ TEST_REQUEST='{
     "name": "build",
     "arguments": {
       "name": "test-mcp-build",
-      "src": "./cmd/test-go",
+      "src": "./cmd/lint-go",
       "dest": "./build/bin",
       "engine": "go://build-go"
     }

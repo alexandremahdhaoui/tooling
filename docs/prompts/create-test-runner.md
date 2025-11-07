@@ -93,11 +93,11 @@ Your JSON output must match this structure:
 
 ### Step 1: Set Up Project Structure
 
-Start from the `test-runner-go` template:
+Start from the `generic-test-runner` template:
 
 ```bash
 # Copy the template
-cp -r cmd/test-runner-go cmd/<your-runner-name>
+cp -r cmd/generic-test-runner cmd/<your-runner-name>
 
 # Update the Name constant in main.go
 const Name = "<your-runner-name>"
@@ -267,7 +267,7 @@ func (r *TestRunner) createArtifactFiles() ([]string, error) {
 
 ### Step 6: Implement MCP Server
 
-Follow the pattern in `test-runner-go/mcp.go`:
+Follow the pattern in `generic-test-runner/mcp.go`:
 
 ```go
 func handleRunTool(ctx context.Context, req *mcp.CallToolRequest, input RunInput) (*mcp.CallToolResult, any, error) {
@@ -390,12 +390,11 @@ func runJestTests(stage string) (forge.TestStats, forge.Coverage, error) {
 
 ## Examples
 
-- **test-runner-go**: Reference implementation in `cmd/test-runner-go`
-- **generic-test-runner**: Simple exit-code-based runner in `cmd/generic-test-runner`
+- **generic-test-runner**: Reference implementation in `cmd/generic-test-runner`
 
 ## Need Help?
 
-- Review `cmd/test-runner-go` for a complete working example
+- Review `cmd/generic-test-runner` for a complete working example
 - Check the TestReport structure in `pkg/forge/artifact_store.go`
 - The forge CLI handles MCP communication - focus on test execution and parsing
 
@@ -1205,4 +1204,4 @@ Following this guide ensures your test runner integrates seamlessly with the for
 
 ## Reference Implementation
 
-See `cmd/test-runner-go` for a complete reference implementation using gotestsum for Go tests.
+See `cmd/generic-test-runner` for a complete reference implementation.

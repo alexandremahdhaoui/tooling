@@ -200,22 +200,19 @@ Test Runners (3):
 Test Management (1):
   ⚡ test-report          - Test report aggregator
 
-Code Quality (3):
+Code Quality (2):
   format-go              - Go code formatter
   lint-go                - Go linter wrapper
-  test-go                - Legacy Go test runner
 
-Code Generation (3):
+Code Generation (2):
   generate-mocks         - Mock generator
   generate-openapi-go    - OpenAPI code generator
-  oapi-codegen-helper    - OpenAPI codegen helper
 
 Orchestration (2):
   forge                  - Main CLI orchestrator
   forge-e2e              - Forge E2E tests
 
-Planning (2):
-  chart-prereq           - Helm chart dependencies
+Planning (1):
   ci-orchestrator        - CI/CD orchestration (planning phase)
 ```
 
@@ -1354,7 +1351,6 @@ The repository uses its own tools for building and testing itself.
 **Examples:**
 
 - `make build-binary` uses `cmd/build-binary`
-- `make test-go` uses `cmd/test-go`
 - `make test-e2e` uses `cmd/e2e` and `cmd/local-container-registry`
 
 **Benefits:**

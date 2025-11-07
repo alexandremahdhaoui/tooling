@@ -277,11 +277,10 @@ Generic-test-runner generates a TestReport:
 
 **Note**: generic-test-runner doesn't parse detailed test statistics - it only knows pass/fail based on exit code.
 
-## vs. Built-in Test Runners
+## vs. Custom Test Runners
 
 | Runner | Purpose | Features |
 |--------|---------|----------|
-| `go://test-runner-go` | Go unit tests | Parses JUnit XML, coverage, test stats |
 | `go://generic-test-runner` | Any command | Simple pass/fail, no parsing |
 | Custom runner | Complex logic | Full control, custom parsing |
 
@@ -306,7 +305,7 @@ artifactStorePath: .forge/artifacts.yaml
 engines:
   # Formatters (for build)
   - alias: go-fmt
-    engine: go://generic-engine
+    engine: go://generic-builder
     config:
       command: "gofmt"
       args: ["-l", "-w", "."]
@@ -347,10 +346,10 @@ build:
     engine: go://build-go
 
 test:
-  # Unit tests with built-in runner
+  # Unit tests with generic runner
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   # Linting
   - name: lint
@@ -492,8 +491,8 @@ For integration tests that need environments:
 test:
   # Integration tests with environment
   - name: integration
-    engine: "go://test-integration"  # Creates test environment
-    runner: "go://test-runner-go"    # Runs tests in that environment
+    engine: "go://testenv"  # Creates test environment
+    runner: "go://generic-test-runner"    # Runs tests in that environment
 
   # Linting (no environment needed)
   - name: lint
@@ -523,7 +522,7 @@ For simple pass/fail checks, generic-test-runner is perfect!
 
 ## Related Prompts
 
-- `forge prompt get use-generic-engine` - For build operations
+- `forge prompt get use-generic-builder` - For build operations
 - `forge prompt get create-test-runner` - Custom test runners
 - `forge prompt get migrate-makefile` - Migrate from Makefile
 

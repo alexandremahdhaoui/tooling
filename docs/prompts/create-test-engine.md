@@ -222,7 +222,7 @@ Follow the pattern in `testenv/mcp.go`:
 test:
   - name: integration
     engine: go://<your-engine-name>
-    runner: go://test-runner-go
+    runner: go://generic-test-runner
 ```
 
 ## Best Practices
@@ -269,7 +269,6 @@ forge test list
 ## Examples
 
 - **testenv**: Reference implementation in `cmd/testenv`
-- **kindenv**: Manages Kind Kubernetes clusters in `cmd/kindenv`
 
 ## Need Help?
 
@@ -944,7 +943,7 @@ Add to `forge.yaml`:
 test:
   - name: integration
     engine: "go://github.com/myorg/my-test-engine"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 ```
 
 Test via forge:
@@ -956,7 +955,7 @@ forge test integration list
 
 ## Reference Implementation
 
-See `cmd/test-integration` for a complete reference implementation that manages integration test environments.
+See `cmd/testenv` for a complete reference implementation that manages test environments.
 
 ## Common Patterns
 

@@ -64,10 +64,10 @@ Test stages configuration. See [Test Configuration](#test-configuration).
 test:
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
   - name: integration
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 ```
 
 #### `oapiCodegenHelper` (OAPICodegenHelper, optional)
@@ -414,15 +414,15 @@ List of test stages. Each stage can have its own environment and runner.
 test:
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   - name: integration
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   - name: e2e
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   - name: lint
     engine: "noop"
@@ -484,15 +484,13 @@ Test runner engine URI specifying which test runner to use.
 **Format:** `<protocol>://<runner-name>`
 
 **Available Runners:**
-- `"go://test-runner-go"` - Go test runner with JUnit/coverage
-- `"go://lint-go"` - Golangci-lint runner
-- `"go://test-runner-go-verify-tags"` - Verify build tags on test files
 - `"go://generic-test-runner"` - Execute arbitrary commands as tests
+- `"go://lint-go"` - Golangci-lint runner
 
 **Example:**
 ```yaml
-# Run Go tests
-runner: "go://test-runner-go"
+# Execute arbitrary commands as tests
+runner: "go://generic-test-runner"
 
 # Run linter
 runner: "go://lint-go"
@@ -505,7 +503,7 @@ runner: "go://lint-go"
 ```yaml
 - name: unit
   engine: "noop"
-  runner: "go://test-runner-go"
+  runner: "go://generic-test-runner"
 ```
 
 **Usage:**
@@ -523,7 +521,7 @@ forge test unit run
 ```yaml
 - name: integration
   engine: "go://testenv"
-  runner: "go://test-runner-go"
+  runner: "go://generic-test-runner"
 ```
 
 **Usage:**
@@ -609,17 +607,17 @@ test:
   # Unit tests - no environment needed
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   # Integration tests - full test environment
   - name: integration
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   # E2E tests
   - name: e2e
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://generic-test-runner"
 
   # Linting
   - name: lint

@@ -109,11 +109,11 @@ forge --help
 - **MCP-Based Architecture**: 11 specialized MCP server engines for extensibility
 - **Test Environment Management**: Automated Kind clusters with TLS-enabled registries
 - **Artifact Tracking**: Automatic versioning with git commit SHAs
-- **21 CLI Tools**: From code generation to E2E testing
+- **18 CLI Tools**: From code generation to E2E testing
 
 ## Available Tools
 
-All 21 tools categorized by function. Tools marked ⚡ provide MCP servers.
+All 18 tools categorized by function. Tools marked ⚡ provide MCP servers.
 
 ### Build Tools (3)
 - ⚡ `build-go` - Go binary builder with git versioning
@@ -130,20 +130,16 @@ All 21 tools categorized by function. Tools marked ⚡ provide MCP servers.
 - ⚡ `generic-test-runner` - Execute any command as test
 - ⚡ `test-report` - Test report management
 
-### Code Quality (3)
+### Code Quality (2)
 - `format-go` - Go code formatter (gofumpt)
 - `lint-go` - Go linter (golangci-lint)
-- `test-go` - Legacy Go test runner
 
-### Code Generation (3)
+### Code Generation (2)
 - `generate-mocks` - Mock generator (mockery)
 - `generate-openapi-go` - OpenAPI code generator
-- `oapi-codegen-helper` - OpenAPI codegen helper
 
-### Orchestration (4)
+### Orchestration (2)
 - `forge` - Main CLI orchestrator
-- `forge-e2e` - Forge end-to-end tests
-- `chart-prereq` - Helm chart prerequisites
 - `ci-orchestrator` - CI/CD orchestration (planning)
 
 ## Configuration: forge.yaml
@@ -328,7 +324,7 @@ go test ./...
 
 ### Project Statistics
 
-- **21 CLI tools** across build, test, and code generation
+- **18 CLI tools** across build, test, and code generation
 - **11 MCP server** implementations
 - **5 public packages** for reusable functionality
 - **123 Go source files** with comprehensive tests

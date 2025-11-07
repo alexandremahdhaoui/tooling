@@ -330,12 +330,7 @@ if [ $MCP_COUNT -ne $MCP_DOCS ]; then
   echo "⚠️  DRIFT: Missing MCP.md files"
 fi
 
-# Check 3: Old names still present
-if grep -r "test-integration\|kindenv\|local-container-registry" --include="*.md" . 2>/dev/null | grep -v ".git" | grep -v "keeping-docs-up-to-date" | grep -v "Old Names"; then
-  echo "⚠️  DRIFT: Outdated binary names found"
-fi
-
-# Check 4: Code file count vs documented
+# Check 3: Code file count vs documented
 GO_FILES=$(find . -name "*.go" -not -path "./vendor/*" | wc -l)
 echo "Go files: $GO_FILES (documented: 123)"
 
@@ -539,9 +534,6 @@ find . -name "README.md" -not -path "./vendor/*"
 
 # Find all prompts
 ls docs/prompts/
-
-# Check for old names (should return nothing except this file)
-grep -r "test-integration\|kindenv\|local-container-registry" --include="*.md" . | grep -v keeping-docs-up-to-date
 ```
 
 ### Validation Commands
@@ -623,11 +615,11 @@ grep -r "generic-engine" --include="*.md" . | grep -v ".git"
 **Code Change**: Added `artifactFiles` field to `TestReport` struct
 
 **Documentation Updates**:
-1. ✅ Updated `cmd/test-runner-go/MCP.md` - output schema includes new field
+1. ✅ Updated `cmd/generic-test-runner/MCP.md` - output schema includes new field
 2. ✅ Updated `cmd/test-report/MCP.md` - get/list output includes field
 3. ✅ Updated `ARCHITECTURE.md` - TestEnvironment example shows field
 4. ✅ Updated `docs/forge-test-usage.md` - example output includes field
-5. ✅ Updated `docs/test-runner-guide.md` - documented field purpose
+5. ✅ Updated `docs/prompts/use-generic-test-runner.md` - documented field purpose
 
 **Verification**:
 - Checked all TestReport struct examples match new fields

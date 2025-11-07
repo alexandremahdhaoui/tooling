@@ -112,22 +112,22 @@ func TestBuildSingleArtifact(t *testing.T) {
 	}
 
 	// Clean up test binary
-	testBinPath := "./build/bin/test-go"
+	testBinPath := "./build/bin/lint-go"
 	_ = os.Remove(testBinPath)
 
-	// Build only test-go
-	cmd := exec.Command(forgeBin, "build", "test-go")
+	// Build only lint-go
+	cmd := exec.Command(forgeBin, "build", "lint-go")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("forge build test-go failed: %v\nOutput: %s", err, string(output))
+		t.Fatalf("forge build lint-go failed: %v\nOutput: %s", err, string(output))
 	}
 
-	// Verify test-go binary exists
+	// Verify lint-go binary exists
 	if _, err := os.Stat(testBinPath); os.IsNotExist(err) {
-		t.Fatal("test-go binary was not built")
+		t.Fatal("lint-go binary was not built")
 	}
 
-	t.Log("Successfully built single artifact: test-go")
+	t.Log("Successfully built single artifact: lint-go")
 }
 
 func TestBuildNonexistentArtifact(t *testing.T) {
@@ -246,10 +246,10 @@ func TestBuildSingleArtifactDoesNotRunFormatter(t *testing.T) {
 	}
 
 	// Build only one specific binary
-	cmd := exec.Command(forgeBin, "build", "test-go")
+	cmd := exec.Command(forgeBin, "build", "lint-go")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("forge build test-go failed: %v\nOutput: %s", err, string(output))
+		t.Fatalf("forge build lint-go failed: %v\nOutput: %s", err, string(output))
 	}
 
 	outputStr := string(output)
@@ -257,7 +257,7 @@ func TestBuildSingleArtifactDoesNotRunFormatter(t *testing.T) {
 
 	// When building a specific artifact that's not format-code, the formatter should not run
 	// (unless format-code is explicitly requested or the spec filtering includes it)
-	// Since we're building "test-go" and format-code has name "format-code", it won't match
+	// Since we're building "lint-go" and format-code has name "format-code", it won't match
 	formatCount := countOccurrences(outputStr, "go://format-go")
 	if formatCount > 0 {
 		t.Log("Note: formatter ran even for single artifact build - this is expected if format-code is always processed first")

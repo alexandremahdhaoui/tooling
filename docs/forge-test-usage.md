@@ -507,6 +507,6 @@ See `.ai/plan/test-command-refactor/examples.md` for more comprehensive examples
 ## Reference
 
 - **Test Engine Guide**: [`docs/prompts/create-test-engine.md`](./prompts/create-test-engine.md)
-- **Test Runner Guide**: [`docs/prompts/create-test-runner.md`](./prompts/create-test-runner.md)
+- **Generic Test Runner Guide**: [`docs/prompts/use-generic-test-runner.md`](./prompts/use-generic-test-runner.md)
 - **Architecture**: [ARCHITECTURE.md](../ARCHITECTURE.md#test-infrastructure)
-- **Reference Implementation**: `cmd/testenv`, `cmd/test-runner-go`
+- **Reference Implementation**: `cmd/testenv`, `cmd/generic-test-runner`

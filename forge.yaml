@@ -101,10 +101,6 @@ build:
     src: ./cmd/testenv-helm-install
     dest: ./build/bin
     engine: go://build-go
-  - name: test-go
-    src: ./cmd/test-go
-    dest: ./build/bin
-    engine: go://build-go
   - name: test-runner-go
     src: ./cmd/test-runner-go
     dest: ./build/bin
@@ -151,10 +147,6 @@ build:
     engine: go://build-go
   - name: ci-orchestrator
     src: ./cmd/ci-orchestrator
-    dest: ./build/bin
-    engine: go://build-go
-  - name: oapi-codegen-helper
-    src: ./cmd/oapi-codegen-helper
     dest: ./build/bin
     engine: go://build-go
 

@@ -45,7 +45,7 @@ func init() {
 // callMCPEngine calls an MCP engine with the specified tool and parameters.
 // It spawns the engine process with --mcp flag, sets up stdio transport, and calls the tool.
 func callMCPEngine(binaryPath string, toolName string, params interface{}) (interface{}, error) {
-	// Create command to spawn MCP server
+	// Create command to spawn MCP server (without context to avoid premature termination)
 	cmd := exec.Command(binaryPath, "--mcp")
 
 	// Inherit environment variables from parent process
@@ -66,10 +66,9 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 		Command: cmd,
 	}
 
-	// Connect to the MCP server with timeout
-	// Use 5 minutes for operations that may involve cluster creation/deletion
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	// Use a background context for connection (let the tool timeout internally)
+	// The MCP server itself will handle timeouts for operations
+	ctx := context.Background()
 
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
@@ -88,14 +87,18 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 		arguments = params.(map[string]any)
 	}
 
-	// Call the tool with the same timeout context
-	result, err := session.CallTool(ctx, &mcp.CallToolParams{
+	// Call the tool with a timeout context
+	// Use 6 minutes to allow for helm's internal 3-4 minute timeout + buffer
+	toolCtx, cancel := context.WithTimeout(context.Background(), 6*time.Minute)
+	defer cancel()
+
+	result, err := session.CallTool(toolCtx, &mcp.CallToolParams{
 		Name:      toolName,
 		Arguments: arguments,
 	})
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("MCP tool call timed out after 5 minutes: %w", err)
+		if toolCtx.Err() == context.DeadlineExceeded {
+			return nil, fmt.Errorf("MCP tool call timed out after 6 minutes: %w", err)
 		}
 		return nil, fmt.Errorf("MCP tool call failed: %w", err)
 	}

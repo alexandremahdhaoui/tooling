@@ -65,8 +65,8 @@ func TestEnginesList(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	engines := enginetest.AllEngines(repoRoot)
 
-	if len(engines) != 14 {
-		t.Errorf("Expected 14 engines, got %d", len(engines))
+	if len(engines) != 12 {
+		t.Errorf("Expected 12 engines, got %d", len(engines))
 	}
 
 	expectedEngines := map[string]bool{
@@ -75,8 +75,6 @@ func TestEnginesList(t *testing.T) {
 		"build-container":          true,
 		"kindenv":                  true,
 		"local-container-registry": true,
-		"test-go":                  true,
-		"oapi-codegen-helper":      true,
 		"test-runner-go":           true,
 		"test-integration":         true,
 		"format-go":                true,
