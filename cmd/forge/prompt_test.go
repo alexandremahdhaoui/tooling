@@ -231,6 +231,41 @@ func TestPromptGet_LocalFile(t *testing.T) {
 	}
 }
 
+// TestPromptList_AllPromptsExist verifies that all prompts in prompt-list.yaml
+// reference files that actually exist in ./docs/prompts/
+func TestPromptList_AllPromptsExist(t *testing.T) {
+	// Read the prompt-list.yaml file
+	promptListPath := filepath.Join("..", "..", "docs", "prompt-list.yaml")
+	content, err := os.ReadFile(promptListPath)
+	if err != nil {
+		t.Fatalf("Failed to read prompt-list.yaml: %v", err)
+	}
+
+	// Parse the YAML
+	var store PromptStore
+	if err := yaml.Unmarshal(content, &store); err != nil {
+		t.Fatalf("Failed to parse prompt-list.yaml: %v", err)
+	}
+
+	// Check each prompt file exists
+	promptsDir := filepath.Join("..", "..", "docs", "prompts")
+	var missingFiles []string
+
+	for _, prompt := range store.Prompts {
+		promptPath := filepath.Join(promptsDir, prompt.URL)
+		if _, err := os.Stat(promptPath); os.IsNotExist(err) {
+			missingFiles = append(missingFiles, prompt.URL)
+			t.Errorf("Prompt '%s' references non-existent file: %s", prompt.Name, prompt.URL)
+		}
+	}
+
+	if len(missingFiles) > 0 {
+		t.Fatalf("Found %d prompts referencing non-existent files: %v", len(missingFiles), missingFiles)
+	}
+
+	t.Logf("Verified %d prompts - all files exist", len(store.Prompts))
+}
+
 // contains checks if a string contains a substring
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) && findSubstring(s, substr))
