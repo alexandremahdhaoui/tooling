@@ -73,6 +73,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "docs":
+		if err := runDocs(cmdArgs); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "config":
 		if err := runConfig(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -125,6 +130,7 @@ Commands:
   test <stage> <operation>           Manage test environments
   test-all                           Build all artifacts and run all test stages
   prompt <list|get> [name]           Fetch documentation prompts
+  docs <list|get> [name]             Fetch project documentation
   config <subcommand>                Configuration management
   version                            Show version information
 
@@ -145,6 +151,10 @@ Test All:
 Prompts:
   prompt list                        List all available prompts
   prompt get <name>                  Fetch a specific prompt
+
+Docs:
+  docs list                          List all available documentation
+  docs get <name>                    Fetch a specific document
 
 Config:
   config validate [path]             Validate forge.yaml configuration

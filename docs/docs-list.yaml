@@ -1,0 +1,76 @@
+# Forge Documentation Store
+# This file contains a list of available documentation that can be fetched using `forge docs get <name>`
+
+version: "1.0"
+baseURL: "https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main"
+
+docs:
+  # Architecture and Design
+  - name: "architecture"
+    title: "Forge Architecture"
+    description: "Comprehensive overview of forge architecture, design patterns, and components"
+    url: "ARCHITECTURE.md"
+    tags: ["architecture", "design", "overview"]
+
+  - name: "testenv-architecture"
+    title: "Test Environment Architecture"
+    description: "Design and architecture of the test environment system"
+    url: "docs/testenv-architecture.md"
+    tags: ["architecture", "testenv", "design"]
+
+  # User Guides and Usage
+  - name: "readme"
+    title: "Forge README"
+    description: "Main project overview and getting started guide"
+    url: "README.md"
+    tags: ["getting-started", "overview"]
+
+  - name: "forge-usage"
+    title: "Forge Command Reference"
+    description: "Complete forge command-line interface reference and usage guide"
+    url: "docs/forge-usage.md"
+    tags: ["usage", "cli", "reference", "commands"]
+
+  - name: "forge-test-usage"
+    title: "Forge Test System Usage"
+    description: "Guide to using forge's test system including test runners and environments"
+    url: "docs/forge-test-usage.md"
+    tags: ["usage", "testing", "test-runner"]
+
+  - name: "testenv-quick-start"
+    title: "Test Environment Quick Start"
+    description: "Quick start guide for setting up and using test environments"
+    url: "docs/testenv-quick-start.md"
+    tags: ["testenv", "quick-start", "getting-started"]
+
+  - name: "forge-schema"
+    title: "forge.yaml Schema Reference"
+    description: "Complete field-by-field documentation of forge.yaml configuration"
+    url: "docs/forge-schema.md"
+    tags: ["reference", "schema", "configuration"]
+
+  # Development Guides
+  - name: "generic-builder-guide"
+    title: "Generic Builder Development Guide"
+    description: "Guide for using and extending the generic builder"
+    url: "docs/generic-builder-guide.md"
+    tags: ["development", "generic-builder", "build"]
+
+  - name: "doc-convention"
+    title: "Documentation Conventions"
+    description: "Standards and conventions for writing documentation in the forge project"
+    url: "docs/doc-convention.md"
+    tags: ["development", "documentation", "conventions"]
+
+  - name: "keeping-docs-up-to-date"
+    title: "Documentation Maintenance Guide"
+    description: "Guide for maintaining and updating forge documentation"
+    url: "docs/keeping-docs-up-to-date.md"
+    tags: ["development", "documentation", "maintenance"]
+
+  # Reference Documentation
+  - name: "built-in-tools"
+    title: "Built-in Tools Reference"
+    description: "Reference guide for all built-in forge tools and engines"
+    url: "docs/built-in-tools.md"
+    tags: ["reference", "tools", "engines"]
