@@ -13,13 +13,15 @@ This document provides a comprehensive reference for all built-in forge tools/en
 
 ## Overview
 
-Forge includes 18 built-in tools organized into categories:
+Forge includes 17 built-in tools/engines organized into categories:
 - **4 Build Engines** - For building binaries and containers
 - **5 Test Runners** - For executing tests
 - **4 Test Environment Tools** - For managing test infrastructure
-- **5 Utility Tools** - For code quality and generation
+- **4 Utility Tools** - For code quality, generation, and management
 
 All tools are MCP servers and can be used directly via their `go://` URI or wrapped in engine aliases for customization.
+
+**Note:** This document covers the 17 built-in engines that forge orchestrates. The forge CLI itself (the 18th tool) is the orchestrator and is documented separately in [forge-usage.md](./forge-usage.md) and [cmd/forge/MCP.md](../cmd/forge/MCP.md).
 
 ## Build Engines
 

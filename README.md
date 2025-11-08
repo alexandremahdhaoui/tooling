@@ -113,7 +113,7 @@ forge --help
 ## Core Features
 
 - **Unified Build System**: One `forge.yaml` for all artifacts (binaries, containers)
-- **MCP-First Architecture**: The forge CLI and all 11 build/test engines are MCP servers, providing native AI agent integration
+- **MCP-First Architecture**: The forge CLI and all 17 engines are MCP servers, providing native AI agent integration
 - **Test Environment Management**: Automated Kind clusters with TLS-enabled registries
 - **Artifact Tracking**: Automatic versioning with git commit SHAs
 - **18 CLI Tools**: From code generation to E2E testing
@@ -138,15 +138,16 @@ All 18 tools categorized by function. Tools marked ⚡ provide MCP servers.
 - ⚡ `test-report` - Test report management
 
 ### Code Quality (2)
-- `format-go` - Go code formatter (gofumpt)
-- `lint-go` - Go linter (golangci-lint)
+- ⚡ `format-go` - Go code formatter (gofumpt)
+- ⚡ `lint-go` - Go linter (golangci-lint)
 
 ### Code Generation (2)
-- `generate-mocks` - Mock generator (mockery)
-- `generate-openapi-go` - OpenAPI code generator
+- ⚡ `generate-mocks` - Mock generator (mockery)
+- ⚡ `generate-openapi-go` - OpenAPI code generator
 
-### Orchestration (2)
+### Orchestration (3)
 - ⚡ `forge` - Main CLI orchestrator (also an MCP server)
+- ⚡ `forge-e2e` - End-to-end test runner for forge itself
 - `ci-orchestrator` - CI/CD orchestration (planning)
 
 ## Configuration: forge.yaml
@@ -285,6 +286,7 @@ For complete architecture details, design patterns, and component descriptions, 
 - **[Test Usage Guide](./docs/forge-test-usage.md)** - Test system usage patterns
 - **[Test Environment Guide](./docs/testenv-quick-start.md)** - Quick start for test environments
 - **[Generic Builder Guide](./docs/generic-builder-guide.md)** - Custom build commands
+- **[Troubleshooting Guide](./docs/troubleshooting.md)** - Common issues and solutions
 
 ### Architecture Documentation
 - **[Architecture Overview](./ARCHITECTURE.md)** - System architecture and design patterns
@@ -332,7 +334,7 @@ go test ./...
 ### Project Statistics
 
 - **18 CLI tools** across build, test, and code generation
-- **11 MCP server** implementations
+- **18 MCP servers** (17 functional + 1 planned)
 - **5 public packages** for reusable functionality
 - **123 Go source files** with comprehensive tests
 - **Go 1.24.1** with modern dependency management

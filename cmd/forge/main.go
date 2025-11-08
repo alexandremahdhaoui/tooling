@@ -18,6 +18,9 @@ var (
 // versionInfo holds forge's version information
 var versionInfo *version.Info
 
+// configPath is the path to the forge.yaml file
+var configPath string
+
 func init() {
 	versionInfo = version.New("forge")
 	versionInfo.Version = Version
@@ -31,7 +34,17 @@ func main() {
 		os.Exit(1)
 	}
 
-	command := os.Args[1]
+	// Parse global flags
+	args := os.Args[1:]
+	args = parseGlobalFlags(args)
+
+	if len(args) < 1 {
+		printUsage()
+		os.Exit(1)
+	}
+
+	command := args[0]
+	cmdArgs := args[1:]
 
 	switch command {
 	case "--mcp":
@@ -41,27 +54,27 @@ func main() {
 			os.Exit(1)
 		}
 	case "build":
-		if err := runBuild(os.Args[2:]); err != nil {
+		if err := runBuild(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	case "test":
-		if err := runTest(os.Args[2:]); err != nil {
+		if err := runTest(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	case "test-all":
-		if err := runTestAll(os.Args[2:]); err != nil {
+		if err := runTestAll(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	case "prompt":
-		if err := runPrompt(os.Args[2:]); err != nil {
+		if err := runPrompt(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
 	case "config":
-		if err := runConfig(os.Args[2:]); err != nil {
+		if err := runConfig(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -76,33 +89,67 @@ func main() {
 	}
 }
 
+// parseGlobalFlags parses global flags like --config and returns remaining args
+func parseGlobalFlags(args []string) []string {
+	result := make([]string, 0, len(args))
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		if arg == "--config" {
+			if i+1 >= len(args) {
+				fmt.Fprintf(os.Stderr, "Error: --config requires a path argument\n")
+				os.Exit(1)
+			}
+			configPath = args[i+1]
+			i++ // Skip the next argument (the path)
+		} else {
+			result = append(result, arg)
+		}
+	}
+
+	return result
+}
+
 func printUsage() {
 	fmt.Println(`forge - A build orchestration tool
 
 Usage:
-  forge build [artifact-name]         Build artifacts from forge.yaml
-  forge test <stage> <operation>      Manage test environments
-  forge test-all                      Build all artifacts and run all test stages
-  forge prompt <list|get> [name]      Fetch documentation prompts
-  forge config <subcommand>           Configuration management
-  forge version                       Show version information
+  forge [--config <path>] <command> [args...]
+
+Global Flags:
+  --config <path>                    Use custom forge.yaml path (default: forge.yaml)
 
 Commands:
-  build                              Build all artifacts
+  build [artifact-name]              Build all artifacts
+  test <stage> <operation>           Manage test environments
+  test-all                           Build all artifacts and run all test stages
+  prompt <list|get> [name]           Fetch documentation prompts
+  config <subcommand>                Configuration management
+  version                            Show version information
 
+Build:
+  build                              Build all artifacts from forge.yaml
+  build <artifact-name>              Build specific artifact
+
+Test:
   test <stage> create                Create test environment for stage
   test <stage> get <id>              Get test environment details
   test <stage> delete <id>           Delete test environment
   test <stage> list                  List test environments for stage
   test <stage> run [test-id]         Run tests for stage
 
+Test All:
   test-all                           Build all artifacts and run all test stages sequentially
 
+Prompts:
   prompt list                        List all available prompts
   prompt get <name>                  Fetch a specific prompt
 
+Config:
   config validate [path]             Validate forge.yaml configuration
 
+Other:
   version                            Show version information
   help                               Show this help message`)
 }

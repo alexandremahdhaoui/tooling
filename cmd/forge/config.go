@@ -6,8 +6,11 @@ import (
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
-// loadConfig loads the forge configuration from forge.yaml.
+// loadConfig loads the forge configuration from forge.yaml or custom path.
 func loadConfig() (forge.Spec, error) {
+	if configPath != "" {
+		return forge.ReadSpecFromPath(configPath)
+	}
 	return forge.ReadSpec()
 }
 

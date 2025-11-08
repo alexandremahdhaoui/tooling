@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
@@ -41,7 +42,9 @@ func resolveEngineAlias(alias string, spec *forge.Spec) (string, error) {
 			return "", fmt.Errorf("builder alias %s has no builder engines configured", alias)
 		}
 		if len(config.Builder) > 1 {
-			return "", fmt.Errorf("builder alias %s has multiple engines (not yet supported in simple resolution)", alias)
+			// Multi-engine builder: signal to caller that orchestration is needed
+			// Return the alias URI so caller can detect and use orchestrator
+			return "alias://" + alias, nil
 		}
 		return config.Builder[0].Engine, nil
 	}
@@ -52,7 +55,9 @@ func resolveEngineAlias(alias string, spec *forge.Spec) (string, error) {
 			return "", fmt.Errorf("test-runner alias %s has no test runner engines configured", alias)
 		}
 		if len(config.TestRunner) > 1 {
-			return "", fmt.Errorf("test-runner alias %s has multiple engines (not yet supported in simple resolution)", alias)
+			// Multi-engine test-runner: signal to caller that orchestration is needed
+			// Return the alias URI so caller can detect and use orchestrator
+			return "alias://" + alias, nil
 		}
 		return config.TestRunner[0].Engine, nil
 	}
@@ -76,6 +81,12 @@ func resolveEngine(engineURI string, spec *forge.Spec) (string, error) {
 		resolvedURI, err := resolveEngineAlias(aliasName, spec)
 		if err != nil {
 			return "", err
+		}
+
+		// If resolvedURI is still an alias, it's a multi-engine alias
+		// Return it as-is so the caller can use orchestration
+		if strings.HasPrefix(resolvedURI, "alias://") {
+			return resolvedURI, nil
 		}
 
 		// Recursively parse the resolved URI (it should be go://)

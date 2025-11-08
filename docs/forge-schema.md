@@ -68,7 +68,53 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 Custom engine configurations with aliases. Allows you to create reusable engine configurations with custom parameters.
 
-**Example:**
+**Engine Types:**
+- `builder` - Multi-step build orchestration
+- `test-runner` - Multi-suite test orchestration
+- `testenv` - Test environment setup
+
+**Multi-Engine Orchestration:**
+
+Forge supports executing multiple engines sequentially within a single alias. This enables:
+- **Sequential Execution**: Engines run in order, one after another
+- **Fail-Fast**: Stops on first failure
+- **Result Aggregation**: Combines outputs (artifacts for builders, test reports for test-runners)
+- **Config Injection**: Each engine gets its own `spec` configuration
+
+**Example: Multi-Step Builder**
+```yaml
+engines:
+  - alias: generate-all
+    type: builder
+    builder:
+      - engine: "go://generic-builder"
+        spec:
+          command: "go"
+          args: ["mod", "tidy"]
+      - engine: "go://generic-builder"
+        spec:
+          command: "go"
+          args: ["generate", "./..."]
+      - engine: "go://generic-builder"
+        spec:
+          command: "controller-gen"
+          args: ["object:headerFile=./hack/boilerplate.go.txt", "paths=./..."]
+```
+
+**Example: Multi-Suite Test Runner**
+```yaml
+engines:
+  - alias: comprehensive-tests
+    type: test-runner
+    testRunner:
+      - engine: "go://test-runner-go"
+        spec:
+          args: ["-tags=unit"]
+      - engine: "go://test-runner-go-verify-tags"
+      - engine: "go://lint-go"
+```
+
+**Example: Multi-Step Test Environment**
 ```yaml
 engines:
   - alias: setup-integration
@@ -81,7 +127,21 @@ engines:
           autoPushImages: true
 ```
 
-See [Engine Configuration](#engine-configuration) for details.
+**Usage:**
+```yaml
+build:
+  - name: generated-code
+    src: .
+    dest: .
+    engine: alias://generate-all
+
+test:
+  - name: comprehensive
+    runner: alias://comprehensive-tests
+  - name: integration
+    testenv: alias://setup-integration
+    runner: go://test-runner-go
+```
 
 #### `build` (array of BuildSpec, required)
 

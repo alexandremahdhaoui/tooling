@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/alexandremahdhaoui/forge/internal/orchestrate"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
@@ -79,71 +80,111 @@ func runBuild(args []string) error {
 			return fmt.Errorf("failed to resolve engine %s: %w", engineURI, err)
 		}
 
-		// Get engine config if this is an alias
-		var engineConfig *forge.EngineConfig
-		if strings.HasPrefix(engineURI, "alias://") {
-			aliasName := strings.TrimPrefix(engineURI, "alias://")
-			engineConfig = getEngineConfig(aliasName, &config)
-		}
+		// Check if this is a multi-engine alias (binaryPath still contains "alias://")
+		var artifacts []forge.Artifact
+		if strings.HasPrefix(binaryPath, "alias://") {
+			// Multi-engine builder - use orchestrator
+			aliasName := strings.TrimPrefix(binaryPath, "alias://")
+			engineConfig := getEngineConfig(aliasName, &config)
+			if engineConfig == nil {
+				return fmt.Errorf("engine alias not found: %s", aliasName)
+			}
 
-		// Inject directories into all specs
-		for i := range specs {
-			specs[i]["tmpDir"] = dirs.TmpDir
-			specs[i]["buildDir"] = dirs.BuildDir
-			specs[i]["rootDir"] = dirs.RootDir
-		}
+			if engineConfig.Type != forge.BuilderEngineConfigType {
+				return fmt.Errorf("alias %s is not a builder type", aliasName)
+			}
 
-		// Inject engine config into specs if present
-		if engineConfig != nil && engineConfig.Type == forge.BuilderEngineConfigType {
-			// For builder aliases, use the first builder's spec
-			if len(engineConfig.Builder) > 0 {
-				builderSpec := engineConfig.Builder[0].Spec
-				for i := range specs {
-					// Inject command, args, env, envFile, workDir from engine config
-					if builderSpec.Command != "" {
-						specs[i]["command"] = builderSpec.Command
-					}
-					if len(builderSpec.Args) > 0 {
-						specs[i]["args"] = builderSpec.Args
-					}
-					if len(builderSpec.Env) > 0 {
-						specs[i]["env"] = builderSpec.Env
-					}
-					if builderSpec.EnvFile != "" {
-						specs[i]["envFile"] = builderSpec.EnvFile
-					}
-					if builderSpec.WorkDir != "" {
-						specs[i]["workDir"] = builderSpec.WorkDir
+			fmt.Printf("  Multi-engine builder detected (%d engines)\n", len(engineConfig.Builder))
+
+			// Create builder orchestrator
+			orchestrator := orchestrate.NewBuilderOrchestrator(
+				callMCPEngine,
+				func(uri string) (string, error) {
+					return resolveEngine(uri, &config)
+				},
+			)
+
+			// Prepare directories map
+			dirsMap := map[string]any{
+				"tmpDir":   dirs.TmpDir,
+				"buildDir": dirs.BuildDir,
+				"rootDir":  dirs.RootDir,
+			}
+
+			// Execute orchestration
+			artifacts, err = orchestrator.Orchestrate(engineConfig.Builder, specs, dirsMap)
+			if err != nil {
+				return fmt.Errorf("multi-engine build failed: %w", err)
+			}
+		} else {
+			// Single-engine builder - use existing logic
+			// Get engine config if this is an alias
+			var engineConfig *forge.EngineConfig
+			if strings.HasPrefix(engineURI, "alias://") {
+				aliasName := strings.TrimPrefix(engineURI, "alias://")
+				engineConfig = getEngineConfig(aliasName, &config)
+			}
+
+			// Inject directories into all specs
+			for i := range specs {
+				specs[i]["tmpDir"] = dirs.TmpDir
+				specs[i]["buildDir"] = dirs.BuildDir
+				specs[i]["rootDir"] = dirs.RootDir
+			}
+
+			// Inject engine config into specs if present
+			if engineConfig != nil && engineConfig.Type == forge.BuilderEngineConfigType {
+				// For builder aliases, use the first builder's spec
+				if len(engineConfig.Builder) > 0 {
+					builderSpec := engineConfig.Builder[0].Spec
+					for i := range specs {
+						// Inject command, args, env, envFile, workDir from engine config
+						if builderSpec.Command != "" {
+							specs[i]["command"] = builderSpec.Command
+						}
+						if len(builderSpec.Args) > 0 {
+							specs[i]["args"] = builderSpec.Args
+						}
+						if len(builderSpec.Env) > 0 {
+							specs[i]["env"] = builderSpec.Env
+						}
+						if builderSpec.EnvFile != "" {
+							specs[i]["envFile"] = builderSpec.EnvFile
+						}
+						if builderSpec.WorkDir != "" {
+							specs[i]["workDir"] = builderSpec.WorkDir
+						}
 					}
 				}
 			}
-		}
 
-		// Use buildBatch if multiple specs, otherwise use build
-		var result interface{}
-		if len(specs) == 1 {
-			result, err = callMCPEngine(binaryPath, "build", specs[0])
-		} else {
-			params := map[string]any{
-				"specs": specs,
+			// Use buildBatch if multiple specs, otherwise use build
+			var result interface{}
+			if len(specs) == 1 {
+				result, err = callMCPEngine(binaryPath, "build", specs[0])
+			} else {
+				params := map[string]any{
+					"specs": specs,
+				}
+				result, err = callMCPEngine(binaryPath, "buildBatch", params)
 			}
-			result, err = callMCPEngine(binaryPath, "buildBatch", params)
-		}
 
-		if err != nil {
-			return fmt.Errorf("build failed: %w", err)
-		}
-
-		// Parse artifacts from result
-		artifacts, err := parseArtifacts(result)
-		if err != nil {
-			fmt.Printf("Warning: could not parse artifacts: %v\n", err)
-		} else {
-			// Update artifact store
-			for _, artifact := range artifacts {
-				forge.AddOrUpdateArtifact(&store, artifact)
-				totalBuilt++
+			if err != nil {
+				return fmt.Errorf("build failed: %w", err)
 			}
+
+			// Parse artifacts from result
+			artifacts, err = parseArtifacts(result)
+			if err != nil {
+				fmt.Printf("Warning: could not parse artifacts: %v\n", err)
+				continue
+			}
+		}
+
+		// Update artifact store
+		for _, artifact := range artifacts {
+			forge.AddOrUpdateArtifact(&store, artifact)
+			totalBuilt++
 		}
 	}
 
