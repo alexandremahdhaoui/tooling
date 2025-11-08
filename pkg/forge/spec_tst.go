@@ -18,6 +18,30 @@ type TestSpec struct {
 	Runner string `json:"runner"`
 }
 
+// Validate validates the TestSpec
+func (ts *TestSpec) Validate() error {
+	errs := NewValidationErrors()
+
+	// Validate required fields
+	if err := ValidateRequired(ts.Name, "name", "TestSpec"); err != nil {
+		errs.Add(err)
+	}
+
+	// Validate runner URI
+	if err := ValidateURI(ts.Runner, "TestSpec.runner"); err != nil {
+		errs.Add(err)
+	}
+
+	// Validate testenv URI if specified and not empty/noop
+	if ts.Testenv != "" && ts.Testenv != "noop" {
+		if err := ValidateURI(ts.Testenv, "TestSpec.testenv"); err != nil {
+			errs.Add(err)
+		}
+	}
+
+	return errs.ErrorOrNil()
+}
+
 // TestEnvironment represents a test environment instance
 type TestEnvironment struct {
 	// ID is the unique identifier for this test environment

@@ -12,7 +12,7 @@ Modern software development faces common orchestration challenges:
 
 Forge solves these with a **modern, declarative, AI-native approach** to build and development orchestration:
 
-- **AI-Driven**: Deeply integrated with AI coding agents like Claude Code, enabling seamless AI-assisted development
+- **AI-Driven**: Built entirely as MCP servers, making every component directly accessible to AI coding agents like Claude Code. Forge itself is both a CLI tool AND an MCP server, enabling seamless AI-assisted development.
 - **Declarative & Simple**: Single `forge.yaml` configuration—no verbose scripts or complex Make syntax
 - **Extensible**: MCP-based architecture makes adding new capabilities straightforward
 - **Consistent**: Same commands, same configuration format across all projects and languages
@@ -22,7 +22,7 @@ Forge solves these with a **modern, declarative, AI-native approach** to build a
 
 ## How It Works
 
-Forge is built on **Model Context Protocol (MCP)**, the same protocol that powers AI coding agents like Claude Code. This architectural choice makes Forge uniquely suited for AI-driven development:
+Forge is built on **Model Context Protocol (MCP)**, the same protocol that powers AI coding agents like Claude Code. **Every component—including the `forge` CLI itself—is implemented as an MCP server**, making the entire toolchain AI-accessible. This architectural choice makes Forge uniquely suited for AI-driven development:
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -53,12 +53,19 @@ Forge is built on **Model Context Protocol (MCP)**, the same protocol that power
 **Key Principles:**
 
 1. **Declarative Configuration**: Define *what* you want in `forge.yaml`, not *how* to do it
-2. **MCP Communication**: All engines speak MCP, making them composable and AI-accessible
+2. **MCP-First Architecture**: Every component (forge CLI, build engines, test runners) is an MCP server, making them composable and fully AI-accessible
 3. **Artifact Tracking**: Every build, test, and deployment is tracked with git SHAs and timestamps
 4. **AI-Native Design**: AI agents can read configurations, invoke engines, and interpret results naturally
 5. **Test-Driven Workflow**: Automated environment creation, test execution, and cleanup in a single command
 
 Configure once in `forge.yaml`, then use it from command line, CI/CD pipelines, or AI coding agents—all with the same consistent interface.
+
+> **Why This Makes Forge AI-Driven**: Because every component speaks MCP natively, AI coding agents can:
+> - Read your `forge.yaml` configuration
+> - Invoke any build engine or test runner directly
+> - Parse build artifacts and test reports
+> - Orchestrate complex workflows without CLI wrappers
+> - All using the same protocol they use for code understanding and generation
 
 ## Quick Start
 
@@ -106,7 +113,7 @@ forge --help
 ## Core Features
 
 - **Unified Build System**: One `forge.yaml` for all artifacts (binaries, containers)
-- **MCP-Based Architecture**: 11 specialized MCP server engines for extensibility
+- **MCP-First Architecture**: The forge CLI and all 11 build/test engines are MCP servers, providing native AI agent integration
 - **Test Environment Management**: Automated Kind clusters with TLS-enabled registries
 - **Artifact Tracking**: Automatic versioning with git commit SHAs
 - **18 CLI Tools**: From code generation to E2E testing
@@ -139,7 +146,7 @@ All 18 tools categorized by function. Tools marked ⚡ provide MCP servers.
 - `generate-openapi-go` - OpenAPI code generator
 
 ### Orchestration (2)
-- `forge` - Main CLI orchestrator
+- ⚡ `forge` - Main CLI orchestrator (also an MCP server)
 - `ci-orchestrator` - CI/CD orchestration (planning)
 
 ## Configuration: forge.yaml
@@ -240,7 +247,7 @@ EOF
 
 ## Architecture
 
-Forge uses the Model Context Protocol (MCP) to orchestrate specialized engines. Each tool (builder, test runner, environment manager) implements the MCP server interface, allowing them to be composed declaratively via `forge.yaml`.
+Forge uses the Model Context Protocol (MCP) to orchestrate specialized engines. **The `forge` CLI itself is an MCP server**, as is each tool (builder, test runner, environment manager). This uniform MCP server architecture allows all components to be composed declaratively via `forge.yaml` and accessed directly by AI agents.
 
 ```
 ┌─────────────┐

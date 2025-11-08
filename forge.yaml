@@ -5,13 +5,14 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 # -- engines defines custom engine configurations with aliases
 engines:
+  # Example: custom test runner alias
   # - alias: verify-tags-runner
   #   type: test-runner
-  #   test-runner:
-  #     engine: go://generic-test-runner
-  #     config:
-  #       command: "go"
-  #       args: ["run", "./cmd/test-runner-go-verify-tags", "."]
+  #   testRunner:
+  #     - engine: go://generic-test-runner
+  #       spec:
+  #         command: "go"
+  #         args: ["run", "./cmd/test-runner-go-verify-tags", "."]
 
   - alias: setup-integration
     type: testenv

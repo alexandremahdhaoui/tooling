@@ -308,26 +308,25 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 	} else {
 		// Auto-create environment if engine is configured
 		if testSpec.Testenv != "" && testSpec.Testenv != "noop" {
-			// Parse engine and create environment
-			engineType, enginePath, err := parseEngine(testSpec.Testenv)
+			// Resolve engine URI (handles aliases)
+			enginePath, err := resolveEngine(testSpec.Testenv, config)
 			if err != nil {
-				return fmt.Errorf("failed to parse engine URI: %w", err)
+				return fmt.Errorf("failed to resolve testenv engine %s: %w", testSpec.Testenv, err)
 			}
 
-			if engineType == "mcp" {
-				result, err := callMCPEngine(enginePath, "create", map[string]any{
-					"stage": testSpec.Name,
-				})
-				if err != nil {
-					return fmt.Errorf("failed to create test environment: %w", err)
-				}
+			// Create test environment
+			result, err := callMCPEngine(enginePath, "create", map[string]any{
+				"stage": testSpec.Name,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to create test environment: %w", err)
+			}
 
-				// Extract test ID
-				if resultMap, ok := result.(map[string]any); ok {
-					if id, ok := resultMap["testID"].(string); ok {
-						testID = id
-						fmt.Printf("Created test environment: %s\n", testID)
-					}
+			// Extract test ID
+			if resultMap, ok := result.(map[string]any); ok {
+				if id, ok := resultMap["testID"].(string); ok {
+					testID = id
+					fmt.Printf("Created test environment: %s\n", testID)
 				}
 			}
 		}
@@ -414,21 +413,25 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 	}
 
 	// Inject runner config if present (for alias:// runners)
-	if runnerConfig != nil && runnerConfig.Config.Command != "" {
-		if runnerConfig.Config.Command != "" {
-			params["command"] = runnerConfig.Config.Command
-		}
-		if len(runnerConfig.Config.Args) > 0 {
-			params["args"] = runnerConfig.Config.Args
-		}
-		if len(runnerConfig.Config.Env) > 0 {
-			params["env"] = runnerConfig.Config.Env
-		}
-		if runnerConfig.Config.EnvFile != "" {
-			params["envFile"] = runnerConfig.Config.EnvFile
-		}
-		if runnerConfig.Config.WorkDir != "" {
-			params["workDir"] = runnerConfig.Config.WorkDir
+	if runnerConfig != nil && runnerConfig.Type == forge.TestRunnerEngineConfigType {
+		// For test-runner aliases, use the first test runner's spec
+		if len(runnerConfig.TestRunner) > 0 {
+			runnerSpec := runnerConfig.TestRunner[0].Spec
+			if runnerSpec.Command != "" {
+				params["command"] = runnerSpec.Command
+			}
+			if len(runnerSpec.Args) > 0 {
+				params["args"] = runnerSpec.Args
+			}
+			if len(runnerSpec.Env) > 0 {
+				params["env"] = runnerSpec.Env
+			}
+			if runnerSpec.EnvFile != "" {
+				params["envFile"] = runnerSpec.EnvFile
+			}
+			if runnerSpec.WorkDir != "" {
+				params["workDir"] = runnerSpec.WorkDir
+			}
 		}
 	}
 

@@ -17,6 +17,15 @@ This guide provides practical examples and workflows for using the forge CLI too
 - [Troubleshooting](#troubleshooting)
 - [Best Practices](#best-practices)
 
+## What is Forge?
+
+Forge is both a **command-line interface (CLI)** and an **MCP server**:
+- **As a CLI:** Run directly from your terminal for builds, tests, and environment management
+- **As an MCP server:** AI coding agents can invoke forge's capabilities programmatically
+- **Architecture:** All forge components (CLI + engines) are MCP servers, creating a uniform, AI-accessible interface
+
+This guide focuses on CLI usage. For MCP server usage, see [ARCHITECTURE.md](../ARCHITECTURE.md#mcp-architecture).
+
 ## Quick Start
 
 ### Installation

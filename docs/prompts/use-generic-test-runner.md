@@ -10,9 +10,49 @@ Generic-test-runner is a flexible test execution wrapper that:
 - Generates structured TestReport JSON
 - Perfect for linters, security scanners, compliance checks, custom test tools
 
-## Key Difference from generic-engine
+## When to Use generic-test-runner vs Built-in Test Runners
 
-| Feature | generic-engine | generic-test-runner |
+**Use Built-in Test Runners When Available:**
+- **Go tests**: Use `go://test-runner-go` for go test (supports coverage, tags, race detector)
+- **Build tag verification**: Use `go://test-runner-go-verify-tags` to verify test files have build tags
+- **Go linting**: Use `go://lint-go` for golangci-lint
+- **E2E tests**: Use `go://forge-e2e` for forge's own e2e testing framework
+
+**Use generic-test-runner When:**
+- No built-in runner exists for your test tool
+- Running custom linters or security scanners
+- Executing compliance checks or validation scripts
+- Integrating third-party test frameworks (jest, pytest, etc.)
+- Quick prototyping before creating a custom test runner
+
+**Example - Use Built-in:**
+```yaml
+# ✅ Good: Use built-in for Go tests
+test:
+  - name: unit
+    runner: go://test-runner-go
+```
+
+**Example - Use generic-test-runner:**
+```yaml
+# ✅ Good: No built-in for shellcheck
+engines:
+  - alias: shellcheck
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+        spec:
+          command: "shellcheck"
+          args: ["scripts/*.sh"]
+
+test:
+  - name: shell-lint
+    runner: alias://shellcheck
+```
+
+## Key Difference from generic-builder
+
+| Feature | generic-builder | generic-test-runner |
 |---------|----------------|---------------------|
 | Purpose | Build operations | Test operations |
 | Used in | `build:` section | `test:` section (as runner) |
@@ -43,8 +83,10 @@ In your `forge.yaml`, add to `engines:` section:
 ```yaml
 engines:
   - alias: my-test-tool
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "<command-name>"
       args: ["arg1", "arg2"]
       env:
@@ -58,7 +100,6 @@ engines:
 ```yaml
 test:
   - name: my-test-stage
-    engine: "noop"  # No environment management needed
     runner: alias://my-test-tool
 ```
 
@@ -70,7 +111,7 @@ forge test my-test-stage run
 
 ## Configuration Reference
 
-Same as generic-engine:
+Same as generic-builder:
 
 ### alias (required)
 Unique name for this test runner.
@@ -80,19 +121,19 @@ Unique name for this test runner.
 ### engine (required)
 Must be: `go://generic-test-runner`
 
-### config.command (required)
+### spec.command (required)
 The test command to execute.
 
-### config.args (optional)
+### spec.args (optional)
 Command arguments.
 
-### config.env (optional)
+### spec.env (optional)
 Environment variables.
 
-### config.envFile (optional)
+### spec.envFile (optional)
 Path to environment file.
 
-### config.workDir (optional)
+### spec.workDir (optional)
 Working directory.
 
 ## Common Patterns
@@ -102,8 +143,10 @@ Working directory.
 ```yaml
 engines:
   - alias: golangci-lint
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "golangci-lint"
       args: ["run", "--timeout=5m", "./..."]
       env:
@@ -111,7 +154,6 @@ engines:
 
 test:
   - name: lint
-    engine: "noop"
     runner: alias://golangci-lint
 ```
 
@@ -122,14 +164,15 @@ test:
 ```yaml
 engines:
   - alias: gosec-scanner
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "gosec"
       args: ["-fmt=json", "-out=security-report.json", "./..."]
 
 test:
   - name: security
-    engine: "noop"
     runner: alias://gosec-scanner
 ```
 
@@ -140,8 +183,10 @@ test:
 ```yaml
 engines:
   - alias: pytest-runner
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "pytest"
       args:
         - "--verbose"
@@ -154,7 +199,6 @@ engines:
 
 test:
   - name: python-tests
-    engine: "noop"
     runner: alias://pytest-runner
 ```
 
@@ -165,14 +209,15 @@ test:
 ```yaml
 engines:
   - alias: shellcheck-lint
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "shellcheck"
       args: ["scripts/*.sh"]
 
 test:
   - name: shell-lint
-    engine: "noop"
     runner: alias://shellcheck-lint
 ```
 
@@ -181,15 +226,16 @@ test:
 ```yaml
 engines:
   - alias: custom-validator
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "./scripts/validate-config.sh"
       args: ["--strict"]
       envFile: ".env.test"
 
 test:
   - name: config-validation
-    engine: "noop"
     runner: alias://custom-validator
 ```
 
@@ -198,34 +244,37 @@ test:
 ```yaml
 engines:
   - alias: golangci
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "golangci-lint"
       args: ["run", "./..."]
 
   - alias: staticcheck
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "staticcheck"
       args: ["./..."]
 
   - alias: gosec
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "gosec"
       args: ["./..."]
 
 test:
   - name: lint-golangci
-    engine: "noop"
     runner: alias://golangci
 
   - name: lint-staticcheck
-    engine: "noop"
     runner: alias://staticcheck
 
   - name: security-scan
-    engine: "noop"
     runner: alias://gosec
 ```
 
@@ -306,32 +355,40 @@ engines:
   # Formatters (for build)
   - alias: go-fmt
     engine: go://generic-builder
-    config:
+    spec:
       command: "gofmt"
       args: ["-l", "-w", "."]
 
   # Test runners
   - alias: golangci-lint
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "golangci-lint"
       args: ["run", "--timeout=5m", "./..."]
 
   - alias: gosec
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "gosec"
       args: ["-quiet", "./..."]
 
   - alias: staticcheck
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "staticcheck"
       args: ["./..."]
 
   - alias: shellcheck
-    engine: go://generic-test-runner
-    config:
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+            spec:
       command: "shellcheck"
       args: ["scripts/*.sh"]
 
@@ -348,27 +405,22 @@ build:
 test:
   # Unit tests with generic runner
   - name: unit
-    engine: "noop"
     runner: "go://generic-test-runner"
 
   # Linting
   - name: lint
-    engine: "noop"
     runner: alias://golangci-lint
 
   # Security scanning
   - name: security
-    engine: "noop"
     runner: alias://gosec
 
   # Static analysis
   - name: static-analysis
-    engine: "noop"
     runner: alias://staticcheck
 
   # Shell script linting
   - name: shell-lint
-    engine: "noop"
     runner: alias://shellcheck
 ```
 
@@ -404,7 +456,7 @@ echo $?
 Add verbose flags to your command:
 
 ```yaml
-config:
+spec:
   command: "golangci-lint"
   args: ["run", "--verbose", "./..."]
 ```
@@ -491,7 +543,7 @@ For integration tests that need environments:
 test:
   # Integration tests with environment
   - name: integration
-    engine: "go://testenv"  # Creates test environment
+    testenv: "go://testenv"  # Creates test environment
     runner: "go://generic-test-runner"    # Runs tests in that environment
 
   # Linting (no environment needed)
@@ -530,7 +582,7 @@ For simple pass/fail checks, generic-test-runner is perfect!
 
 Full documentation:
 ```
-https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/generic-engine-guide.md
+https://raw.githubusercontent.com/alexandremahdhaoui/forge/refs/heads/main/docs/generic-builder-guide.md
 ```
 
 ## Summary

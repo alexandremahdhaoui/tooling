@@ -10,6 +10,51 @@ Generic-builder is a flexible, configuration-driven build engine that executes a
 - Executing build scripts
 - Calling external tools (docker, npm, make)
 
+## When to Use generic-builder vs Built-in Tools
+
+**Use Built-in Tools When Available:**
+- **Go binaries**: Use `go://build-go` for all Go builds (handles versioning, ldflags, etc.)
+- **Containers**: Use `go://build-container` for Dockerfiles/Containerfiles
+- **Go formatting**: Use `go://format-go` for gofmt/goimports
+- **Go linting**: Use `go://lint-go` for golangci-lint
+- **Go tests**: Use `go://test-runner-go` for go test
+- **Test environments**: Use `go://testenv` for Kind clusters + registry
+
+**Use generic-builder When:**
+- No built-in tool exists for your use case
+- You need to wrap a custom tool or script
+- You're integrating third-party CLIs (protoc, npm, etc.)
+- You have custom build scripts that don't fit into built-in patterns
+- You need quick prototyping before creating a custom engine
+
+**Example - Use Built-in:**
+```yaml
+# ✅ Good: Use built-in for Go
+build:
+  - name: myapp
+    src: ./cmd/myapp
+    dest: ./build/bin
+    engine: go://build-go
+```
+
+**Example - Use generic-builder:**
+```yaml
+# ✅ Good: No built-in for protoc
+engines:
+  - alias: protoc
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+            command: "protoc"
+            args: ["--go_out=.", "api/service.proto"]
+
+build:
+  - name: generate-proto
+    src: ./api
+    engine: alias://protoc
+```
+
 ## Quick Start
 
 ### Step 1: Ensure generic-builder is Built
@@ -33,14 +78,16 @@ In your `forge.yaml`, add an `engines:` section:
 ```yaml
 engines:
   - alias: my-tool
-    engine: go://generic-builder
-    config:
-      command: "<command-name>"
-      args: ["arg1", "arg2"]
-      env:
-        VAR_NAME: "value"
-      envFile: ".envrc"        # Optional
-      workDir: "./subdir"      # Optional
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+            command: "<command-name>"
+            args: ["arg1", "arg2"]
+            env:
+              VAR_NAME: "value"
+            envFile: ".envrc"        # Optional
+            workDir: "./subdir"      # Optional
 ```
 
 ### Step 3: Use the Alias in Build Specs
@@ -67,15 +114,15 @@ Unique name for this engine configuration.
 **Example**: `go-formatter`, `protoc-generator`, `npm-builder`
 
 ### engine (required)
-Must be: `go://generic-engine`
+Must be: `go://generic-builder`
 
-### config.command (required)
+### spec.command (required)
 The executable to run. Can be:
 - Command in PATH: `"go"`, `"docker"`, `"npm"`
 - Relative path: `"./scripts/build.sh"`
 - Absolute path: `"/usr/local/bin/tool"`
 
-### config.args (optional)
+### spec.args (optional)
 Array of arguments passed to command.
 
 **Example**:
@@ -83,7 +130,7 @@ Array of arguments passed to command.
 args: ["build", "-o", "output.bin", "input.go"]
 ```
 
-### config.env (optional)
+### spec.env (optional)
 Environment variables to set.
 
 **Example**:
@@ -93,7 +140,7 @@ env:
   CGO_ENABLED: "0"
 ```
 
-### config.envFile (optional)
+### spec.envFile (optional)
 Path to file with environment variables (`.envrc` format).
 
 **File format**:
@@ -106,7 +153,7 @@ QUOTED="value with spaces"
 
 **Precedence**: System env < envFile < inline env
 
-### config.workDir (optional)
+### spec.workDir (optional)
 Working directory for command execution.
 
 **Example**:
@@ -121,10 +168,12 @@ workDir: "./frontend"
 ```yaml
 engines:
   - alias: go-fmt
-    engine: go://generic-engine
-    config:
-      command: "gofmt"
-      args: ["-l", "-w", "."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gofmt"
+          args: ["-l", "-w", "."]
 
 build:
   - name: format-code
@@ -137,14 +186,16 @@ build:
 ```yaml
 engines:
   - alias: proto-gen
-    engine: go://generic-engine
-    config:
-      command: "protoc"
-      args:
-        - "--go_out=."
-        - "--go-grpc_out=."
-        - "api/service.proto"
-      workDir: "."
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "protoc"
+          args:
+          - "--go_out=."
+          - "--go-grpc_out=."
+          - "api/service.proto"
+          workDir: "."
 
 build:
   - name: generate-grpc
@@ -158,13 +209,15 @@ build:
 ```yaml
 engines:
   - alias: npm-build
-    engine: go://generic-engine
-    config:
-      command: "npm"
-      args: ["run", "build"]
-      workDir: "./frontend"
-      env:
-        NODE_ENV: "production"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "npm"
+          args: ["run", "build"]
+          workDir: "./frontend"
+          env:
+          NODE_ENV: "production"
 
 build:
   - name: frontend-assets
@@ -178,12 +231,14 @@ build:
 ```yaml
 engines:
   - alias: docker-build
-    engine: go://generic-engine
-    config:
-      command: "docker"
-      args: ["build", "-t", "myapp:latest", "."]
-      env:
-        DOCKER_BUILDKIT: "1"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "docker"
+          args: ["build", "-t", "myapp:latest", "."]
+          env:
+          DOCKER_BUILDKIT: "1"
 
 build:
   - name: container-image
@@ -196,11 +251,13 @@ build:
 ```yaml
 engines:
   - alias: custom-build
-    engine: go://generic-engine
-    config:
-      command: "./scripts/build.sh"
-      args: ["--env=prod", "--verbose"]
-      envFile: ".env.prod"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "./scripts/build.sh"
+          args: ["--env=prod", "--verbose"]
+          envFile: ".env.prod"
 
 build:
   - name: custom-artifact
@@ -213,15 +270,19 @@ build:
 ```yaml
 engines:
   - alias: step1-generate
-    engine: go://generic-engine
-    config:
-      command: "./generate.sh"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "./generate.sh"
 
   - alias: step2-compile
-    engine: go://generic-engine
-    config:
-      command: "gcc"
-      args: ["-o", "output", "generated.c"]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gcc"
+          args: ["-o", "output", "generated.c"]
 
 build:
   # Run in sequence
@@ -356,13 +417,13 @@ Use a custom Go engine when you need:
 - Performance-critical operations
 - Rich artifact metadata
 
-For simple tool wrapping, generic-engine is perfect!
+For simple tool wrapping, generic-builder is perfect!
 
 ## Testing Your Configuration
 
 ```bash
-# 1. Build generic-engine if needed
-forge build generic-engine
+# 1. Build generic-builder if needed
+forge build generic-builder
 
 # 2. Test your command manually first
 <your-command> <your-args>
@@ -387,33 +448,41 @@ artifactStorePath: .forge/artifacts.yaml
 engines:
   # Formatter
   - alias: go-fmt
-    engine: go://generic-engine
-    config:
-      command: "gofmt"
-      args: ["-l", "-w", "."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gofmt"
+          args: ["-l", "-w", "."]
 
   # Linter (as test runner - see use-generic-test-runner prompt)
   - alias: golangci
-    engine: go://generic-test-runner
-    config:
-      command: "golangci-lint"
-      args: ["run", "./..."]
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+        spec:
+          command: "golangci-lint"
+          args: ["run", "./..."]
 
   # Mock generator
   - alias: mockgen
-    engine: go://generic-engine
-    config:
-      command: "go"
-      args: ["generate", "./..."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "go"
+          args: ["generate", "./..."]
 
   # Docker builder
   - alias: docker-builder
-    engine: go://generic-engine
-    config:
-      command: "docker"
-      args: ["build", "-t", "myapp:latest", "."]
-      env:
-        DOCKER_BUILDKIT: "1"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "docker"
+          args: ["build", "-t", "myapp:latest", "."]
+          env:
+          DOCKER_BUILDKIT: "1"
 
 build:
   # Format first
@@ -439,7 +508,6 @@ build:
 
 test:
   - name: lint
-    engine: "noop"
     runner: alias://golangci
 ```
 
@@ -454,7 +522,7 @@ test:
 Full documentation:
 ```
 See cmd/generic-builder/MCP.md for MCP server documentation
-See docs/generic-engine-guide.md for detailed guide (needs rename to generic-builder-guide.md)
+See docs/generic-builder-guide.md for detailed guide (needs rename to generic-builder-guide.md)
 ```
 
 ## Summary

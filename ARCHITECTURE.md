@@ -37,6 +37,8 @@ Go development tooling repository providing CLI tools for streamlined workflows 
 
 **Philosophy:** Dogfooding approach - tools build and test themselves, ensuring real-world reliability.
 
+**MCP-First Architecture:** All tools—including the forge CLI itself—are implemented as MCP servers, enabling native AI agent integration and composability.
+
 ## Project Structure
 
 ```
@@ -219,8 +221,9 @@ Planning (1):
 ### Core Tools
 
 **forge** (`cmd/forge/`)
-- Make-like build orchestrator using MCP protocol
-- Manages builds, tests, and test environments
+- Main CLI orchestrator (also an MCP server)
+- Both a standalone CLI tool AND an MCP server for AI agent integration
+- Manages builds, tests, and test environments using MCP protocol
 - See [Forge Architecture](#forge-architecture) section
 
 **testenv** (`cmd/testenv/`)
@@ -317,6 +320,8 @@ Forge uses Model Context Protocol (MCP) for communication between the orchestrat
           │  (server)   │ │  (server)   │
           └─────────────┘ └─────────────┘
 ```
+
+**Note:** The forge CLI itself is also an MCP server. When invoked with `--mcp`, it exposes its orchestration capabilities to AI coding agents, allowing them to build artifacts, run tests, and manage test environments directly.
 
 ### MCP Servers (10 total)
 
@@ -632,6 +637,12 @@ Forge is a make-like build orchestrator that provides a unified interface for bu
 - Engine-based architecture using MCP servers
 - Artifact tracking and versioning
 - Integration environment lifecycle management
+
+**MCP-First Design:**
+- Forge itself is both a CLI tool and an MCP server
+- All engines are MCP servers, creating a uniform, composable architecture
+- AI agents can interact with any component using the same protocol
+- This enables true AI-driven development workflows
 
 **Key Features:**
 - Build Go binaries and container images through a single interface

@@ -112,6 +112,46 @@ type ArtifactStore struct {
 	TestReports      map[string]*TestReport      `json:"testReports,omitempty"`
 }
 
+// Validate validates the Artifact
+func (a *Artifact) Validate() error {
+	errs := NewValidationErrors()
+
+	// Validate required fields
+	if err := ValidateRequired(a.Name, "name", "Artifact"); err != nil {
+		errs.Add(err)
+	}
+	if err := ValidateRequired(a.Type, "type", "Artifact"); err != nil {
+		errs.Add(err)
+	}
+	if err := ValidateRequired(a.Location, "location", "Artifact"); err != nil {
+		errs.Add(err)
+	}
+
+	return errs.ErrorOrNil()
+}
+
+// Validate validates the ArtifactStore
+func (as *ArtifactStore) Validate() error {
+	errs := NewValidationErrors()
+
+	// Validate version
+	if err := ValidateRequired(as.Version, "version", "ArtifactStore"); err != nil {
+		errs.Add(err)
+	}
+
+	// Validate all artifacts
+	for i, artifact := range as.Artifacts {
+		if err := artifact.Validate(); err != nil {
+			errs.AddErrorf("artifacts[%d] (%s): %v", i, artifact.Name, err)
+		}
+	}
+
+	// Note: TestEnvironments and TestReports don't need deep validation here
+	// as they are managed internally by forge
+
+	return errs.ErrorOrNil()
+}
+
 var (
 	errReadingArtifactStore    = errors.New("reading artifact store")
 	errWritingArtifactStore    = errors.New("writing artifact store")
@@ -149,6 +189,11 @@ func ReadArtifactStore(path string) (ArtifactStore, error) {
 	}
 	if out.Version == "" {
 		out.Version = artifactStoreVersion
+	}
+
+	// Validate the artifact store
+	if err := out.Validate(); err != nil {
+		return ArtifactStore{}, flaterrors.Join(err, errInvalidArtifactStore, errReadingArtifactStore)
 	}
 
 	return out, nil

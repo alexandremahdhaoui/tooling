@@ -4,6 +4,8 @@
 
 The `forge test` command provides a unified interface for managing test environments and executing tests across different stages (unit, integration, e2e, etc.). It replaces the hardcoded `forge integration` command with a flexible, configuration-driven approach.
 
+**MCP Integration:** All components in the test system (forge CLI, test engines, test runners) are MCP servers, allowing AI coding agents to programmatically create test environments, run tests, and retrieve results.
+
 ## Quick Start
 
 ### 1. Configure forge.yaml

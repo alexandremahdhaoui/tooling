@@ -11,6 +11,11 @@ The testenv system provides a composable, extensible way to create and manage te
 - **MCP Protocol**: Communication between components
 - **Artifact Store**: Centralized storage for test environment metadata
 
+**MCP-First Design:** All test environment components (forge, testenv, testenv-kind, testenv-lcr) are implemented as MCP servers, enabling:
+- Uniform communication protocol across all layers
+- Direct AI agent access to all test environment operations
+- Composable, declarative environment management
+
 ## Core Components
 
 ### 1. testenv (Orchestrator)

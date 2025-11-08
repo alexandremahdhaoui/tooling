@@ -4,12 +4,14 @@ You are assisting a user in migrating their existing Makefile-based build system
 
 ## Overview
 
-Forge is a build and test orchestration system that:
+Forge is a modern, AI-native build and test orchestration system that:
+- **MCP-First Architecture:** Forge CLI and all engines are MCP servers, making every component AI-accessible
 - Uses declarative YAML configuration instead of imperative Makefiles
 - Provides structured artifact tracking and test environment management
 - Supports engine-based extensibility for custom build logic
 - Offers built-in integration with Go tooling
 - Enables reproducible builds with proper dependency management
+- Allows AI coding agents to directly invoke build, test, and environment operations
 
 ## Migration Strategy
 
@@ -28,7 +30,7 @@ Follow this systematic approach:
    - **Build targets** → `build:` section in forge.yaml
    - **Test targets** → `test:` section in forge.yaml
    - **Format/lint targets** → Can be build artifacts or test stages
-   - **Complex scripts** → Custom engines or generic-engine with aliases
+   - **Complex scripts** → Custom engines or generic-builder with aliases
    - **Environment setup** → Test engines (for environments) or engine config
 
 ### Phase 2: Learn About Forge Engines
@@ -69,17 +71,21 @@ artifactStorePath: .forge/artifacts.yaml
 engines:
   # Example: Wrapper for a formatter from Makefile
   - alias: my-formatter
-    engine: go://generic-engine
-    config:
-      command: "gofmt"
-      args: ["-l", "-w", "."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gofmt"
+          args: ["-l", "-w", "."]
 
   # Example: Wrapper for a linter from Makefile
   - alias: my-linter
-    engine: go://generic-test-runner
-    config:
-      command: "golangci-lint"
-      args: ["run", "./..."]
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+        spec:
+          command: "golangci-lint"
+          args: ["run", "./..."]
 
 # Build artifacts (from make build, make compile, etc.)
 build:
@@ -98,12 +104,10 @@ build:
 test:
   # Unit tests (equivalent to: make test)
   - name: unit
-    engine: "noop"
-    runner: "go://generic-test-runner"
+    runner: "go://test-runner-go"
 
   # Linting (equivalent to: make lint)
   - name: lint
-    engine: "noop"
     runner: alias://my-linter
 ```
 
@@ -138,13 +142,15 @@ build:
 ```yaml
 engines:
   - alias: linux-builder
-    engine: go://generic-engine
-    config:
-      command: "go"
-      args: ["build", "-o", "bin/myapp", "./cmd/myapp"]
-      env:
-        CGO_ENABLED: "0"
-        GOOS: "linux"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "go"
+          args: ["build", "-o", "bin/myapp", "./cmd/myapp"]
+          env:
+            CGO_ENABLED: "0"
+            GOOS: "linux"
 
 build:
   - name: myapp
@@ -166,14 +172,14 @@ fmt:
 ```yaml
 engines:
   - alias: go-fmt
-    engine: go://generic-engine
-    config:
+    engine: go://generic-builder
+    spec:
       command: "gofmt"
       args: ["-l", "-w", "."]
 
   - alias: go-imports
-    engine: go://generic-engine
-    config:
+    engine: go://generic-builder
+    spec:
       command: "goimports"
       args: ["-l", "-w", "."]
 
@@ -202,11 +208,11 @@ test-integration:
 ```yaml
 test:
   - name: unit
-    engine: "noop"
+    # No testenv needed
     runner: "go://generic-test-runner"
 
   - name: integration
-    engine: "go://testenv"  # Manages test environment
+    testenv: "go://testenv"  # Manages test environment
     runner: "go://generic-test-runner"
 ```
 
@@ -223,13 +229,13 @@ lint:
 engines:
   - alias: golangci
     engine: go://generic-test-runner
-    config:
+    spec:
       command: "golangci-lint"
       args: ["run", "./..."]
 
 test:
   - name: lint
-    engine: "noop"
+    # No testenv needed
     runner: alias://golangci
 ```
 
@@ -255,7 +261,7 @@ Or with generic-builder:
 engines:
   - alias: docker-builder
     engine: go://generic-builder
-    config:
+    spec:
       command: "docker"
       args: ["build", "-t", "myapp:latest", "."]
 
@@ -279,13 +285,13 @@ generate:
 engines:
   - alias: go-generate
     engine: go://generic-builder
-    config:
+    spec:
       command: "go"
       args: ["generate", "./..."]
 
   - alias: mockgen
     engine: go://generic-builder
-    config:
+    spec:
       command: "mockgen"
       args: ["-source=interfaces.go", "-destination=mocks/mocks.go"]
 
@@ -315,12 +321,12 @@ setup:
 engines:
   - alias: setup-script
     engine: go://generic-builder
-    config:
+    spec:
       command: "./scripts/setup.sh"
 
   - alias: mod-download
     engine: go://generic-builder
-    config:
+    spec:
       command: "go"
       args: ["mod", "download"]
 
@@ -350,8 +356,8 @@ If your Makefile has:
    ```yaml
    engines:
      - alias: complex-build
-       engine: go://generic-engine
-       config:
+       engine: go://generic-builder
+       spec:
          command: "./scripts/complex-build.sh"
          args: ["arg1", "arg2"]
    ```
@@ -381,7 +387,7 @@ export AWS_ACCESS_KEY_ID=xxx
 engines:
   - alias: deployer
     engine: go://generic-builder
-    config:
+    spec:
       command: "./deploy.sh"
       envFile: ".envrc"
 ```
@@ -420,7 +426,7 @@ build:
 - [ ] All build targets migrated to `build:` section
 - [ ] All test targets migrated to `test:` section
 - [ ] Environment variables handled (inline or via .envrc)
-- [ ] Custom scripts wrapped with generic-engine
+- [ ] Custom scripts wrapped with generic-builder
 - [ ] Complex logic extracted to custom engines (if needed)
 - [ ] forge.yaml tested and working
 - [ ] CI/CD updated to use `forge` instead of `make`
@@ -511,13 +517,13 @@ artifactStorePath: .forge/artifacts.yaml
 engines:
   - alias: formatter
     engine: go://generic-builder
-    config:
+    spec:
       command: "gofmt"
       args: ["-l", "-w", "."]
 
   - alias: linter
     engine: go://generic-test-runner
-    config:
+    spec:
       command: "golangci-lint"
       args: ["run", "./..."]
 
@@ -533,11 +539,11 @@ build:
 
 test:
   - name: unit
-    engine: "noop"
+    # No testenv needed
     runner: "go://generic-test-runner"
 
   - name: lint
-    engine: "noop"
+    # No testenv needed
     runner: alias://linter
 ```
 
@@ -577,7 +583,7 @@ This lets teams gradually adopt `forge` commands while maintaining `make` compat
 
 ## Summary
 
-1. Read generic-engine and test-runner documentation
+1. Read generic-builder and test-runner documentation
 2. Map Makefile targets to forge concepts
 3. Create forge.yaml with engines and build/test sections
 4. Test incrementally

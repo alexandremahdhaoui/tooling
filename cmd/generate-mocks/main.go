@@ -131,10 +131,10 @@ func getMocksDir(mocksDir string) string {
 func generateMocks(mocksDir string) error {
 	mockeryVersion := os.Getenv("MOCKERY_VERSION")
 	if mockeryVersion == "" {
-		mockeryVersion = "v2.42.0"
+		mockeryVersion = "v3.5.5"
 	}
 
-	mockery := fmt.Sprintf("github.com/vektra/mockery/v2@%s", mockeryVersion)
+	mockery := fmt.Sprintf("github.com/vektra/mockery/v3@%s", mockeryVersion)
 
 	// Clean mocks directory
 	dir := getMocksDir(mocksDir)

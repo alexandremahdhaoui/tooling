@@ -94,23 +94,27 @@ func runBuild(args []string) error {
 		}
 
 		// Inject engine config into specs if present
-		if engineConfig != nil && engineConfig.Config.Command != "" {
-			for i := range specs {
-				// Inject command, args, env, envFile, workDir from engine config
-				if engineConfig.Config.Command != "" {
-					specs[i]["command"] = engineConfig.Config.Command
-				}
-				if len(engineConfig.Config.Args) > 0 {
-					specs[i]["args"] = engineConfig.Config.Args
-				}
-				if len(engineConfig.Config.Env) > 0 {
-					specs[i]["env"] = engineConfig.Config.Env
-				}
-				if engineConfig.Config.EnvFile != "" {
-					specs[i]["envFile"] = engineConfig.Config.EnvFile
-				}
-				if engineConfig.Config.WorkDir != "" {
-					specs[i]["workDir"] = engineConfig.Config.WorkDir
+		if engineConfig != nil && engineConfig.Type == forge.BuilderEngineConfigType {
+			// For builder aliases, use the first builder's spec
+			if len(engineConfig.Builder) > 0 {
+				builderSpec := engineConfig.Builder[0].Spec
+				for i := range specs {
+					// Inject command, args, env, envFile, workDir from engine config
+					if builderSpec.Command != "" {
+						specs[i]["command"] = builderSpec.Command
+					}
+					if len(builderSpec.Args) > 0 {
+						specs[i]["args"] = builderSpec.Args
+					}
+					if len(builderSpec.Env) > 0 {
+						specs[i]["env"] = builderSpec.Env
+					}
+					if builderSpec.EnvFile != "" {
+						specs[i]["envFile"] = builderSpec.EnvFile
+					}
+					if builderSpec.WorkDir != "" {
+						specs[i]["workDir"] = builderSpec.WorkDir
+					}
 				}
 			}
 		}

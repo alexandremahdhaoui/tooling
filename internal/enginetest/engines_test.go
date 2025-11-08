@@ -65,23 +65,29 @@ func TestEnginesList(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	engines := enginetest.AllEngines(repoRoot)
 
-	if len(engines) != 12 {
-		t.Errorf("Expected 12 engines, got %d", len(engines))
+	if len(engines) != 18 {
+		t.Errorf("Expected 18 engines, got %d", len(engines))
 	}
 
 	expectedEngines := map[string]bool{
-		"forge":                    true,
-		"build-go":                 true,
-		"build-container":          true,
-		"kindenv":                  true,
-		"local-container-registry": true,
-		"test-runner-go":           true,
-		"test-integration":         true,
-		"format-go":                true,
-		"lint-go":                  true,
-		"generate-mocks":           true,
-		"generate-openapi-go":      true,
-		"forge-e2e":                true,
+		"forge":                      true,
+		"build-go":                   true,
+		"build-container":            true,
+		"generic-builder":            true,
+		"testenv":                    true,
+		"testenv-kind":               true,
+		"testenv-lcr":                true,
+		"testenv-helm-install":       true,
+		"test-runner-go":             true,
+		"test-runner-go-verify-tags": true,
+		"generic-test-runner":        true,
+		"test-report":                true,
+		"format-go":                  true,
+		"lint-go":                    true,
+		"generate-mocks":             true,
+		"generate-openapi-go":        true,
+		"ci-orchestrator":            true,
+		"forge-e2e":                  true,
 	}
 
 	for _, engine := range engines {
@@ -104,16 +110,24 @@ func TestMCPEnginesConfiguration(t *testing.T) {
 
 	// Verify which engines should support MCP
 	expectedMCPEngines := map[string]bool{
-		"forge":               true,
-		"build-go":            true,
-		"build-container":     true,
-		"test-runner-go":      true,
-		"test-integration":    true,
-		"format-go":           true,
-		"lint-go":             true,
-		"generate-mocks":      true,
-		"generate-openapi-go": true,
-		"forge-e2e":           true,
+		"forge":                      true,
+		"build-go":                   true,
+		"build-container":            true,
+		"generic-builder":            true,
+		"testenv":                    true,
+		"testenv-kind":               true,
+		"testenv-lcr":                true,
+		"testenv-helm-install":       true,
+		"test-runner-go":             true,
+		"test-runner-go-verify-tags": true,
+		"generic-test-runner":        true,
+		"test-report":                true,
+		"format-go":                  true,
+		"lint-go":                    true,
+		"generate-mocks":             true,
+		"generate-openapi-go":        true,
+		"ci-orchestrator":            true,
+		"forge-e2e":                  true,
 	}
 
 	for _, engine := range engines {

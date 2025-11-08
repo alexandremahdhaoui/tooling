@@ -20,3 +20,23 @@ type BuildSpec struct {
 	// - go://build-go        (go://github.com/alexandremahdhaoui/forge/cmd/build-go)
 	Engine string `json:"engine"`
 }
+
+// Validate validates the BuildSpec
+func (bs *BuildSpec) Validate() error {
+	errs := NewValidationErrors()
+
+	// Validate required fields
+	if err := ValidateRequired(bs.Name, "name", "BuildSpec"); err != nil {
+		errs.Add(err)
+	}
+	if err := ValidateRequired(bs.Src, "src", "BuildSpec"); err != nil {
+		errs.Add(err)
+	}
+
+	// Validate engine URI
+	if err := ValidateURI(bs.Engine, "BuildSpec.engine"); err != nil {
+		errs.Add(err)
+	}
+
+	return errs.ErrorOrNil()
+}

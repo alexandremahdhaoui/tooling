@@ -55,6 +55,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "config":
+		if err := runConfig(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "version", "--version", "-v":
 		versionInfo.Print()
 	case "help", "--help", "-h":
@@ -73,6 +78,7 @@ Usage:
   forge build [artifact-name]         Build artifacts from forge.yaml
   forge test <stage> <operation>      Manage test environments
   forge prompt <list|get> [name]      Fetch documentation prompts
+  forge config <subcommand>           Configuration management
   forge version                       Show version information
 
 Commands:
@@ -86,6 +92,8 @@ Commands:
 
   prompt list                        List all available prompts
   prompt get <name>                  Fetch a specific prompt
+
+  config validate [path]             Validate forge.yaml configuration
 
   version                            Show version information
   help                               Show this help message`)

@@ -35,9 +35,11 @@ The `forge.yaml` file defines:
 
 ```yaml
 name: string                              # Project name
-build: Build                              # Build configuration
+artifactStorePath: string                 # Artifact store path
+engines: []EngineConfig                   # Engine configurations (optional)
+build: []BuildSpec                        # Build configuration
 test: []TestSpec                          # Test stages configuration
-oapiCodegenHelper: OAPICodegenHelper      # OpenAPI codegen configuration
+oapiCodegenHelper: OAPICodegenHelper      # OpenAPI codegen configuration (optional)
 ```
 
 ### Root Fields
@@ -51,7 +53,37 @@ Project name used for identification.
 name: tooling
 ```
 
-#### `build` (Build, required)
+#### `artifactStorePath` (string, required)
+
+Path to the artifact store YAML file where forge tracks built artifacts, test environments, and metadata.
+
+**Default:** `.ignore.artifact-store.yaml`
+
+**Example:**
+```yaml
+artifactStorePath: .ignore.artifact-store.yaml
+```
+
+#### `engines` (array of EngineConfig, optional)
+
+Custom engine configurations with aliases. Allows you to create reusable engine configurations with custom parameters.
+
+**Example:**
+```yaml
+engines:
+  - alias: setup-integration
+    type: testenv
+    testenv:
+      - engine: "go://testenv-kind"
+      - engine: "go://testenv-lcr"
+        spec:
+          enabled: true
+          autoPushImages: true
+```
+
+See [Engine Configuration](#engine-configuration) for details.
+
+#### `build` (array of BuildSpec, required)
 
 Build configuration defining all artifacts to build. See [Build Configuration](#build-configuration).
 
@@ -63,11 +95,10 @@ Test stages configuration. See [Test Configuration](#test-configuration).
 ```yaml
 test:
   - name: unit
-    engine: "noop"
-    runner: "go://generic-test-runner"
+    runner: "go://test-runner-go"
   - name: integration
-    engine: "go://testenv"
-    runner: "go://generic-test-runner"
+    testenv: "alias://setup-integration"
+    runner: "go://test-runner-go"
 ```
 
 #### `oapiCodegenHelper` (OAPICodegenHelper, optional)
@@ -399,7 +430,7 @@ The `test` section defines test stages with their environments and runners.
 ```yaml
 test:
   - name: string       # Test stage name
-    engine: string     # Test environment engine
+    testenv: string    # Test environment engine (optional)
     runner: string     # Test runner engine
 ```
 
@@ -413,19 +444,16 @@ List of test stages. Each stage can have its own environment and runner.
 ```yaml
 test:
   - name: unit
-    engine: "noop"
-    runner: "go://generic-test-runner"
+    runner: "go://test-runner-go"
 
   - name: integration
-    engine: "go://testenv"
-    runner: "go://generic-test-runner"
+    testenv: "alias://setup-integration"
+    runner: "go://test-runner-go"
 
   - name: e2e
-    engine: "noop"
-    runner: "go://generic-test-runner"
+    runner: "go://forge-e2e"
 
   - name: lint
-    engine: "noop"
     runner: "go://lint-go"
 ```
 
@@ -437,7 +465,7 @@ The `TestSpec` defines a single test stage.
 
 ```yaml
 name: string      # Stage identifier
-engine: string    # Environment engine URI
+testenv: string   # Environment engine URI (optional)
 runner: string    # Test runner engine URI
 ```
 
@@ -458,23 +486,33 @@ Test stage identifier. Used in commands like `forge test <name> run`.
 name: integration
 ```
 
-#### `engine` (string, required)
+#### `testenv` (string, optional)
 
-Test environment engine URI. Use `"noop"` for tests that don't need an environment.
+Test environment engine URI. Omit this field for tests that don't need an environment (like unit tests and linting).
 
-**Format:** `<protocol>://<engine-name>` or `"noop"`
+**Format:** `<protocol>://<engine-name>` or `alias://<alias-name>`
 
 **Available Engines:**
-- `"noop"` - No environment (for unit tests, linting)
-- `"go://testenv"` - Complete test environment (Kind cluster + registry)
+- `"go://testenv"` - Complete test environment (Kind cluster + registry + helm)
+- `"go://testenv-kind"` - Kind cluster only
+- `"go://testenv-lcr"` - Local container registry only
+- `"alias://<name>"` - Custom engine alias from engines section
 
 **Example:**
 ```yaml
-# No environment needed
-engine: "noop"
+# No environment needed (omit testenv field)
+name: unit
+runner: "go://test-runner-go"
 
 # Full test environment with cluster
-engine: "go://testenv"
+name: integration
+testenv: "go://testenv"
+runner: "go://test-runner-go"
+
+# Custom environment alias
+name: integration
+testenv: "alias://setup-integration"
+runner: "go://test-runner-go"
 ```
 
 #### `runner` (string, required)
@@ -484,16 +522,25 @@ Test runner engine URI specifying which test runner to use.
 **Format:** `<protocol>://<runner-name>`
 
 **Available Runners:**
+- `"go://test-runner-go"` - Go test runner with coverage and JUnit reports
+- `"go://test-runner-go-verify-tags"` - Verify all test files have build tags
 - `"go://generic-test-runner"` - Execute arbitrary commands as tests
 - `"go://lint-go"` - Golangci-lint runner
+- `"go://forge-e2e"` - Forge end-to-end test runner
 
 **Example:**
 ```yaml
-# Execute arbitrary commands as tests
-runner: "go://generic-test-runner"
+# Run Go tests
+runner: "go://test-runner-go"
+
+# Verify build tags
+runner: "go://test-runner-go-verify-tags"
 
 # Run linter
 runner: "go://lint-go"
+
+# Execute custom commands
+runner: "go://generic-test-runner"
 ```
 
 ### Complete TestSpec Examples
@@ -502,8 +549,7 @@ runner: "go://lint-go"
 
 ```yaml
 - name: unit
-  engine: "noop"
-  runner: "go://generic-test-runner"
+  runner: "go://test-runner-go"
 ```
 
 **Usage:**
@@ -520,8 +566,8 @@ forge test unit run
 
 ```yaml
 - name: integration
-  engine: "go://testenv"
-  runner: "go://generic-test-runner"
+  testenv: "alias://setup-integration"
+  runner: "go://test-runner-go"
 ```
 
 **Usage:**
@@ -541,7 +587,6 @@ forge test integration delete  # Delete environment
 
 ```yaml
 - name: lint
-  engine: "noop"
   runner: "go://lint-go"
 ```
 
@@ -563,65 +608,75 @@ Here's a complete `forge.yaml` example with all sections:
 # Project name
 name: my-project
 
+# Path to artifact store
+artifactStorePath: .ignore.artifact-store.yaml
+
+# Custom engine configurations (optional)
+engines:
+  - alias: setup-integration
+    type: testenv
+    testenv:
+      - engine: "go://testenv-kind"
+      - engine: "go://testenv-lcr"
+        spec:
+          enabled: true
+          autoPushImages: true
+
 # Build configuration
 build:
-  # Path to artifact store
-  artifactStorePath: .forge/artifacts.yaml
+  # CLI tools
+  - name: my-cli
+    src: ./cmd/my-cli
+    dest: ./build/bin
+    engine: go://build-go
 
-  # Artifacts to build
-  specs:
-    # CLI tools
-    - name: my-cli
-      src: ./cmd/my-cli
-      dest: ./build/bin
-      builder: go://build-go
+  - name: api-server
+    src: ./cmd/api-server
+    dest: ./build/bin
+    engine: go://build-go
 
-    - name: api-server
-      src: ./cmd/api-server
-      dest: ./build/bin
-      builder: go://build-go
+  # Build tools (self-hosting)
+  - name: build-go
+    src: ./cmd/build-go
+    dest: ./build/bin
+    engine: go://build-go
 
-    # Build tools (self-hosting)
-    - name: build-go
-      src: ./cmd/build-go
-      dest: ./build/bin
-      builder: go://build-go
+  - name: build-container
+    src: ./cmd/build-container
+    dest: ./build/bin
+    engine: go://build-go
 
-    - name: build-container
-      src: ./cmd/build-container
-      dest: ./build/bin
-      builder: go://build-go
+  # Container images
+  - name: api-server-image
+    src: ./containers/api-server/Containerfile
+    dest: localhost:5000
+    engine: go://build-container
 
-    # Container images
-    - name: api-server-image
-      src: ./containers/api-server/Containerfile
-      dest: localhost:5000
-      builder: go://build-container
-
-    - name: worker
-      src: ./containers/worker/Containerfile
-      builder: go://build-container
+  - name: worker
+    src: ./containers/worker/Containerfile
+    engine: go://build-container
 
 # Test stages configuration
 test:
+  # Verify build tags
+  - name: verify-tags
+    runner: "go://test-runner-go-verify-tags"
+
   # Unit tests - no environment needed
   - name: unit
-    engine: "noop"
-    runner: "go://generic-test-runner"
+    runner: "go://test-runner-go"
 
   # Integration tests - full test environment
   - name: integration
-    engine: "go://testenv"
-    runner: "go://generic-test-runner"
+    testenv: "alias://setup-integration"
+    runner: "go://test-runner-go"
 
   # E2E tests
   - name: e2e
-    engine: "noop"
-    runner: "go://generic-test-runner"
+    runner: "go://forge-e2e"
 
   # Linting
   - name: lint
-    engine: "noop"
     runner: "go://lint-go"
 
 # OpenAPI code generation (optional)

@@ -31,16 +31,33 @@ func resolveEngineAlias(alias string, spec *forge.Spec) (string, error) {
 	}
 
 	// For testenv type, return the testenv orchestrator
-	if config.Type == "testenv" {
+	if config.Type == forge.TestenvEngineConfigType {
 		return "go://testenv", nil
 	}
 
-	// For other types, check the Engine field
-	if config.Engine == "" {
-		return "", fmt.Errorf("engine alias %s has no engine URI configured", alias)
+	// For builder type, check if there's exactly one builder engine
+	if config.Type == forge.BuilderEngineConfigType {
+		if len(config.Builder) == 0 {
+			return "", fmt.Errorf("builder alias %s has no builder engines configured", alias)
+		}
+		if len(config.Builder) > 1 {
+			return "", fmt.Errorf("builder alias %s has multiple engines (not yet supported in simple resolution)", alias)
+		}
+		return config.Builder[0].Engine, nil
 	}
 
-	return config.Engine, nil
+	// For test-runner type, check if there's exactly one test runner engine
+	if config.Type == forge.TestRunnerEngineConfigType {
+		if len(config.TestRunner) == 0 {
+			return "", fmt.Errorf("test-runner alias %s has no test runner engines configured", alias)
+		}
+		if len(config.TestRunner) > 1 {
+			return "", fmt.Errorf("test-runner alias %s has multiple engines (not yet supported in simple resolution)", alias)
+		}
+		return config.TestRunner[0].Engine, nil
+	}
+
+	return "", fmt.Errorf("unknown engine type for alias %s", alias)
 }
 
 // resolveEngine resolves an engine URI (which may be an alias) to the actual engine binary path.

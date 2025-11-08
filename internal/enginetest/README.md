@@ -14,13 +14,8 @@ The `enginetest` package ensures that all engines in the forge repository implem
 ### Running All Tests
 
 ```bash
-# Build all tools first
-go build -o ./build/bin/forge ./cmd/forge
-go build -o ./build/bin/build-go ./cmd/build-go
-go build -o ./build/bin/build-container ./cmd/build-container
-go build -o ./build/bin/kindenv ./cmd/kindenv
-go build -o ./build/bin/local-container-registry ./cmd/local-container-registry
-go build -o ./build/bin/test-runner-go ./cmd/test-runner-go
+# Build all tools first (or use forge build)
+forge build
 
 # Run tests
 go test ./internal/enginetest -v
@@ -28,16 +23,28 @@ go test ./internal/enginetest -v
 
 ### Test Coverage
 
-The package tests all engines:
+The package tests all 18 engines:
 
 | Engine | Version Support | MCP Support |
 |--------|----------------|-------------|
-| forge | ✅ | ❌ |
+| forge | ✅ | ✅ |
 | build-go | ✅ | ✅ |
 | build-container | ✅ | ✅ |
-| kindenv | ✅ | ❌ |
-| local-container-registry | ✅ | ❌ |
+| generic-builder | ✅ | ✅ |
+| testenv | ✅ | ✅ |
+| testenv-kind | ✅ | ✅ |
+| testenv-lcr | ✅ | ✅ |
+| testenv-helm-install | ✅ | ✅ |
 | test-runner-go | ✅ | ✅ |
+| test-runner-go-verify-tags | ✅ | ✅ |
+| generic-test-runner | ✅ | ✅ |
+| test-report | ✅ | ✅ |
+| format-go | ✅ | ✅ |
+| lint-go | ✅ | ✅ |
+| generate-mocks | ✅ | ✅ |
+| generate-openapi-go | ✅ | ✅ |
+| ci-orchestrator | ✅ | ✅ |
+| forge-e2e | ✅ | ✅ |
 
 ## Test Functions
 

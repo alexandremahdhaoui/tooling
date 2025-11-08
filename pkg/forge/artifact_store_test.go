@@ -504,16 +504,16 @@ func TestPruneBuildArtifacts_MultipleLTypes(t *testing.T) {
 		Version: "1.0",
 		Artifacts: []Artifact{
 			// Binary artifacts (5 total, should keep 3)
-			{Name: "app", Type: "binary", Timestamp: now.Add(-4 * time.Hour).Format(time.RFC3339), Version: "v1"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v2"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v3"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v4"},
-			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v5"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v1", Timestamp: now.Add(-4 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v2", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v3", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v3"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v4", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v4"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v5", Timestamp: now.Format(time.RFC3339), Version: "v5"},
 			// Container artifacts (4 total, should keep 3)
-			{Name: "app", Type: "container", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "c1"},
-			{Name: "app", Type: "container", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "c2"},
-			{Name: "app", Type: "container", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "c3"},
-			{Name: "app", Type: "container", Timestamp: now.Format(time.RFC3339), Version: "c4"},
+			{Name: "app", Type: "container", Location: "registry.local/app:c1", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "c1"},
+			{Name: "app", Type: "container", Location: "registry.local/app:c2", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "c2"},
+			{Name: "app", Type: "container", Location: "registry.local/app:c3", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "c3"},
+			{Name: "app", Type: "container", Location: "registry.local/app:c4", Timestamp: now.Format(time.RFC3339), Version: "c4"},
 		},
 		TestEnvironments: make(map[string]*TestEnvironment),
 	}
@@ -553,13 +553,13 @@ func TestPruneBuildArtifacts_MultipleNames(t *testing.T) {
 		Version: "1.0",
 		Artifacts: []Artifact{
 			// app1 artifacts (4 total, should keep 3)
-			{Name: "app1", Type: "binary", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v1"},
-			{Name: "app1", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v2"},
-			{Name: "app1", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v3"},
-			{Name: "app1", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v4"},
+			{Name: "app1", Type: "binary", Location: "./build/bin/app1-v1", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app1", Type: "binary", Location: "./build/bin/app1-v2", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app1", Type: "binary", Location: "./build/bin/app1-v3", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v3"},
+			{Name: "app1", Type: "binary", Location: "./build/bin/app1-v4", Timestamp: now.Format(time.RFC3339), Version: "v4"},
 			// app2 artifacts (2 total, should keep all)
-			{Name: "app2", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v1"},
-			{Name: "app2", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v2"},
+			{Name: "app2", Type: "binary", Location: "./build/bin/app2-v1", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app2", Type: "binary", Location: "./build/bin/app2-v2", Timestamp: now.Format(time.RFC3339), Version: "v2"},
 		},
 		TestEnvironments: make(map[string]*TestEnvironment),
 	}
@@ -598,9 +598,9 @@ func TestPruneBuildArtifacts_NoLPruningNeeded(t *testing.T) {
 	store := &ArtifactStore{
 		Version: "1.0",
 		Artifacts: []Artifact{
-			{Name: "app", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v1"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v2"},
-			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v3"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v1", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v2", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v3", Timestamp: now.Format(time.RFC3339), Version: "v3"},
 		},
 		TestEnvironments: make(map[string]*TestEnvironment),
 	}
@@ -619,9 +619,9 @@ func TestPruneBuildArtifacts_InvalidTimestamps(t *testing.T) {
 	store := &ArtifactStore{
 		Version: "1.0",
 		Artifacts: []Artifact{
-			{Name: "app", Type: "binary", Timestamp: "invalid-timestamp", Version: "v1"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v2"},
-			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v3"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v1", Timestamp: "invalid-timestamp", Version: "v1"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v2", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v3", Timestamp: now.Format(time.RFC3339), Version: "v3"},
 		},
 		TestEnvironments: make(map[string]*TestEnvironment),
 	}
@@ -666,11 +666,11 @@ func TestWriteArtifactStore_AutomaticPruning(t *testing.T) {
 		Version:     "1.0",
 		LastUpdated: now,
 		Artifacts: []Artifact{
-			{Name: "app", Type: "binary", Timestamp: now.Add(-4 * time.Hour).Format(time.RFC3339), Version: "v1"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v2"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v3"},
-			{Name: "app", Type: "binary", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v4"},
-			{Name: "app", Type: "binary", Timestamp: now.Format(time.RFC3339), Version: "v5"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v1", Timestamp: now.Add(-4 * time.Hour).Format(time.RFC3339), Version: "v1"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v2", Timestamp: now.Add(-3 * time.Hour).Format(time.RFC3339), Version: "v2"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v3", Timestamp: now.Add(-2 * time.Hour).Format(time.RFC3339), Version: "v3"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v4", Timestamp: now.Add(-1 * time.Hour).Format(time.RFC3339), Version: "v4"},
+			{Name: "app", Type: "binary", Location: "./build/bin/app-v5", Timestamp: now.Format(time.RFC3339), Version: "v5"},
 		},
 		TestEnvironments: make(map[string]*TestEnvironment),
 	}
@@ -720,6 +720,7 @@ func TestGetArtifactStorePath_WithConfiguredPath(t *testing.T) {
 
 	// Create forge.yaml with custom artifact store path
 	spec := Spec{
+		Name:              "test-project",
 		ArtifactStorePath: "/custom/path/artifacts.yaml",
 	}
 
@@ -758,7 +759,8 @@ func TestGetArtifactStorePath_WithDefaultPath(t *testing.T) {
 
 	// Create forge.yaml without artifact store path
 	spec := Spec{
-		Name: "test-project",
+		Name:              "test-project",
+		ArtifactStorePath: ".forge/artifacts.yaml",
 	}
 
 	data, err := yaml.Marshal(spec)
