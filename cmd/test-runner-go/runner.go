@@ -71,10 +71,8 @@ func runTests(stage, name, tmpDir string, testEnv map[string]string) (*TestRepor
 
 	// Inherit current environment and add testenv variables
 	cmd.Env = os.Environ()
-	if testEnv != nil {
-		for key, value := range testEnv {
-			cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
-		}
+	for key, value := range testEnv {
+		cmd.Env = append(cmd.Env, fmt.Sprintf("%s=%s", key, value))
 	}
 
 	// Redirect test output to stderr so JSON report can go to stdout

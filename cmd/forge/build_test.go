@@ -39,7 +39,7 @@ func TestBuildIntegration(t *testing.T) {
 	}
 
 	// Clean up artifact store before test
-	artifactStorePath := ".ignore.artifact-store.yaml"
+	artifactStorePath := ".forge/artifact-store.yaml"
 	_ = os.Remove(artifactStorePath)
 
 	// Run forge build

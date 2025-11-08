@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
 // TestGolangciLintVersion tests that the correct golangci-lint version is used
@@ -96,7 +98,7 @@ func TestGolangciLintPackagePath(t *testing.T) {
 
 // TestRunInputStructure tests the RunInput structure
 func TestRunInputStructure(t *testing.T) {
-	input := RunInput{
+	input := mcptypes.RunInput{
 		Stage: "lint",
 		Name:  "lint-test",
 	}

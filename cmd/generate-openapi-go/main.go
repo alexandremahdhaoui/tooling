@@ -16,6 +16,7 @@ import (
 	"github.com/alexandremahdhaoui/forge/internal/util"
 	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -63,10 +64,6 @@ output-options:
   skip-prune: true
 `
 )
-
-type GenerateInput struct {
-	ConfigPath string `json:"configPath,omitempty"` // Path to forge.yaml (default: ./forge.yaml)
-}
 
 func main() {
 	if len(os.Args) > 1 {
@@ -123,9 +120,10 @@ func runMCPServer() error {
 func handleBuild(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
-	input GenerateInput,
+	input mcptypes.BuildInput,
 ) (*mcp.CallToolResult, any, error) {
-	configPath := input.ConfigPath
+	// Get configPath from environment variable or use default
+	configPath := os.Getenv("OPENAPI_CONFIG_PATH")
 	if configPath == "" {
 		configPath = "./forge.yaml"
 	}
@@ -272,7 +270,7 @@ func writeTempCodegenConfig(templatedConfig string) (string, func(), error) {
 	}
 
 	cleanup := func() {
-		os.RemoveAll(tempFile.Name())
+		_ = os.RemoveAll(tempFile.Name())
 	}
 
 	if _, err := tempFile.WriteString(templatedConfig); err != nil {

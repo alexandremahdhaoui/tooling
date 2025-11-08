@@ -550,7 +550,7 @@ func updateTestStatus(testID, status string) {
 	env.UpdatedAt = time.Now().UTC()
 
 	forge.AddOrUpdateTestEnvironment(&store, env)
-	forge.WriteArtifactStore(artifactStorePath, store)
+	_ = forge.WriteArtifactStore(artifactStorePath, store)
 }
 
 // outputFormat represents the desired output format
@@ -612,94 +612,6 @@ func printYAML(v any) {
 		return
 	}
 	fmt.Print(string(data))
-}
-
-// printTestReportsTable prints test reports as a table.
-func printTestReportsTable(reports []any) {
-	if len(reports) == 0 {
-		return
-	}
-
-	// Print header
-	fmt.Printf("%-36s  %-10s  %-20s  %-10s\n", "ID", "STATUS", "CREATED", "COVERAGE")
-	fmt.Printf("%s  %s  %s  %s\n",
-		strings.Repeat("-", 36),
-		strings.Repeat("-", 10),
-		strings.Repeat("-", 20),
-		strings.Repeat("-", 10))
-
-	// Print rows
-	for _, r := range reports {
-		report, ok := r.(map[string]any)
-		if !ok {
-			continue
-		}
-
-		id := getStringField(report, "id")
-		status := getStringField(report, "status")
-
-		// Get created timestamp
-		createdStr := "-"
-		if createdAt, ok := report["createdAt"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-				createdStr = t.Format("2006-01-02 15:04:05")
-			}
-		}
-
-		// Get coverage percentage
-		coverageStr := "-"
-		if coverage, ok := report["coverage"].(map[string]any); ok {
-			if pct, ok := coverage["percentage"].(float64); ok {
-				coverageStr = fmt.Sprintf("%.1f%%", pct)
-			}
-		}
-
-		fmt.Printf("%-36s  %-10s  %-20s  %-10s\n",
-			id,
-			truncate(status, 10),
-			createdStr,
-			coverageStr)
-	}
-}
-
-// printTestReportTable prints a single test report as a table.
-func printTestReportTable(report map[string]any) {
-	fmt.Printf("Test Report: %s\n", getStringField(report, "id"))
-	fmt.Printf("Stage:       %s\n", getStringField(report, "stage"))
-	fmt.Printf("Status:      %s\n", getStringField(report, "status"))
-
-	if createdAt, ok := report["createdAt"].(string); ok {
-		if t, err := time.Parse(time.RFC3339, createdAt); err == nil {
-			fmt.Printf("Created:     %s\n", t.Format("2006-01-02 15:04:05"))
-		}
-	}
-
-	if duration, ok := report["duration"].(float64); ok {
-		fmt.Printf("Duration:    %.2fs\n", duration)
-	}
-
-	if stats, ok := report["testStats"].(map[string]any); ok {
-		if total, ok := stats["total"].(float64); ok {
-			fmt.Printf("Tests:       %.0f total", total)
-			if passed, ok := stats["passed"].(float64); ok {
-				fmt.Printf(", %.0f passed", passed)
-			}
-			if failed, ok := stats["failed"].(float64); ok {
-				fmt.Printf(", %.0f failed", failed)
-			}
-			fmt.Println()
-		}
-	}
-
-	if coverage, ok := report["coverage"].(map[string]any); ok {
-		if pct, ok := coverage["percentage"].(float64); ok {
-			fmt.Printf("Coverage:    %.1f%%\n", pct)
-		}
-	}
-
-	if outputPath, ok := report["outputPath"].(string); ok && outputPath != "" {
-		fmt.Printf("Output:      %s\n", outputPath)
-	}
 }
 
 // getStringField safely gets a string field from a map.

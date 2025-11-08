@@ -12,6 +12,7 @@ import (
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/internal/version"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -29,10 +30,6 @@ func init() {
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
-}
-
-type GenerateMocksInput struct {
-	MocksDir string `json:"mocksDir,omitempty"` // Directory to clean/generate mocks (default: ./internal/util/mocks)
 }
 
 func main() {
@@ -89,11 +86,14 @@ func runMCPServer() error {
 func handleBuild(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
-	input GenerateMocksInput,
+	input mcptypes.BuildInput,
 ) (*mcp.CallToolResult, any, error) {
 	log.Printf("Generating mocks")
 
-	if err := generateMocks(input.MocksDir); err != nil {
+	// Get mocksDir from environment variable
+	mocksDir := os.Getenv("MOCKS_DIR")
+
+	if err := generateMocks(mocksDir); err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: fmt.Sprintf("Mock generation failed: %v", err)},
@@ -106,7 +106,7 @@ func handleBuild(
 	artifact := forge.Artifact{
 		Name:      "mocks",
 		Type:      "generated",
-		Location:  getMocksDir(input.MocksDir),
+		Location:  getMocksDir(mocksDir),
 		Timestamp: time.Now().Format(time.RFC3339),
 	}
 

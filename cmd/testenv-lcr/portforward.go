@@ -98,7 +98,7 @@ func (pf *PortForwarder) waitForReady(ctx context.Context) error {
 				100*time.Millisecond,
 			)
 			if err == nil {
-				conn.Close()
+				_ = conn.Close()
 				return nil
 			}
 		}

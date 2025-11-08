@@ -818,7 +818,7 @@ go run ./cmd/forge build generic-builder generic-test-runner
 
 - Read [Engine Implementation Guide](./prompts/create-build-engine.md) for custom engines
 - Read [Using Generic Test Runner](./prompts/use-generic-test-runner.md) for test patterns
-- See [Test Engine Guide](./prompts/create-test-engine.md) for environment management
+- See [Testenv Subengine Guide](./prompts/create-testenv-subengine.md) for environment management
 - Check `cmd/generic-builder` and `cmd/generic-test-runner` source code for implementation details
 
 ## Summary

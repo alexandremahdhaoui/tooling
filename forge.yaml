@@ -1,7 +1,7 @@
 name: forge
 
 # -- artifactStorePath is the path to the unified artifact store (moved to root level)
-artifactStorePath: .ignore.artifact-store.yaml
+artifactStorePath: .forge/artifact-store.yaml
 
 # -- engines defines custom engine configurations with aliases
 engines:

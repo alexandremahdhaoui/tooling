@@ -54,9 +54,10 @@ Before proceeding, read these documentation files using `forge prompt get` or di
    docs/prompts/create-build-engine.md
    ```
 
-4. **Test Engine Guide** (if you manage test environments):
+4. **Testenv Guides** (if you manage test environments):
    ```
-   docs/prompts/create-test-engine.md
+   docs/prompts/create-testenv-subengine.md  # For creating subengines
+   docs/prompts/create-testenv.md            # For custom orchestrators
    ```
 
 ### Phase 3: Create forge.yaml Structure

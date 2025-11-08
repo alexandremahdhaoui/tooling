@@ -21,7 +21,9 @@ package forge
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
@@ -260,14 +262,71 @@ func PruneBuildArtifacts(store *ArtifactStore, keepCount int) {
 	store.Artifacts = prunedArtifacts
 }
 
+// lockArtifactStore acquires an exclusive file lock for the artifact store.
+// The lock is held on a separate .lock file to avoid interfering with reads.
+// The caller must call unlockArtifactStore to release the lock.
+func lockArtifactStore(path string) (*os.File, error) {
+	lockPath := path + ".lock"
+
+	// Ensure the directory exists
+	dir := filepath.Dir(lockPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, flaterrors.Join(err, errors.New("failed to create lock directory"))
+	}
+
+	// Open or create the lock file
+	lockFile, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, flaterrors.Join(err, errors.New("failed to open lock file"))
+	}
+
+	// Acquire exclusive lock (LOCK_EX) - blocks until lock is available
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX); err != nil {
+		_ = lockFile.Close()
+		return nil, flaterrors.Join(err, errors.New("failed to acquire lock"))
+	}
+
+	return lockFile, nil
+}
+
+// unlockArtifactStore releases the file lock and closes the lock file.
+func unlockArtifactStore(lockFile *os.File) error {
+	if lockFile == nil {
+		return nil
+	}
+
+	// Release the lock
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN); err != nil {
+		_ = lockFile.Close()
+		return flaterrors.Join(err, errors.New("failed to release lock"))
+	}
+
+	// Close the lock file
+	return lockFile.Close()
+}
+
 // WriteArtifactStore writes the artifact store to the specified path.
 // Before writing, it prunes old build artifacts to keep only the 3 most recent per type+name.
+// This function uses file locking to prevent concurrent write conflicts.
 func WriteArtifactStore(path string, store ArtifactStore) error {
+	// Acquire exclusive lock
+	lockFile, err := lockArtifactStore(path)
+	if err != nil {
+		return flaterrors.Join(err, errWritingArtifactStore)
+	}
+	defer func() { _ = unlockArtifactStore(lockFile) }()
+
 	// Prune old build artifacts (keep only 3 most recent per type+name)
 	PruneBuildArtifacts(&store, 3)
 
 	b, err := yaml.Marshal(store)
 	if err != nil {
+		return flaterrors.Join(err, errWritingArtifactStore)
+	}
+
+	// Ensure directory exists
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return flaterrors.Join(err, errWritingArtifactStore)
 	}
 

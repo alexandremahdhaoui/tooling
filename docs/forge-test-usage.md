@@ -360,9 +360,9 @@ forge test integration run $TEST_ID
 
 ## Implementing Custom Tools
 
-### Custom Test Engine
+### Custom Testenv Orchestrator or Subengine
 
-See [`docs/prompts/create-test-engine.md`](./prompts/create-test-engine.md) for detailed implementation guide.
+See [`docs/prompts/create-testenv.md`](./prompts/create-testenv.md) for creating custom orchestrators or [`docs/prompts/create-testenv-subengine.md`](./prompts/create-testenv-subengine.md) for creating subengines.
 
 **Minimal engine:**
 ```go
@@ -508,7 +508,8 @@ See `.ai/plan/test-command-refactor/examples.md` for more comprehensive examples
 
 ## Reference
 
-- **Test Engine Guide**: [`docs/prompts/create-test-engine.md`](./prompts/create-test-engine.md)
+- **Testenv Orchestrator Guide**: [`docs/prompts/create-testenv.md`](./prompts/create-testenv.md)
+- **Testenv Subengine Guide**: [`docs/prompts/create-testenv-subengine.md`](./prompts/create-testenv-subengine.md)
 - **Generic Test Runner Guide**: [`docs/prompts/use-generic-test-runner.md`](./prompts/use-generic-test-runner.md)
 - **Architecture**: [ARCHITECTURE.md](../ARCHITECTURE.md#test-infrastructure)
 - **Reference Implementation**: `cmd/testenv`, `cmd/generic-test-runner`

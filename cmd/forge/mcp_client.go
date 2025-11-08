@@ -39,7 +39,7 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MCP server %s: %w", binaryPath, err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Convert params to map[string]any for CallTool
 	var arguments map[string]any

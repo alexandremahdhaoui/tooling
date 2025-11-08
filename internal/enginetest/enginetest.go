@@ -90,7 +90,7 @@ func TestMCPMode(t *testing.T, engine Engine) {
 		if err != nil {
 			t.Fatalf("Failed to create stdin pipe: %v", err)
 		}
-		defer stdin.Close()
+		defer func() { _ = stdin.Close() }()
 
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
@@ -135,7 +135,7 @@ func TestMCPMode(t *testing.T, engine Engine) {
 		}
 
 		// Clean up
-		stdin.Close()
+		_ = stdin.Close()
 
 		// Wait for process to exit or kill it
 		done := make(chan error, 1)
@@ -149,7 +149,7 @@ func TestMCPMode(t *testing.T, engine Engine) {
 		case <-time.After(1 * time.Second):
 			// Kill the process if it's still running
 			if cmd.Process != nil {
-				cmd.Process.Kill()
+				_ = cmd.Process.Kill()
 			}
 		}
 

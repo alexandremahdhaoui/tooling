@@ -11,6 +11,7 @@ import (
 
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/internal/version"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -38,11 +39,6 @@ type TestReport struct {
 	Total        int     `json:"total"`    // total issues found
 	Passed       int     `json:"passed"`   // always 0 or 1
 	Failed       int     `json:"failed"`   // 0 if passed, 1 if failed
-}
-
-type RunInput struct {
-	Stage string `json:"stage"`
-	Name  string `json:"name"`
 }
 
 func main() {
@@ -121,7 +117,7 @@ func runMCPServer() error {
 func handleRun(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
-	input RunInput,
+	input mcptypes.RunInput,
 ) (*mcp.CallToolResult, any, error) {
 	log.Printf("Running linter: stage=%s, name=%s", input.Stage, input.Name)
 

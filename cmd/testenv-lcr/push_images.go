@@ -130,7 +130,7 @@ func loginToRegistry(containerEngine, registryEndpoint, credPath string) error {
 	if _, err := stdin.Write([]byte(creds.Password)); err != nil {
 		return flaterrors.Join(err, errLoggingInToRegistry)
 	}
-	stdin.Close()
+	_ = stdin.Close()
 
 	// Wait for command to finish
 	if err := loginCmd.Wait(); err != nil {

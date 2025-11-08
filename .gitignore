@@ -24,4 +24,5 @@ build/*
 .ignore*
 .kindenv.kubeconfig.yaml
 tmp/
+.forge/
 .envrc

@@ -50,6 +50,11 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
+	case "test-all":
+		if err := runTestAll(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "prompt":
 		if err := runPrompt(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -77,6 +82,7 @@ func printUsage() {
 Usage:
   forge build [artifact-name]         Build artifacts from forge.yaml
   forge test <stage> <operation>      Manage test environments
+  forge test-all                      Build all artifacts and run all test stages
   forge prompt <list|get> [name]      Fetch documentation prompts
   forge config <subcommand>           Configuration management
   forge version                       Show version information
@@ -89,6 +95,8 @@ Commands:
   test <stage> delete <id>           Delete test environment
   test <stage> list                  List test environments for stage
   test <stage> run [test-id]         Run tests for stage
+
+  test-all                           Build all artifacts and run all test stages sequentially
 
   prompt list                        List all available prompts
   prompt get <name>                  Fetch a specific prompt

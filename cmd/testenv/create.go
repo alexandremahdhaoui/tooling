@@ -41,14 +41,14 @@ func cmdCreate(stageName string) (string, error) {
 	// Generate unique test ID
 	testID := generateTestID(stageName)
 
-	// Create tmpDir for this test environment in project's ./tmp directory
-	// Pattern: ./tmp/test-{stage}-{testID}
+	// Create tmpDir for this test environment in project's ./.forge/tmp directory
+	// Pattern: ./.forge/tmp/test-{stage}-{testID}
 	rootDir, err := os.Getwd()
 	if err != nil {
 		return "", fmt.Errorf("failed to get working directory: %w", err)
 	}
 
-	tmpBase := filepath.Join(rootDir, "tmp")
+	tmpBase := filepath.Join(rootDir, ".forge", "tmp")
 	if err := os.MkdirAll(tmpBase, 0o755); err != nil {
 		return "", fmt.Errorf("failed to create tmp base directory: %w", err)
 	}
@@ -84,7 +84,7 @@ func cmdCreate(stageName string) (string, error) {
 
 		binaryPath, err := resolveEngineURI(setupSpec)
 		if err != nil {
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir)
 			return "", fmt.Errorf("failed to resolve engine %s: %w", setupSpec, err)
 		}
 
@@ -101,7 +101,7 @@ func cmdCreate(stageName string) (string, error) {
 
 		result, err := callMCPEngine(binaryPath, "create", params)
 		if err != nil {
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir)
 			return "", fmt.Errorf("failed to create with %s: %w", setupSpec, err)
 		}
 
@@ -137,7 +137,7 @@ func cmdCreate(stageName string) (string, error) {
 		// Orchestrate testenv-subengines
 		if err := orchestrateCreate(config, setupAlias, env); err != nil {
 			// Cleanup tmpDir on failure
-			os.RemoveAll(tmpDir)
+			_ = os.RemoveAll(tmpDir)
 			return "", fmt.Errorf("failed to orchestrate testenv-subengines: %w", err)
 		}
 	}
@@ -172,7 +172,7 @@ func cmdCreate(stageName string) (string, error) {
 func generateTestID(stageName string) string {
 	// Generate random suffix
 	randBytes := make([]byte, 4)
-	rand.Read(randBytes)
+	_, _ = rand.Read(randBytes)
 	suffix := hex.EncodeToString(randBytes)
 
 	// Format: test-<stage>-YYYYMMDD-XXXXXXXX
@@ -226,7 +226,7 @@ func orchestrateCreate(config forge.Spec, setupAlias string, env *forge.TestEnvi
 		}
 
 		// Add spec if provided
-		if subengine.Spec != nil && len(subengine.Spec) > 0 {
+		if len(subengine.Spec) > 0 {
 			params["spec"] = subengine.Spec
 		}
 

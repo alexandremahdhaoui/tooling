@@ -11,11 +11,17 @@ prompts:
     url: "migrate-makefile.md"
     tags: ["migration", "makefile", "getting-started"]
 
-  - name: "create-test-engine"
-    title: "Create a Custom Test Engine"
-    description: "Step-by-step guide for implementing a custom test engine"
-    url: "create-test-engine.md"
-    tags: ["test-engine", "implementation", "custom"]
+  - name: "create-testenv"
+    title: "Create a Custom Testenv Orchestrator"
+    description: "Guide for implementing a custom testenv orchestrator that composes subengines"
+    url: "create-testenv.md"
+    tags: ["testenv", "orchestrator", "implementation", "custom"]
+
+  - name: "create-testenv-subengine"
+    title: "Create a Testenv Subengine"
+    description: "Step-by-step guide for implementing a testenv subengine component"
+    url: "create-testenv-subengine.md"
+    tags: ["testenv", "subengine", "implementation", "custom"]
 
   - name: "create-test-runner"
     title: "Create a Custom Test Runner"

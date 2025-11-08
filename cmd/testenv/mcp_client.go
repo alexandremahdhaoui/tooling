@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -74,7 +73,7 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to MCP server %s: %w", binaryPath, err)
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// Convert params to map[string]any for CallTool
 	var arguments map[string]any
@@ -148,14 +147,4 @@ func resolveEngineURI(engineURI string) (string, error) {
 
 	// Fallback: use relative path from current directory
 	return fmt.Sprintf("./build/bin/%s", packagePath), nil
-}
-
-// getEngineConfig retrieves an engine configuration by alias from the spec.
-func getEngineConfig(alias string, spec *forge.Spec) *forge.EngineConfig {
-	for i := range spec.Engines {
-		if spec.Engines[i].Alias == alias {
-			return &spec.Engines[i]
-		}
-	}
-	return nil
 }
