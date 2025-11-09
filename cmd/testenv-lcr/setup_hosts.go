@@ -20,7 +20,7 @@ const (
 var errManagingHostsFile = errors.New("managing /etc/hosts file")
 
 // addHostsEntry adds an entry to /etc/hosts for the given FQDN if it doesn't already exist.
-// It uses the provided prepend command (e.g., "sudo") for privileged operations.
+// It uses the provided prepend command (e.g., "sudo", "sudo -E") for privileged operations.
 func addHostsEntry(fqdn, prependCmd string) error {
 	// Check if entry already exists
 	exists, err := hostsEntryExists(fqdn)
@@ -38,7 +38,10 @@ func addHostsEntry(fqdn, prependCmd string) error {
 
 	var cmd *exec.Cmd
 	if prependCmd != "" {
-		cmd = exec.Command(prependCmd, "sh", "-c", fmt.Sprintf("echo '%s' >> %s", entry, hostsFilePath))
+		// Split prepend command by spaces to handle "sudo -E" correctly
+		prependArgs := strings.Fields(prependCmd)
+		args := append(prependArgs, "sh", "-c", fmt.Sprintf("echo '%s' >> %s", entry, hostsFilePath))
+		cmd = exec.Command(args[0], args[1:]...)
 	} else {
 		cmd = exec.Command("sh", "-c", fmt.Sprintf("echo '%s' >> %s", entry, hostsFilePath))
 	}
@@ -53,7 +56,7 @@ func addHostsEntry(fqdn, prependCmd string) error {
 }
 
 // removeHostsEntry removes the entry from /etc/hosts for the given FQDN.
-// It uses the provided prepend command (e.g., "sudo") for privileged operations.
+// It uses the provided prepend command (e.g., "sudo", "sudo -E") for privileged operations.
 func removeHostsEntry(fqdn, prependCmd string) error {
 	// Check if entry exists
 	exists, err := hostsEntryExists(fqdn)
@@ -71,7 +74,10 @@ func removeHostsEntry(fqdn, prependCmd string) error {
 
 	var cmd *exec.Cmd
 	if prependCmd != "" {
-		cmd = exec.Command(prependCmd, "sh", "-c", sedCmd)
+		// Split prepend command by spaces to handle "sudo -E" correctly
+		prependArgs := strings.Fields(prependCmd)
+		args := append(prependArgs, "sh", "-c", sedCmd)
+		cmd = exec.Command(args[0], args[1:]...)
 	} else {
 		cmd = exec.Command("sh", "-c", sedCmd)
 	}

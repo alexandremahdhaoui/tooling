@@ -74,12 +74,6 @@ func runBuild(args []string) error {
 	for engineURI, specs := range engineSpecs {
 		fmt.Printf("Building %d artifact(s) with %s...\n", len(specs), engineURI)
 
-		// Resolve engine URI (handles aliases)
-		command, args, err := resolveEngine(engineURI, &config)
-		if err != nil {
-			return fmt.Errorf("failed to resolve engine %s: %w", engineURI, err)
-		}
-
 		// Check if this is a multi-engine alias
 		var artifacts []forge.Artifact
 		if strings.HasPrefix(engineURI, "alias://") {
@@ -114,7 +108,12 @@ func runBuild(args []string) error {
 					return fmt.Errorf("multi-engine build failed: %w", err)
 				}
 			} else {
-				// Single-engine alias or direct go:// URI
+				// Single-engine alias - resolve to actual engine
+				command, args, err := resolveEngine(engineURI, &config)
+				if err != nil {
+					return fmt.Errorf("failed to resolve engine %s: %w", engineURI, err)
+				}
+
 				artifacts, err = buildWithSingleEngine(command, args, specs, dirs, engineConfig)
 				if err != nil {
 					return fmt.Errorf("build failed: %w", err)
@@ -122,6 +121,11 @@ func runBuild(args []string) error {
 			}
 		} else {
 			// Direct go:// URI - single engine
+			command, args, err := resolveEngine(engineURI, &config)
+			if err != nil {
+				return fmt.Errorf("failed to resolve engine %s: %w", engineURI, err)
+			}
+
 			artifacts, err = buildWithSingleEngine(command, args, specs, dirs, nil)
 			if err != nil {
 				return fmt.Errorf("build failed: %w", err)

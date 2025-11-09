@@ -44,7 +44,12 @@ Create local container registry in Kind cluster.
     "testenv-lcr.registryFQDN": "testenv-lcr.testenv-lcr.svc.cluster.local:5000",
     "testenv-lcr.namespace": "testenv-lcr",
     "testenv-lcr.caCrtPath": "/abs/path/to/tmpDir/ca.crt",
-    "testenv-lcr.credentialPath": "/abs/path/to/tmpDir/registry-credentials.yaml"
+    "testenv-lcr.credentialPath": "/abs/path/to/tmpDir/registry-credentials.yaml",
+    "testenv-lcr.imagePullSecretCount": "2",
+    "testenv-lcr.imagePullSecret.0.namespace": "default",
+    "testenv-lcr.imagePullSecret.0.secretName": "local-container-registry-credentials",
+    "testenv-lcr.imagePullSecret.1.namespace": "my-app",
+    "testenv-lcr.imagePullSecret.1.secretName": "local-container-registry-credentials"
   },
   "managedResources": [
     "/abs/path/to/tmpDir/ca.crt",
@@ -63,6 +68,8 @@ Create local container registry in Kind cluster.
 7. Deploys registry:2 with TLS and auth
 8. Exports CA cert and credentials to tmpDir
 9. Updates /etc/hosts for registry FQDN
+10. Auto-pushes images from artifact store (if autoPushImages: true)
+11. Creates image pull secrets in configured namespaces (if imagePullSecretNamespaces specified)
 
 **Example:**
 ```json
@@ -106,9 +113,122 @@ Delete local container registry from Kind cluster.
 
 **What It Does:**
 1. Uses kubeconfig from metadata
-2. Deletes Kubernetes namespace
-3. Removes /etc/hosts entry
-4. Best-effort cleanup (doesn't fail on errors)
+2. Deletes image pull secrets in all namespaces
+3. Deletes Kubernetes namespace
+4. Removes /etc/hosts entry
+5. Best-effort cleanup (doesn't fail on errors)
+
+### `create-image-pull-secret`
+
+Create an image pull secret in a specific namespace for the local container registry.
+
+**Input Schema:**
+```json
+{
+  "testID": "string (required)",     // Test environment ID
+  "namespace": "string (required)",  // Kubernetes namespace for secret
+  "secretName": "string (optional)", // Secret name (defaults to config or "local-container-registry-credentials")
+  "metadata": {                      // Metadata from testenv
+    "testenv-kind.kubeconfigPath": "string",
+    "testenv-lcr.registryFQDN": "string",
+    "testenv-lcr.caCrtPath": "string",
+    "testenv-lcr.credentialPath": "string"
+  }
+}
+```
+
+**Output:**
+```json
+{
+  "success": true,
+  "message": "Created image pull secret: namespace/secret-name"
+}
+```
+
+**What It Does:**
+1. Validates inputs (testID and namespace required)
+2. Reads registry credentials from file
+3. Reads CA certificate
+4. Creates namespace if it doesn't exist
+5. Generates .dockerconfigjson with registry auth
+6. Creates Kubernetes secret with type kubernetes.io/dockerconfigjson
+7. Labels secret with app.kubernetes.io/managed-by=testenv-lcr
+
+**Example:**
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "create-image-pull-secret",
+    "arguments": {
+      "testID": "test-int-20250106-xyz789",
+      "namespace": "my-app",
+      "metadata": {
+        "testenv-lcr.registryFQDN": "testenv-lcr.testenv-lcr.svc.cluster.local:5000",
+        "testenv-lcr.caCrtPath": ".forge/tmp/.../ca.crt",
+        "testenv-lcr.credentialPath": ".forge/tmp/.../registry-credentials.yaml"
+      }
+    }
+  }
+}
+```
+
+### `list-image-pull-secrets`
+
+List all image pull secrets created by testenv-lcr across all namespaces or in a specific namespace.
+
+**Input Schema:**
+```json
+{
+  "testID": "string (required)",      // Test environment ID
+  "namespace": "string (optional)",   // Optional namespace filter
+  "metadata": {                       // Metadata from testenv
+    "testenv-kind.kubeconfigPath": "string"
+  }
+}
+```
+
+**Output:**
+```json
+{
+  "testID": "string",
+  "secrets": [
+    {
+      "namespace": "default",
+      "secretName": "local-container-registry-credentials",
+      "createdAt": "2025-01-06T10:30:00Z"
+    },
+    {
+      "namespace": "test-podinfo",
+      "secretName": "local-container-registry-credentials",
+      "createdAt": "2025-01-06T10:30:00Z"
+    }
+  ],
+  "count": 2
+}
+```
+
+**What It Does:**
+1. Lists all secrets with label app.kubernetes.io/managed-by=testenv-lcr
+2. Filters by namespace if provided
+3. Returns secret information (namespace, name, creation time)
+
+**Example:**
+```json
+{
+  "method": "tools/call",
+  "params": {
+    "name": "list-image-pull-secrets",
+    "arguments": {
+      "testID": "test-int-20250106-xyz789",
+      "namespace": "default",
+      "metadata": {
+        "testenv-kind.kubeconfigPath": ".forge/tmp/.../kubeconfig"
+      }
+    }
+  }
+}
+```
 
 ## Integration
 
@@ -123,6 +243,11 @@ localContainerRegistry:
   namespace: testenv-lcr
   credentialPath: .forge/registry-credentials.yaml  # Overridden by tmpDir
   caCrtPath: .forge/ca.crt                          # Overridden by tmpDir
+  autoPushImages: true                              # Auto-push images from artifact store on setup
+  imagePullSecretNamespaces:                        # Automatically create image pull secrets in these namespaces
+    - default
+    - my-app
+  imagePullSecretName: local-container-registry-credentials  # Custom secret name (optional)
 ```
 
 ## Registry Details

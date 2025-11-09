@@ -45,6 +45,10 @@ localContainerRegistry:
   caCrtPath: .ignore.ca.crt
   namespace: local-container-registry
   autoPushImages: true  # Automatically push images from artifact store on setup
+  imagePullSecretNamespaces:  # Automatically create image pull secrets in these namespaces
+    - default
+    - my-app
+  imagePullSecretName: local-container-registry-credentials  # Custom secret name (optional)
 
 build:
   artifactStorePath: .ignore.artifact-store.yaml
@@ -84,6 +88,8 @@ CONTAINER_ENGINE=docker PREPEND_CMD=sudo go run ./cmd/local-container-registry
 7. **Adds /etc/hosts entry** for registry FQDN
 8. Deploys registry with TLS and auth
 9. Writes credentials to `.ignore.local-container-registry.yaml`
+10. Auto-pushes images from artifact store (if `autoPushImages: true`)
+11. Creates image pull secrets in configured namespaces (if `imagePullSecretNamespaces` specified)
 
 ### Teardown
 
@@ -92,10 +98,11 @@ CONTAINER_ENGINE=docker PREPEND_CMD=sudo go run ./cmd/local-container-registry t
 ```
 
 **What happens during teardown:**
-1. Deletes namespace (cascades to all resources)
-2. Uninstalls cert-manager
-3. **Removes /etc/hosts entry**
-4. Cleans up local files
+1. Deletes image pull secrets in all namespaces
+2. Deletes namespace (cascades to all resources)
+3. Uninstalls cert-manager
+4. **Removes /etc/hosts entry**
+5. Cleans up local files
 
 ### Push Single Image
 
@@ -129,6 +136,38 @@ CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push-all
    - Tags and pushes image
 
 **Note**: If `autoPushImages: true` in config, this happens automatically during setup.
+
+### Create Image Pull Secret
+
+```bash
+# Create an image pull secret in a specific namespace
+CONTAINER_ENGINE=docker go run ./cmd/local-container-registry create-image-pull-secret my-app
+
+# Create with a custom secret name
+CONTAINER_ENGINE=docker go run ./cmd/local-container-registry create-image-pull-secret my-app my-custom-secret
+```
+
+**What happens during create-image-pull-secret:**
+1. Reads registry configuration and credentials
+2. Creates namespace if it doesn't exist
+3. Generates `.dockerconfigjson` with registry auth
+4. Creates Kubernetes secret of type `kubernetes.io/dockerconfigjson`
+5. Labels secret with `app.kubernetes.io/managed-by=testenv-lcr`
+
+### List Image Pull Secrets
+
+```bash
+# List all image pull secrets created by testenv-lcr
+CONTAINER_ENGINE=docker go run ./cmd/local-container-registry list-image-pull-secrets
+
+# List secrets in a specific namespace
+CONTAINER_ENGINE=docker go run ./cmd/local-container-registry list-image-pull-secrets my-app
+```
+
+**What happens during list-image-pull-secrets:**
+1. Lists all secrets with label `app.kubernetes.io/managed-by=testenv-lcr`
+2. Filters by namespace if provided
+3. Displays namespace, secret name, and creation time
 
 ## Accessing the Registry
 

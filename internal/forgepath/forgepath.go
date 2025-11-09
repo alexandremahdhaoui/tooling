@@ -120,8 +120,10 @@ func IsForgeRepo(dir string) bool {
 // BuildGoRunCommand constructs the command arguments for executing a forge MCP server
 // via `go run`. The returned slice is suitable for use with exec.Command("go", args...).
 //
-// It prefers using the module path (github.com/alexandremahdhaoui/forge/cmd/{packageName})
-// for portability, but falls back to the local repository path if needed.
+// Behavior:
+// - If forge module is in dependencies/cache: use module path github.com/alexandremahdhaoui/forge/cmd/{packageName}
+// - If running from within forge repo: use relative path ./cmd/{packageName}
+// - Otherwise: use versioned module syntax github.com/alexandremahdhaoui/forge/cmd/{packageName}@latest
 //
 // Example usage:
 //
@@ -133,22 +135,54 @@ func BuildGoRunCommand(packageName string) ([]string, error) {
 		return nil, fmt.Errorf("package name cannot be empty")
 	}
 
-	// Try to use module path first (preferred for portability)
+	// Try to use module path first (preferred when forge is in dependencies)
 	moduleCmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", forgeModule)
 	if output, err := moduleCmd.Output(); err == nil {
 		modulePath := strings.TrimSpace(string(output))
 		if modulePath != "" {
-			// Module is available, use module path
+			// Module is available in go.mod or cache, use module path
 			return []string{"run", fmt.Sprintf("%s/cmd/%s", forgeModule, packageName)}, nil
 		}
 	}
 
-	// Fall back to local repository path
+	// Try to find forge repository locally
 	forgeRepo, err := FindForgeRepo()
 	if err != nil {
-		return nil, fmt.Errorf("failed to locate forge repository: %w", err)
+		// Can't find forge locally, use versioned module syntax
+		// This allows `go run` to fetch from the module proxy
+		return []string{"run", fmt.Sprintf("%s/cmd/%s@latest", forgeModule, packageName)}, nil
 	}
 
-	// Use local path
-	return []string{"run", filepath.Join(forgeRepo, "cmd", packageName)}, nil
+	// Found local forge repo - check if we're running from within it
+	cwd, err := os.Getwd()
+	if err != nil {
+		// Can't get CWD, fall back to versioned module
+		return []string{"run", fmt.Sprintf("%s/cmd/%s@latest", forgeModule, packageName)}, nil
+	}
+
+	// Check if CWD is inside forge repo (for development)
+	absForgeRepo, err := filepath.Abs(forgeRepo)
+	if err != nil {
+		return []string{"run", fmt.Sprintf("%s/cmd/%s@latest", forgeModule, packageName)}, nil
+	}
+
+	absCwd, err := filepath.Abs(cwd)
+	if err != nil {
+		return []string{"run", fmt.Sprintf("%s/cmd/%s@latest", forgeModule, packageName)}, nil
+	}
+
+	// If CWD is inside forge repo, use relative path for development
+	if strings.HasPrefix(absCwd, absForgeRepo+string(filepath.Separator)) || absCwd == absForgeRepo {
+		// Running from within forge repo - use relative path
+		relPath, err := filepath.Rel(absCwd, filepath.Join(absForgeRepo, "cmd", packageName))
+		if err != nil {
+			// Shouldn't happen, but fall back to versioned module
+			return []string{"run", fmt.Sprintf("%s/cmd/%s@latest", forgeModule, packageName)}, nil
+		}
+		return []string{"run", relPath}, nil
+	}
+
+	// We're outside the forge repo - use versioned module syntax
+	// This allows customers to run forge tools without having the repo locally
+	return []string{"run", fmt.Sprintf("%s/cmd/%s@latest", forgeModule, packageName)}, nil
 }

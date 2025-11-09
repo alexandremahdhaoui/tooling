@@ -3,6 +3,13 @@ name: forge
 # -- artifactStorePath is the path to the unified artifact store (moved to root level)
 artifactStorePath: .forge/artifact-store.yaml
 
+# -- localContainerRegistry configuration (root level defaults)
+localContainerRegistry:
+  enabled: false  # Disabled by default, enabled via testenv spec
+  namespace: testenv-lcr
+  credentialPath: .forge/registry-credentials.yaml
+  caCrtPath: .forge/ca.crt
+
 # -- engines defines custom engine configurations with aliases
 engines:
   # Example: custom test runner alias
@@ -35,6 +42,12 @@ engines:
           # caCrtPath: .ignore.ca.crt
           # -- namespace where the local container registry will be deployed.
           # namespace: local-container-registry
+          # -- imagePullSecretNamespaces is a list of namespaces where image pull secrets should be automatically created.
+          imagePullSecretNamespaces:
+            - default
+            - test-podinfo
+          # -- imagePullSecretName is the name of the image pull secret to create (defaults to "local-container-registry-credentials").
+          # imagePullSecretName: local-container-registry-credentials
 
       - # -- testenv-helm-install installs Helm charts into the Kind cluster
         engine: "go://testenv-helm-install"
