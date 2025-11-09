@@ -109,6 +109,11 @@ func ReadSpecFromPath(path string) (Spec, error) {
 		}
 	}
 
+	// Apply defaults to LocalContainerRegistry
+	if out.LocalContainerRegistry.Namespace == "" {
+		out.LocalContainerRegistry.Namespace = "testenv-lcr"
+	}
+
 	// Validate the spec
 	if err := out.Validate(); err != nil {
 		return Spec{}, flaterrors.Join(err, errReadingProjectConfig)

@@ -151,6 +151,6 @@ func generateMocks(mocksDir string) error {
 		return fmt.Errorf("mockery failed: %w", err)
 	}
 
-	fmt.Printf("✅ Generated mocks in %s\n", dir)
+	fmt.Fprintf(os.Stderr, "✅ Generated mocks in %s\n", dir)
 	return nil
 }

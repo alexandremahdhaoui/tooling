@@ -230,7 +230,7 @@ func doGenerate(executable string, config forge.GenerateOpenAPIConfig) error {
 		return fmt.Errorf("generation failed: %s", strings.Join(errors, "; "))
 	}
 
-	fmt.Println("✅ Successfully generated OpenAPI code")
+	fmt.Fprintln(os.Stderr, "✅ Successfully generated OpenAPI code")
 	return nil
 }
 

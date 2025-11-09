@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"log"
 	"os"
 
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
@@ -32,14 +33,29 @@ func NewK8s(cl client.Client, kubeconfigPath, namespace string) *K8s {
 var errSettingUpK8sCluster = errors.New("setting up k8s cluster")
 
 // Setup sets up the Kubernetes cluster for the local container registry.
-// It creates the namespace and sets the KUBECONFIG environment variable.
+// It creates the namespace if it doesn't exist and sets the KUBECONFIG environment variable.
 func (k *K8s) Setup(ctx context.Context) error {
-	// 1. create the local-container-registry namespace
+	// 1. create the local-container-registry namespace if it doesn't exist
 	ns := corev1.Namespace{}
 	ns.Name = k.namespace
 
-	if err := k.client.Create(ctx, &ns); !apierrors.IsAlreadyExists(err) && err != nil {
-		return flaterrors.Join(err, errSettingUpK8sCluster)
+	// Check if namespace already exists
+	existingNs := &corev1.Namespace{}
+	err := k.client.Get(ctx, client.ObjectKey{Name: k.namespace}, existingNs)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			// Namespace doesn't exist, create it
+			if err := k.client.Create(ctx, &ns); err != nil {
+				return flaterrors.Join(err, errSettingUpK8sCluster)
+			}
+			log.Printf("Created namespace: %s", k.namespace)
+		} else {
+			// Other error occurred
+			return flaterrors.Join(err, errSettingUpK8sCluster)
+		}
+	} else {
+		// Namespace already exists
+		log.Printf("Namespace already exists: %s (skipping creation)", k.namespace)
 	}
 
 	// 2. set kubeconfig for the kubectl subprocess which applies the cert manager config

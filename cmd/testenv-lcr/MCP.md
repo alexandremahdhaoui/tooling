@@ -236,18 +236,48 @@ Called by testenv MCP server during test environment creation/deletion.
 
 ## Configuration
 
-Reads from `forge.yaml`:
+Reads configuration from the root-level `localContainerRegistry` section in `forge.yaml`:
+
 ```yaml
 localContainerRegistry:
-  enabled: true
-  namespace: testenv-lcr
-  credentialPath: .forge/registry-credentials.yaml  # Overridden by tmpDir
-  caCrtPath: .forge/ca.crt                          # Overridden by tmpDir
-  autoPushImages: true                              # Auto-push images from artifact store on setup
-  imagePullSecretNamespaces:                        # Automatically create image pull secrets in these namespaces
+  enabled: true                                     # Required: enable/disable the registry
+  namespace: testenv-lcr                            # Optional: defaults to "testenv-lcr"
+  credentialPath: .forge/registry-credentials.yaml  # Optional: overridden by tmpDir
+  caCrtPath: .forge/ca.crt                          # Optional: overridden by tmpDir
+  autoPushImages: true                              # Optional: defaults to false
+  imagePullSecretNamespaces:                        # Optional: list of namespaces for image pull secrets
     - default
     - my-app
-  imagePullSecretName: local-container-registry-credentials  # Custom secret name (optional)
+  imagePullSecretName: local-container-registry-credentials  # Optional: defaults to this value
+```
+
+**Configuration Fields:**
+
+- `enabled` (boolean, required): Whether to create the local container registry
+- `namespace` (string, optional, default: `"testenv-lcr"`): Kubernetes namespace for deployment
+- `credentialPath` (string, optional): Path to store registry credentials (overridden by tmpDir in MCP mode)
+- `caCrtPath` (string, optional): Path to store CA certificate (overridden by tmpDir in MCP mode)
+- `autoPushImages` (boolean, optional, default: `false`): Automatically push images from artifact store on setup
+- `imagePullSecretNamespaces` ([]string, optional): List of namespaces where image pull secrets should be created
+- `imagePullSecretName` (string, optional, default: `"local-container-registry-credentials"`): Name of the image pull secret
+
+**Override via Spec:**
+
+All configuration fields can be overridden via the `spec` parameter in the testenv engine configuration:
+
+```yaml
+engines:
+  - alias: my-testenv
+    type: testenv
+    testenv:
+      - engine: go://testenv-lcr
+        spec:
+          enabled: true
+          namespace: custom-namespace  # Override default
+          autoPushImages: true
+          imagePullSecretNamespaces:
+            - default
+            - my-app-namespace
 ```
 
 ## Registry Details

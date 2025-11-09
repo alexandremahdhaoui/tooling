@@ -36,6 +36,8 @@ The `forge.yaml` file defines:
 ```yaml
 name: string                              # Project name
 artifactStorePath: string                 # Artifact store path
+kindenv: Kindenv                          # Kind cluster configuration (optional)
+localContainerRegistry: LocalContainerRegistry  # Local container registry configuration (optional)
 engines: []EngineConfig                   # Engine configurations (optional)
 build: []BuildSpec                        # Build configuration
 test: []TestSpec                          # Test stages configuration
@@ -63,6 +65,50 @@ Path to the artifact store YAML file where forge tracks built artifacts, test en
 ```yaml
 artifactStorePath: .ignore.artifact-store.yaml
 ```
+
+#### `localContainerRegistry` (LocalContainerRegistry, optional)
+
+Configuration for the local container registry used by `go://testenv-lcr` engine in test environments. This registry provides TLS-enabled container image storage for integration and end-to-end tests.
+
+**Fields:**
+
+- `enabled` (boolean, optional, default: `false`) - Whether the local container registry is enabled
+- `namespace` (string, optional, default: `"testenv-lcr"`) - Kubernetes namespace where the registry will be deployed
+- `credentialPath` (string, optional) - Path to store registry credentials (overridden by tmpDir in test environments)
+- `caCrtPath` (string, optional) - Path to store CA certificate (overridden by tmpDir in test environments)
+- `autoPushImages` (boolean, optional, default: `false`) - Automatically push images from artifact store on setup
+- `imagePullSecretNamespaces` ([]string, optional) - List of namespaces where image pull secrets should be created
+- `imagePullSecretName` (string, optional, default: `"local-container-registry-credentials"`) - Name of the image pull secret
+
+**Example:**
+```yaml
+localContainerRegistry:
+  enabled: false  # Typically enabled via testenv spec, not root config
+  namespace: testenv-lcr  # Default namespace for registry deployment
+  credentialPath: .forge/registry-credentials.yaml
+  caCrtPath: .forge/ca.crt
+```
+
+**Usage in Test Environments:**
+
+Typically, you override these settings in your testenv engine configuration rather than setting them at the root level:
+
+```yaml
+engines:
+  - alias: setup-integration
+    type: testenv
+    testenv:
+      - engine: "go://testenv-kind"
+      - engine: "go://testenv-lcr"
+        spec:
+          enabled: true  # Enable for this test environment
+          autoPushImages: true
+          imagePullSecretNamespaces:
+            - default
+            - my-app-namespace
+```
+
+**See also:** `cmd/testenv-lcr/MCP.md` for detailed testenv-lcr engine documentation.
 
 #### `engines` (array of EngineConfig, optional)
 

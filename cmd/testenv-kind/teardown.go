@@ -20,7 +20,7 @@ func teardown() error {
 		return err // TODO: wrap err
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "⏳ Tearing down kindenv %q\n", config.Name)
+	_, _ = fmt.Fprintf(os.Stderr, "⏳ Tearing down kindenv %q\n", config.Name)
 
 	// 2. read kindenv Envs
 	cfg, err := readEnvs()
@@ -28,14 +28,14 @@ func teardown() error {
 		return fmt.Errorf("%s\n❌ ERROR: %w", formatSetupUsage(), err) // TODO: wrap err
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "%#v\n", cfg)
+	_, _ = fmt.Fprintf(os.Stderr, "%#v\n", cfg)
 
 	// 3. Do
 	if err := doTeardown(config, cfg); err != nil {
 		return err // TODO: wrap error
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "✅ Kindenv %q torn down successfully\n", config.Name)
+	_, _ = fmt.Fprintf(os.Stderr, "✅ Kindenv %q torn down successfully\n", config.Name)
 
 	return nil
 }

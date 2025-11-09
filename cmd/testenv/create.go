@@ -161,8 +161,8 @@ func cmdCreate(stageName string) (string, error) {
 		return "", fmt.Errorf("failed to write artifact store: %w", err)
 	}
 
-	// Output test ID (for CLI usage)
-	fmt.Println(testID)
+	// Output test ID to stderr (safe for both CLI and MCP usage)
+	fmt.Fprintln(os.Stderr, testID)
 
 	return testID, nil
 }

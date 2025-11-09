@@ -64,7 +64,7 @@ func setup() error {
 		return err // TODO: wrap err
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "⏳ Setting up kindenv %q\n", config.Name)
+	_, _ = fmt.Fprintf(os.Stderr, "⏳ Setting up kindenv %q\n", config.Name)
 
 	// 2. read kindenv Envs
 	envs, err := readEnvs()
@@ -77,7 +77,7 @@ func setup() error {
 		return flaterrors.Join(err, doTeardown(config, envs))
 	}
 
-	_, _ = fmt.Fprintf(os.Stdout, "✅ kindenv %q set up successfully\n", config.Name)
+	_, _ = fmt.Fprintf(os.Stderr, "✅ kindenv %q set up successfully\n", config.Name)
 
 	return nil
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/pkg/mcputil"
@@ -52,11 +51,6 @@ func handleCreateTool(
 	input CreateInput,
 ) (*mcp.CallToolResult, any, error) {
 	log.Printf("Creating test environment: stage=%s", input.Stage)
-
-	// Redirect stdout to stderr immediately (cmdCreate writes to stdout, but MCP uses stdout for JSON-RPC)
-	oldStdout := os.Stdout
-	os.Stdout = os.Stderr
-	defer func() { os.Stdout = oldStdout }()
 
 	// Validate inputs
 	if result := mcputil.ValidateRequiredWithPrefix("Create failed", map[string]string{
