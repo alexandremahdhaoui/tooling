@@ -401,15 +401,22 @@ Forge provides a unified test management system that supports multiple test stag
 ### Test Command Structure
 
 ```bash
-forge test <stage> <operation> [args...]
+forge test <operation> <stage> [args...]
 ```
 
 **Operations:**
-- `run [test-id]` - Run tests for the stage
-- `create` - Create test environment (for stages with engines)
-- `list` - List test environments
-- `get <test-id>` - Get environment details
-- `delete <test-id>` - Delete test environment
+
+**Test Reports:**
+- `run <stage> [ENV_ID]` - Run tests (optionally using existing environment)
+- `list <stage>` - List test reports
+- `get <stage> <TEST_ID>` - Get test report details
+- `delete <stage> <TEST_ID>` - Delete test report
+
+**Test Environments:**
+- `list-env <stage>` - List test environments
+- `get-env <stage> <ENV_ID>` - Get environment details
+- `create-env <stage>` - Create test environment
+- `delete-env <stage> <ENV_ID>` - Delete test environment
 
 ### Configure Test Stages
 
@@ -418,26 +425,36 @@ Define test stages in `forge.yaml`:
 ```yaml
 # forge.yaml
 test:
-  # Unit tests - no environment needed
+  # Unit tests - test-report only (no environment)
   - name: unit
-    engine: "noop"
+    testenv: "go://test-report"
     runner: "go://test-runner-go"
 
   # Integration tests - creates Kind cluster automatically
   - name: integration
-    engine: "go://testenv"
+    testenv: "go://testenv"
     runner: "go://test-runner-go"
 
   # E2E tests
   - name: e2e
-    engine: "noop"
+    testenv: "go://test-report"
     runner: "go://forge-e2e"
 
   # Linting as a test stage
   - name: lint
-    engine: "noop"
+    testenv: "go://test-report"
     runner: "go://lint-go"
 ```
+
+**Test Environment Types:**
+- `go://test-report` - Test report storage only (no persistent environment)
+  - Use for unit tests, linting, and other tests that don't need infrastructure
+  - Shows synthetic "default" environment in `list-env`
+  - Rejects `create-env` and `delete-env` operations
+- `go://testenv` - Full test environment orchestrator
+  - Creates Kind clusters, registries, and other infrastructure
+  - Supports persistent environments for debugging
+- `noop` or empty - Legacy option (equivalent to `go://test-report`)
 
 ### Run Tests
 
@@ -447,12 +464,12 @@ Run fast, isolated unit tests:
 
 ```bash
 # Run unit tests
-forge test unit run
+forge test run unit
 ```
 
 **Output:**
 ```
-Running tests: stage=unit, name=unit-20251104-012345
+Running tests: stage=unit, name=test-report-unit-20251109-012345
 ✅ Unit tests passed
 
 Test Results:
@@ -463,16 +480,28 @@ Failed: 0
 Coverage: 85.3%
 ```
 
+**List test reports:**
+```bash
+# List all unit test reports
+forge test list unit
+
+# Get specific test report details
+forge test get unit test-report-unit-20251109-012345
+
+# Delete old test report
+forge test delete unit test-report-unit-20251109-012345
+```
+
 #### Integration Tests
 
 Run integration tests with automatic environment creation:
 
 ```bash
 # Run integration tests (creates environment automatically)
-forge test integration run
+forge test run integration
 
 # Or use existing environment
-forge test integration run <test-id>
+forge test run integration <ENV_ID>
 ```
 
 **What it does:**
@@ -481,9 +510,19 @@ forge test integration run <test-id>
 3. Returns results
 4. Environment persists for inspection
 
-**Clean up environment:**
+**Manage test environments:**
 ```bash
-forge test integration delete <test-id>
+# List test environments
+forge test list-env integration
+
+# Get environment details
+forge test get-env integration <ENV_ID>
+
+# Create environment manually
+forge test create-env integration
+
+# Delete environment when done
+forge test delete-env integration <ENV_ID>
 ```
 
 #### Linting
@@ -491,26 +530,28 @@ forge test integration delete <test-id>
 Run linter as a test:
 
 ```bash
-forge test lint run
+forge test run lint
 ```
 
 ### Manage Test Environments
 
-For test stages with engines (like integration tests):
+For test stages with testenv orchestrators (like integration tests):
 
 ```bash
 # Create environment manually
-forge test integration create
+forge test create-env integration
 
 # List all integration test environments
-forge test integration list
+forge test list-env integration
 
 # Get environment details
-forge test integration get <test-id>
+forge test get-env integration <ENV_ID>
 
 # Delete when done
-forge test integration delete <test-id>
+forge test delete-env integration <ENV_ID>
 ```
+
+**Note:** Stages using `go://test-report` (like unit, lint) don't support environment management. They show a synthetic "default" environment and reject create/delete operations.
 
 ### Test Workflow Example
 
@@ -521,17 +562,21 @@ Complete testing workflow:
 forge build format-code
 
 # 2. Run unit tests
-forge test unit run
+forge test run unit
 
 # 3. Lint code
-forge test lint run
+forge test run lint
 
 # 4. Run integration tests
-forge test integration run
+forge test run integration
 
-# 5. Clean up
-forge test integration list
-forge test integration delete <test-id>
+# 5. View test reports
+forge test list unit
+forge test list integration
+
+# 6. Clean up test environments (not test reports)
+forge test list-env integration
+forge test delete-env integration <ENV_ID>
 ```
 
 ## Integration Environments
@@ -543,11 +588,11 @@ Integration environments are complete development environments with Kind cluster
 Create a new test environment for a stage:
 
 ```bash
-forge test integration create
+forge test create-env integration
 ```
 
 **What it does:**
-1. Generates unique test ID
+1. Generates unique environment ID
 2. Creates Kind cluster (via testenv-kind)
 3. Sets up local container registry with TLS (via testenv-lcr if configured)
 4. Generates kubeconfig, credentials, and certificates
@@ -555,7 +600,7 @@ forge test integration create
 
 **Output:**
 ```
-✅ Test environment created: integration-20251104-123456
+✅ Test environment created: env-integration-20251109-123456
 ```
 
 ### List Environments
@@ -563,23 +608,20 @@ forge test integration create
 View all test environments for a stage:
 
 ```bash
-forge test integration list
+forge test list-env integration
 ```
 
 **Output:**
-```json
-{
-  "environments": [
-    {
-      "testID": "integration-20251104-123456",
-      "createdAt": "2025-11-04T12:34:56Z",
-      "files": {
-        "kubeconfig": ".forge/integration-20251104-123456/kubeconfig.yaml",
-        "ca.crt": ".forge/integration-20251104-123456/ca.crt"
-      }
-    }
-  ]
-}
+```
+=== Test Environments ===
+ENV_ID                              STATUS      CREATED
+----------------------------------------------------------------
+env-integration-20251109-123456     created     2025-11-09 12:34
+```
+
+**JSON output:**
+```bash
+forge test list-env integration -ojson
 ```
 
 ### Get Environment Details
@@ -587,32 +629,37 @@ forge test integration list
 Get detailed information about a test environment:
 
 ```bash
-forge test integration get integration-20251104-123456
+forge test get-env integration env-integration-20251109-123456
 ```
 
-**Output:**
-```json
-{
-  "testID": "integration-20251104-123456",
-  "createdAt": "2025-11-04T12:34:56Z",
-  "files": {
-    "kubeconfig": ".forge/integration-20251104-123456/kubeconfig.yaml",
-    "ca.crt": ".forge/integration-20251104-123456/ca.crt",
-    "credentials.yaml": ".forge/integration-20251104-123456/credentials.yaml"
-  },
-  "metadata": {
-    "clusterName": "test-integration-20251104-123456",
-    "registryURL": "registry.local:5000"
-  }
-}
+**Output (YAML by default):**
+```yaml
+id: env-integration-20251109-123456
+stage: integration
+status: created
+createdAt: "2025-11-09T12:34:56Z"
+files:
+  kubeconfig: .forge/integration-20251109-123456/kubeconfig.yaml
+  ca.crt: .forge/integration-20251109-123456/ca.crt
+  credentials.yaml: .forge/integration-20251109-123456/credentials.yaml
+metadata:
+  clusterName: test-integration-20251109-123456
+  registryURL: registry.local:5000
 ```
+
+**Status Values:**
+- `created` - Environment created but not used
+- `running` - Tests currently executing
+- `passed` - Tests completed successfully
+- `failed` - Tests failed
+- `partially_deleted` - Cleanup incomplete
 
 ### Delete Environment
 
 Tear down a test environment:
 
 ```bash
-forge test integration delete integration-20251104-123456
+forge test delete-env integration env-integration-20251109-123456
 ```
 
 **What it does:**
@@ -623,7 +670,7 @@ forge test integration delete integration-20251104-123456
 
 **Output:**
 ```
-✅ Test environment deleted: integration-20251104-123456
+✅ Test environment deleted: env-integration-20251109-123456
 ```
 
 ### Use Test Environment
@@ -632,8 +679,8 @@ Once created, use the environment for development and testing:
 
 ```bash
 # Get environment details to find kubeconfig
-TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
-KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+ENV_ID=$(forge test list-env integration -ojson | jq -r '.[0].id')
+KUBECONFIG_PATH=$(forge test get-env integration $ENV_ID -oyaml | yq .files.kubeconfig)
 
 # Set kubeconfig
 export KUBECONFIG=$KUBECONFIG_PATH
@@ -646,7 +693,7 @@ kubectl get nodes
 kubectl port-forward -n registry svc/registry 5000:5000 &
 
 # Load credentials from environment details
-CREDS_PATH=$(forge test integration get $TEST_ID | jq -r '.files["credentials.yaml"]')
+CREDS_PATH=$(forge test get-env integration $ENV_ID -oyaml | yq '.files["credentials.yaml"]')
 REGISTRY_USER=$(yq .username $CREDS_PATH)
 REGISTRY_PASS=$(yq .password $CREDS_PATH)
 
@@ -668,17 +715,21 @@ Complete workflow from build to testing with code quality checks:
 forge build
 
 # 2. Run linter
-forge test lint run
+forge test run lint
 
 # 3. Run unit tests
-forge test unit run
+forge test run unit
 
 # 4. Run integration tests (creates environment automatically)
-forge test integration run
+forge test run integration
 
-# 5. Clean up test environments
-forge test integration list
-forge test integration delete <test-id>
+# 5. View test reports
+forge test list unit
+forge test list integration
+
+# 6. Clean up test environments (not test reports)
+forge test list-env integration
+forge test delete-env integration <ENV_ID>
 ```
 
 ### Workflow 2: Iterative Development
@@ -694,13 +745,13 @@ vim cmd/my-app/main.go
 forge build
 
 # 3. Quick lint check
-forge test lint run
+forge test run lint
 
 # 4. Run relevant tests
-forge test unit run
+forge test run unit
 
 # When ready to commit:
-forge test integration run
+forge test run integration
 ```
 
 ### Workflow 3: Container Image Development
@@ -709,15 +760,15 @@ Build and push container images:
 
 ```bash
 # 1. Create test environment with registry
-forge test integration create
+forge test create-env integration
 
 # 2. Build containers
 CONTAINER_ENGINE=docker forge build
 
 # 3. Get environment details
-TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
-KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
-CREDS_PATH=$(forge test integration get $TEST_ID | jq -r '.files["credentials.yaml"]')
+ENV_ID=$(forge test list-env integration -ojson | jq -r '.[0].id')
+KUBECONFIG_PATH=$(forge test get-env integration $ENV_ID -oyaml | yq .files.kubeconfig)
+CREDS_PATH=$(forge test get-env integration $ENV_ID -oyaml | yq '.files["credentials.yaml"]')
 
 # 4. Port-forward registry
 export KUBECONFIG=$KUBECONFIG_PATH
@@ -736,7 +787,7 @@ docker push localhost:5000/my-api:dev
 kubectl apply -f k8s/deployment.yaml
 
 # 8. Clean up when done
-forge test integration delete $TEST_ID
+forge test delete-env integration $ENV_ID
 ```
 
 ### Workflow 4: CI/CD Pipeline
@@ -757,19 +808,19 @@ forge build
 
 # Test phase
 echo "Creating test environment..."
-forge test integration create
+forge test create-env integration
 
 # Get test environment details
-TEST_ID=$(forge test integration list | jq -r '.environments[0].testID')
-KUBECONFIG_PATH=$(forge test integration get $TEST_ID | jq -r '.files.kubeconfig')
+ENV_ID=$(forge test list-env integration -ojson | jq -r '.[0].id')
+KUBECONFIG_PATH=$(forge test get-env integration $ENV_ID -oyaml | yq .files.kubeconfig)
 export KUBECONFIG=$KUBECONFIG_PATH
 
 echo "Running tests..."
-forge test integration run $TEST_ID
+forge test run integration $ENV_ID
 
 # Cleanup
 echo "Cleaning up..."
-forge test integration delete $TEST_ID
+forge test delete-env integration $ENV_ID
 ```
 
 ### Workflow 5: Multi-Environment Testing
@@ -778,22 +829,22 @@ Test across different configurations:
 
 ```bash
 # Create multiple test environments
-forge test integration create  # Creates env 1
-forge test integration create  # Creates env 2
-forge test integration create  # Creates env 3
+forge test create-env integration  # Creates env 1
+forge test create-env integration  # Creates env 2
+forge test create-env integration  # Creates env 3
 
 # List all environments
-TEST_IDS=$(forge test integration list | jq -r '.environments[].testID')
+ENV_IDS=$(forge test list-env integration -ojson | jq -r '.[].id')
 
 # Run tests in each
-for test_id in $TEST_IDS; do
-    echo "Testing in $test_id..."
-    forge test integration run $test_id
+for env_id in $ENV_IDS; do
+    echo "Testing in $env_id..."
+    forge test run integration $env_id
 done
 
 # Clean up all
-for test_id in $TEST_IDS; do
-    forge test integration delete $test_id
+for env_id in $ENV_IDS; do
+    forge test delete-env integration $env_id
 done
 ```
 

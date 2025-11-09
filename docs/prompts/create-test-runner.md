@@ -344,9 +344,9 @@ Once your runner is ready:
 forge test run unit
 forge test run integration
 
-# View reports
-forge test report list
-forge test report get <report-id>
+# View test reports
+forge test list unit
+forge test get unit <TEST_ID>
 ```
 
 ## Common Patterns
@@ -1140,7 +1140,7 @@ cat test.log
 ./build/bin/my-test-runner --mcp
 
 # In another terminal, test with forge
-forge test unit run
+forge test run unit
 ```
 
 ## Troubleshooting

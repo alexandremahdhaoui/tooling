@@ -140,8 +140,8 @@ func cleanupTestEnvironment(config *forge.Spec, testSpec *forge.TestSpec) error 
 	// Get the most recent environment
 	mostRecent := envs[0]
 
-	// Delete it using testDelete
-	if err := testDelete(testSpec, []string{mostRecent.ID}); err != nil {
+	// Delete it using testDeleteEnv
+	if err := testDeleteEnv(testSpec, []string{mostRecent.ID}); err != nil {
 		return fmt.Errorf("failed to delete environment %s: %w", mostRecent.ID, err)
 	}
 

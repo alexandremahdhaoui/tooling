@@ -520,8 +520,8 @@ func handleTestDeleteTool(
 		}, nil, nil
 	}
 
-	// Call testDelete
-	if err := testDelete(testSpec, []string{input.TestID}); err != nil {
+	// Call testDeleteEnv
+	if err := testDeleteEnv(testSpec, []string{input.TestID}); err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: fmt.Sprintf("Failed to delete test environment: %v", err)},
@@ -538,12 +538,13 @@ func handleTestDeleteTool(
 }
 
 // handleTestListTool handles the "test-list" tool call from MCP clients.
+// Note: Now lists test REPORTS, not environments (aligned with CLI behavior).
 func handleTestListTool(
 	ctx context.Context,
 	req *mcp.CallToolRequest,
 	input TestListInput,
 ) (*mcp.CallToolResult, any, error) {
-	log.Printf("Listing test environments for stage: %s", input.Stage)
+	log.Printf("Listing test reports for stage: %s", input.Stage)
 
 	// Load configuration
 	config, err := loadConfig()
@@ -588,13 +589,13 @@ func handleTestListTool(
 		}, nil, nil
 	}
 
-	// List test environments (filter by stage name)
-	envs := forge.ListTestEnvironments(&store, testSpec.Name)
+	// List test reports (NOT environments) - aligned with new CLI behavior
+	reports := forge.ListTestReports(&store, testSpec.Name)
 
-	// Return structured array of TestEnvironment objects
+	// Return structured array of TestReport objects
 	result, artifact := mcputil.SuccessResultWithArtifact(
-		fmt.Sprintf("Successfully listed %d test environment(s) for stage: %s", len(envs), input.Stage),
-		envs,
+		fmt.Sprintf("Successfully listed %d test report(s) for stage: %s", len(reports), input.Stage),
+		reports,
 	)
 	return result, artifact, nil
 }

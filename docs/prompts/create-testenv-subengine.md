@@ -509,9 +509,9 @@ forge build testenv-mysubengine
 
 **Test via testenv orchestrator:**
 ```bash
-forge test integration create
-forge test integration list
-forge test integration delete <test-id>
+forge test create-env integration
+forge test list-env integration
+forge test delete-env integration <ENV_ID>
 ```
 
 **Verify files in tmpDir:**
@@ -521,7 +521,7 @@ ls -la /tmp/forge-test-integration-<testID>/
 
 **Check metadata:**
 ```bash
-forge test integration get <test-id>
+forge test get-env integration <ENV_ID>
 ```
 
 ## Common Patterns

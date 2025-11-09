@@ -964,7 +964,7 @@ func cleanupTestEnv(testID string) {
 	}
 
 	// Try to delete via forge
-	cmd := exec.Command("./build/bin/forge", "test", "integration", "delete", testID)
+	cmd := exec.Command("./build/bin/forge", "test", "delete-env", "integration", testID)
 	cmd.Env = os.Environ()
 	_ = cmd.Run() // Ignore errors during cleanup
 }
@@ -1122,7 +1122,7 @@ func (ts *TestSuite) needsSharedTestEnv() bool {
 
 // createSharedTestEnv creates a shared test environment for reuse across tests
 func (ts *TestSuite) createSharedTestEnv() (string, error) {
-	cmd := exec.Command("./build/bin/forge", "test", "integration", "create")
+	cmd := exec.Command("./build/bin/forge", "test", "create-env", "integration")
 	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1189,7 +1189,7 @@ func testForgeBuildSpecific(ts *TestSuite) error {
 }
 
 func testForgeTestUnit(ts *TestSuite) error {
-	cmd := exec.Command("go", "run", "./cmd/forge", "test", "unit", "run")
+	cmd := exec.Command("go", "run", "./cmd/forge", "test", "run", "unit")
 	output, _ := cmd.CombinedOutput()
 
 	// Unit tests may fail due to linting issues, but command should execute
@@ -1387,7 +1387,7 @@ func testForgeNoArgs(ts *TestSuite) error {
 
 func testTestEnvCreate(ts *TestSuite) error {
 	// Create test environment
-	cmd := exec.Command("./build/bin/forge", "test", "integration", "create")
+	cmd := exec.Command("./build/bin/forge", "test", "create-env", "integration")
 	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -1424,7 +1424,7 @@ func testTestEnvList(ts *TestSuite) error {
 	}
 
 	// List test environments
-	listCmd := exec.Command("./build/bin/forge", "test", "integration", "list")
+	listCmd := exec.Command("./build/bin/forge", "test", "list-env", "integration")
 	listOutput, err := listCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("list command failed: %w\nOutput: %s", err, listOutput)
@@ -1451,14 +1451,14 @@ func testTestEnvGet(ts *TestSuite) error {
 	}
 
 	// Get test environment details
-	getCmd := exec.Command("./build/bin/forge", "test", "integration", "get", testID)
+	getCmd := exec.Command("./build/bin/forge", "test", "get-env", "integration", testID)
 	getOutput, err := getCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("get command failed: %w\nOutput: %s", err, getOutput)
 	}
 
-	// Verify output contains expected fields
-	requiredFields := []string{"ID:", "Name:", "Status:", "TmpDir:", "Files:", "Metadata:"}
+	// Verify output contains expected fields (lowercase YAML format)
+	requiredFields := []string{"id:", "name:", "status:", "tmpDir:", "files:", "metadata:"}
 	for _, field := range requiredFields {
 		if !strings.Contains(string(getOutput), field) {
 			return fmt.Errorf("get output missing field '%s': %s", field, getOutput)
@@ -1481,7 +1481,7 @@ func testTestEnvGetJSON(ts *TestSuite) error {
 	}
 
 	// Get test environment as JSON
-	getCmd := exec.Command("./build/bin/forge", "test", "integration", "get", testID, "-o", "json")
+	getCmd := exec.Command("./build/bin/forge", "test", "get-env", "integration", testID, "-o", "json")
 	getOutput, err := getCmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("get JSON command failed: %w\nOutput: %s", err, getOutput)
@@ -1506,7 +1506,7 @@ func testTestEnvGetJSON(ts *TestSuite) error {
 
 func testTestEnvDelete(ts *TestSuite) error {
 	// Create test environment
-	createCmd := exec.Command("./build/bin/forge", "test", "integration", "create")
+	createCmd := exec.Command("./build/bin/forge", "test", "create-env", "integration")
 	createCmd.Env = os.Environ()
 	createOutput, err := createCmd.CombinedOutput()
 	if err != nil {
@@ -1524,7 +1524,7 @@ func testTestEnvDelete(ts *TestSuite) error {
 	}
 
 	// Delete test environment
-	deleteCmd := exec.Command("./build/bin/forge", "test", "integration", "delete", testID)
+	deleteCmd := exec.Command("./build/bin/forge", "test", "delete-env", "integration", testID)
 	deleteCmd.Env = os.Environ()
 	deleteOutput, err := deleteCmd.CombinedOutput()
 	if err != nil {
@@ -1569,7 +1569,7 @@ func testIntegrationTestRunner(ts *TestSuite) error {
 	}
 
 	// Run integration tests with the test environment
-	runCmd := exec.Command("./build/bin/forge", "test", "integration", "run", testID)
+	runCmd := exec.Command("./build/bin/forge", "test", "run", "integration", testID)
 	runCmd.Env = os.Environ()
 	runOutput, err := runCmd.CombinedOutput()
 
@@ -1672,7 +1672,7 @@ func testMissingBinaryError(ts *TestSuite) error {
 func testInvalidTestIDError(ts *TestSuite) error {
 	invalidID := "invalid-test-id-12345"
 
-	cmd := exec.Command("./build/bin/forge", "test", "integration", "get", invalidID)
+	cmd := exec.Command("./build/bin/forge", "test", "get-env", "integration", invalidID)
 	output, err := cmd.CombinedOutput()
 
 	// Should fail
@@ -1697,7 +1697,7 @@ func testMissingEnvVarError(ts *TestSuite) error {
 func testDeleteNonExistentError(ts *TestSuite) error {
 	nonExistentID := "test-integration-20990101-deadbeef"
 
-	cmd := exec.Command("./build/bin/forge", "test", "integration", "delete", nonExistentID)
+	cmd := exec.Command("./build/bin/forge", "test", "delete-env", "integration", nonExistentID)
 	cmd.Env = os.Environ()
 	output, err := cmd.CombinedOutput()
 

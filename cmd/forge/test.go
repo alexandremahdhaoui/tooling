@@ -14,40 +14,36 @@ import (
 )
 
 // runTest handles the "forge test" command.
+// New format: forge test [subcommand] [STAGE] [args...]
 func runTest(args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: forge test <STAGE> <OPERATION> [args...]")
+		return fmt.Errorf("usage: forge test <SUBCOMMAND> <STAGE> [args...]\n\n" +
+			"Subcommands:\n" +
+			"  run [ENV_ID]          Run tests (optionally using existing environment)\n" +
+			"  list                  List test reports\n" +
+			"  get <TEST_ID>         Get test report details\n" +
+			"  delete <TEST_ID>      Delete test report\n" +
+			"  list-env              List test environments\n" +
+			"  get-env <ENV_ID>      Get test environment details\n" +
+			"  create-env            Create test environment\n" +
+			"  delete-env <ENV_ID>   Delete test environment")
 	}
 
-	stage := args[0]
+	subcommand := args[0]
 
-	// Handle special case: forge test <stage> run (no operation, just stage and action)
-	// Example: forge test unit run
-	// This is a shorthand for running tests
-	if len(args) >= 2 && args[1] == "run" {
-		// Read config
-		config, err := loadConfig()
-		if err != nil {
-			return fmt.Errorf("failed to read forge.yaml: %w", err)
-		}
-
-		// Find TestSpec for stage
-		testSpec := findTestSpec(config.Test, stage)
-		if testSpec == nil {
-			return fmt.Errorf("test stage not found: %s", stage)
-		}
-
-		return testRun(&config, testSpec, args[2:])
+	// Validate subcommand
+	validSubcommands := []string{"run", "list", "get", "delete", "list-env", "get-env", "create-env", "delete-env"}
+	if !stringSliceContains(validSubcommands, subcommand) {
+		return fmt.Errorf("unknown subcommand: %s\nValid subcommands: %v", subcommand, validSubcommands)
 	}
 
-	// Handle operation-based commands
-	// Example: forge test integration create
-	//          forge test integration get <test-id>
+	// All subcommands require a STAGE argument
 	if len(args) < 2 {
-		return fmt.Errorf("usage: forge test <STAGE> <OPERATION> [args...]")
+		return fmt.Errorf("usage: forge test %s <STAGE> [args...]", subcommand)
 	}
 
-	operation := args[1]
+	stage := args[1]
+	subcommandArgs := args[2:]
 
 	// Read config
 	config, err := loadConfig()
@@ -61,21 +57,38 @@ func runTest(args []string) error {
 		return fmt.Errorf("test stage not found: %s", stage)
 	}
 
-	// Route to operation
-	switch operation {
-	case "create":
-		return testCreate(testSpec)
-	case "get":
-		return testGet(testSpec, args[2:])
-	case "delete":
-		return testDelete(testSpec, args[2:])
-	case "list":
-		return testList(testSpec, args[2:])
+	// Route to appropriate handler based on subcommand
+	switch subcommand {
 	case "run":
-		return testRun(&config, testSpec, args[2:])
+		return testRun(&config, testSpec, subcommandArgs)
+	case "list":
+		return testListReports(testSpec, subcommandArgs)
+	case "get":
+		return testGetReport(testSpec, subcommandArgs)
+	case "delete":
+		return testDeleteReport(testSpec, subcommandArgs)
+	case "list-env":
+		return testListEnvironments(testSpec, subcommandArgs)
+	case "get-env":
+		return testGetEnvironment(testSpec, subcommandArgs)
+	case "create-env":
+		return testCreateEnv(testSpec)
+	case "delete-env":
+		return testDeleteEnv(testSpec, subcommandArgs)
 	default:
-		return fmt.Errorf("unknown operation: %s (valid: create, get, delete, list, run)", operation)
+		// Should never reach here due to validation above
+		return fmt.Errorf("unknown subcommand: %s", subcommand)
 	}
+}
+
+// stringSliceContains checks if a slice contains a string.
+func stringSliceContains(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
 }
 
 // findTestSpec finds a TestSpec by name.
@@ -88,8 +101,24 @@ func findTestSpec(specs []forge.TestSpec, name string) *forge.TestSpec {
 	return nil
 }
 
-// testCreate creates a test environment via the engine.
-func testCreate(testSpec *forge.TestSpec) error {
+// IsTestReportStage returns true if the stage uses test-report (default testenv).
+// This means the stage stores test reports only and does not create persistent environments.
+func IsTestReportStage(testSpec *forge.TestSpec) bool {
+	return testSpec.Testenv == "go://test-report"
+}
+
+// testCreateEnv creates a test environment via the engine.
+func testCreateEnv(testSpec *forge.TestSpec) error {
+	// Check if this is a test-report stage
+	if IsTestReportStage(testSpec) {
+		return fmt.Errorf(
+			"stage '%s' uses test-report for test result storage only.\n"+
+				"No environment creation is needed or supported.\n"+
+				"To run tests: forge test run %s\n"+
+				"To list test reports: forge test list %s",
+			testSpec.Name, testSpec.Name, testSpec.Name)
+	}
+
 	// Handle "noop" engine (no environment management)
 	if testSpec.Testenv == "" || testSpec.Testenv == "noop" {
 		return fmt.Errorf("test stage %s has no engine configured (engine is 'noop')", testSpec.Name)
@@ -130,17 +159,57 @@ func testCreate(testSpec *forge.TestSpec) error {
 	return nil
 }
 
-// testGet retrieves and displays test environment/report details from the artifact store.
-func testGet(testSpec *forge.TestSpec, args []string) error {
+// testGetEnvironment retrieves and displays test environment details from the artifact store.
+func testGetEnvironment(testSpec *forge.TestSpec, args []string) error {
 	// Parse output format flag
 	format, remainingArgs := parseOutputFormat(args)
 
 	if len(remainingArgs) < 1 {
-		return fmt.Errorf("usage: forge test <STAGE> get <TEST-ID> [-o json|yaml]")
+		return fmt.Errorf("usage: forge test get-env <STAGE> <ENV-ID> [-o json|yaml|table]")
 	}
 
-	testID := remainingArgs[0]
+	envID := remainingArgs[0]
 
+	// Check if -o flag was explicitly provided, if not default to YAML for get-env
+	outputFlagProvided := false
+	for _, arg := range args {
+		if arg == "-o" || strings.HasPrefix(arg, "-o") {
+			outputFlagProvided = true
+			break
+		}
+	}
+	if !outputFlagProvided && format == outputFormatTable {
+		format = outputFormatYAML
+	}
+
+	// Check if this is test-report with "default" ID
+	if IsTestReportStage(testSpec) && envID == "default" {
+		// Return synthetic environment description
+		syntheticEnv := map[string]interface{}{
+			"id":      "default",
+			"stage":   testSpec.Name,
+			"type":    "test-report",
+			"runtime": "none",
+			"description": fmt.Sprintf(
+				"This stage uses test-report for test result storage only.\n"+
+					"No persistent test environment is created.\n"+
+					"Test reports are stored in the artifact store and can be listed with:\n"+
+					"  forge test list %s", testSpec.Name),
+		}
+
+		switch format {
+		case outputFormatJSON:
+			printJSON(syntheticEnv)
+		case outputFormatTable:
+			printTestReportEnvDetails(syntheticEnv)
+		default:
+			printYAML(syntheticEnv)
+		}
+
+		return nil
+	}
+
+	// For non-test-report or non-default ID, get actual environment
 	// Read forge configuration to get artifact store path
 	config, err := forge.ReadSpec()
 	if err != nil {
@@ -159,34 +228,43 @@ func testGet(testSpec *forge.TestSpec, args []string) error {
 	}
 
 	// Get test environment
-	env, err := forge.GetTestEnvironment(&store, testID)
+	env, err := forge.GetTestEnvironment(&store, envID)
 	if err != nil {
-		return fmt.Errorf("test environment not found: %s", testID)
+		return fmt.Errorf("test environment not found: %s", envID)
 	}
 
 	// Convert to map for display
 	resultMap := testEnvironmentToMap(env)
 
-	// Print result in requested format
+	// Print result in requested format (YAML by default)
 	switch format {
 	case outputFormatJSON:
 		printJSON(resultMap)
-	case outputFormatYAML:
-		printYAML(resultMap)
-	default:
+	case outputFormatTable:
 		printTestEnvironmentTable(resultMap)
+	default:
+		printYAML(resultMap)
 	}
 
 	return nil
 }
 
-// testDelete deletes a test environment via the engine.
-func testDelete(testSpec *forge.TestSpec, args []string) error {
+// testDeleteEnv deletes a test environment via the engine.
+func testDeleteEnv(testSpec *forge.TestSpec, args []string) error {
 	if len(args) < 1 {
-		return fmt.Errorf("usage: forge test <STAGE> delete <TEST-ID>")
+		return fmt.Errorf("usage: forge test delete-env <STAGE> <ENV-ID>")
 	}
 
-	testID := args[0]
+	envID := args[0]
+
+	// Check if this is a test-report stage
+	if IsTestReportStage(testSpec) {
+		return fmt.Errorf(
+			"stage '%s' uses test-report for test result storage only.\n"+
+				"No environment exists to delete.\n"+
+				"To delete test reports, use: forge test delete %s <TEST-ID>",
+			testSpec.Name, testSpec.Name)
+	}
 
 	// Handle noop engine (just remove from artifact store)
 	if testSpec.Testenv == "" || testSpec.Testenv == "noop" {
@@ -200,7 +278,7 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 			return fmt.Errorf("failed to read artifact store: %w", err)
 		}
 
-		if err := forge.DeleteTestEnvironment(&store, testID); err != nil {
+		if err := forge.DeleteTestEnvironment(&store, envID); err != nil {
 			return fmt.Errorf("failed to delete test environment: %w", err)
 		}
 
@@ -208,7 +286,7 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 			return fmt.Errorf("failed to write artifact store: %w", err)
 		}
 
-		fmt.Printf("Deleted test environment: %s\n", testID)
+		fmt.Printf("Deleted test environment: %s\n", envID)
 		return nil
 	}
 
@@ -231,7 +309,7 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 
 	// Call engine delete tool
 	result, err := callMCPEngine(command, args, "delete", map[string]any{
-		paramName: testID,
+		paramName: envID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to delete: %w", err)
@@ -240,22 +318,45 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 	// Print result (may contain deletion details)
 	if resultMap, ok := result.(map[string]any); ok {
 		if success, ok := resultMap["success"].(bool); ok && success {
-			fmt.Printf("Successfully deleted: %s\n", testID)
+			fmt.Printf("Successfully deleted: %s\n", envID)
 		} else {
 			printJSON(resultMap)
 		}
 	} else {
-		fmt.Printf("Deleted: %s\n", testID)
+		fmt.Printf("Deleted: %s\n", envID)
 	}
 
 	return nil
 }
 
-// testList lists test environments/reports for a stage by calling the engine.
-func testList(testSpec *forge.TestSpec, args []string) error {
+// testListEnvironments lists test environments for a stage.
+func testListEnvironments(testSpec *forge.TestSpec, args []string) error {
 	// Parse output format flag
 	format, _ := parseOutputFormat(args)
 
+	// Check if this stage uses test-report
+	if IsTestReportStage(testSpec) {
+		// Return synthetic "default" entry
+		syntheticEnv := map[string]string{
+			"ENV_ID":      "default",
+			"TYPE":        "test-report",
+			"RUNTIME":     "none",
+			"DESCRIPTION": "Test report storage only (no persistent environment)",
+		}
+
+		switch format {
+		case outputFormatJSON:
+			printJSON([]interface{}{syntheticEnv})
+		case outputFormatYAML:
+			printYAML([]interface{}{syntheticEnv})
+		default:
+			printTestReportEnvTable(syntheticEnv)
+		}
+
+		return nil
+	}
+
+	// For non-test-report stages, list actual environments
 	config, err := forge.ReadSpec()
 	if err != nil {
 		return fmt.Errorf("failed to read forge.yaml: %w", err)
@@ -299,16 +400,178 @@ func testList(testSpec *forge.TestSpec, args []string) error {
 	return nil
 }
 
+// testListReports lists test reports for a stage.
+func testListReports(testSpec *forge.TestSpec, args []string) error {
+	// Parse output format flag
+	format, _ := parseOutputFormat(args)
+
+	// Load config and artifact store
+	config, err := forge.ReadSpec()
+	if err != nil {
+		return fmt.Errorf("failed to read forge.yaml: %w", err)
+	}
+
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to get artifact store path: %w", err)
+	}
+
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to read artifact store: %w", err)
+	}
+
+	// List test reports (NOT environments!)
+	reports := forge.ListTestReports(&store, testSpec.Name)
+
+	// Handle empty results
+	if len(reports) == 0 {
+		fmt.Printf("No test reports found for stage: %s\n", testSpec.Name)
+		return nil
+	}
+
+	// Print in requested format
+	switch format {
+	case outputFormatJSON:
+		printJSON(reports)
+	case outputFormatYAML:
+		printYAML(reports)
+	default:
+		printTestReportsTable(reports)
+	}
+
+	return nil
+}
+
+// testGetReport retrieves and displays test report details.
+func testGetReport(testSpec *forge.TestSpec, args []string) error {
+	// Parse output format and test ID
+	format, remainingArgs := parseOutputFormat(args)
+
+	if len(remainingArgs) < 1 {
+		return fmt.Errorf("usage: forge test get <STAGE> <TEST-ID> [-o json|yaml|table]")
+	}
+
+	testID := remainingArgs[0]
+
+	// Check if -o flag was explicitly provided
+	// If not, default to YAML for get command (not table)
+	outputFlagProvided := false
+	for _, arg := range args {
+		if arg == "-o" || strings.HasPrefix(arg, "-o") {
+			outputFlagProvided = true
+			break
+		}
+	}
+	if !outputFlagProvided && format == outputFormatTable {
+		format = outputFormatYAML
+	}
+
+	// Load config and artifact store
+	config, err := forge.ReadSpec()
+	if err != nil {
+		return fmt.Errorf("failed to read forge.yaml: %w", err)
+	}
+
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to get artifact store path: %w", err)
+	}
+
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to read artifact store: %w", err)
+	}
+
+	// Get test report by ID
+	report, err := forge.GetTestReport(&store, testID)
+	if err != nil {
+		return fmt.Errorf("test report not found: %s", testID)
+	}
+
+	// Print in requested format (YAML by default)
+	switch format {
+	case outputFormatJSON:
+		printJSON(report)
+	case outputFormatTable:
+		printTestReportDetails(report)
+	default:
+		printYAML(report)
+	}
+
+	return nil
+}
+
+// testDeleteReport deletes a test report from the artifact store.
+func testDeleteReport(testSpec *forge.TestSpec, args []string) error {
+	if len(args) < 1 {
+		return fmt.Errorf("usage: forge test delete <STAGE> <TEST-ID>")
+	}
+
+	testID := args[0]
+
+	// Load config and artifact store
+	config, err := forge.ReadSpec()
+	if err != nil {
+		return fmt.Errorf("failed to read forge.yaml: %w", err)
+	}
+
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to get artifact store path: %w", err)
+	}
+
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		return fmt.Errorf("failed to read artifact store: %w", err)
+	}
+
+	// Delete test report
+	err = forge.DeleteTestReport(&store, testID)
+	if err != nil {
+		return fmt.Errorf("failed to delete test report: %w", err)
+	}
+
+	// Write updated artifact store
+	err = forge.WriteArtifactStore(artifactStorePath, store)
+	if err != nil {
+		return fmt.Errorf("failed to write artifact store: %w", err)
+	}
+
+	fmt.Printf("Deleted test report: %s\n", testID)
+	return nil
+}
+
 // testRun runs tests via the test runner.
 func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error {
 	var testID string
 
-	// If test ID provided, use it; otherwise auto-create environment
+	// Check if ENV_ID was provided in args
 	if len(args) > 0 {
+		// ENV_ID explicitly provided - verify it exists
 		testID = args[0]
+
+		// Verify the environment exists
+		artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+		if err != nil {
+			return fmt.Errorf("failed to get artifact store path: %w", err)
+		}
+
+		store, err := forge.ReadArtifactStore(artifactStorePath)
+		if err != nil {
+			return fmt.Errorf("failed to read artifact store: %w", err)
+		}
+
+		_, err = forge.GetTestEnvironment(&store, testID)
+		if err != nil {
+			return fmt.Errorf("test environment not found: %s\nUse 'forge test create-env %s' to create one", testID, testSpec.Name)
+		}
+
+		fmt.Printf("Using existing test environment: %s\n", testID)
 	} else {
-		// Auto-create environment if engine is configured
-		if testSpec.Testenv != "" && testSpec.Testenv != "noop" {
+		// No ENV_ID provided - auto-create if needed (existing behavior)
+		// Skip auto-creation for test-report stages (they don't need environments)
+		if testSpec.Testenv != "" && testSpec.Testenv != "noop" && !IsTestReportStage(testSpec) {
 			// Resolve engine URI (handles aliases)
 			command, args, err := resolveEngine(testSpec.Testenv, config)
 			if err != nil {
@@ -760,5 +1023,91 @@ func printTestEnvironmentsTable(envs []any) {
 			created := truncate(getStringField(env, "createdAt"), 20)
 			fmt.Printf("%-40s %-15s %-10s %-20s\n", id, name, status, created)
 		}
+	}
+}
+
+// printTestReportsTable prints a list of test reports in table format.
+func printTestReportsTable(reports []*forge.TestReport) {
+	fmt.Println("\n=== Test Reports ===")
+	fmt.Printf("%-40s %-10s %-15s %-10s %-20s\n", "TEST_ID", "STATUS", "PASSED/TOTAL", "COVERAGE", "TIMESTAMP")
+	fmt.Println(strings.Repeat("-", 100))
+
+	for _, report := range reports {
+		id := truncate(report.ID, 40)
+		status := truncate(report.Status, 10)
+		passedTotal := fmt.Sprintf("%d/%d", report.TestStats.Passed, report.TestStats.Total)
+		coverage := fmt.Sprintf("%.1f%%", report.Coverage.Percentage)
+		timestamp := report.StartTime.Format("2006-01-02 15:04:05")
+
+		fmt.Printf("%-40s %-10s %-15s %-10s %-20s\n", id, status, passedTotal, coverage, timestamp)
+	}
+}
+
+// printTestReportEnvTable prints a synthetic test-report environment table.
+func printTestReportEnvTable(env map[string]string) {
+	fmt.Println("\n=== Test Environments ===")
+	fmt.Printf("%-10s %-15s %-10s %-60s\n", "ENV_ID", "TYPE", "RUNTIME", "DESCRIPTION")
+	fmt.Println(strings.Repeat("-", 100))
+	fmt.Printf("%-10s %-15s %-10s %-60s\n",
+		env["ENV_ID"],
+		env["TYPE"],
+		env["RUNTIME"],
+		env["DESCRIPTION"])
+}
+
+// printTestReportEnvDetails prints synthetic test-report environment details.
+func printTestReportEnvDetails(env map[string]interface{}) {
+	fmt.Println("\n=== Test Environment (test-report) ===")
+	if id, ok := env["id"].(string); ok {
+		fmt.Printf("ID:          %s\n", id)
+	}
+	if stage, ok := env["stage"].(string); ok {
+		fmt.Printf("Stage:       %s\n", stage)
+	}
+	if typ, ok := env["type"].(string); ok {
+		fmt.Printf("Type:        %s\n", typ)
+	}
+	if runtime, ok := env["runtime"].(string); ok {
+		fmt.Printf("Runtime:     %s\n", runtime)
+	}
+	if desc, ok := env["description"].(string); ok {
+		fmt.Printf("\nDescription:\n%s\n", desc)
+	}
+}
+
+// printTestReportDetails prints a single test report in table format with full details.
+func printTestReportDetails(report *forge.TestReport) {
+	fmt.Println("\n=== Test Report ===")
+	fmt.Printf("ID:          %s\n", report.ID)
+	fmt.Printf("Stage:       %s\n", report.Stage)
+	fmt.Printf("Status:      %s\n", report.Status)
+	fmt.Printf("Started:     %s\n", report.StartTime.Format(time.RFC3339))
+	fmt.Printf("Duration:    %.2fs\n", report.Duration)
+
+	fmt.Println("\nTest Statistics:")
+	fmt.Printf("  Total:     %d\n", report.TestStats.Total)
+	fmt.Printf("  Passed:    %d\n", report.TestStats.Passed)
+	fmt.Printf("  Failed:    %d\n", report.TestStats.Failed)
+	fmt.Printf("  Skipped:   %d\n", report.TestStats.Skipped)
+
+	fmt.Println("\nCoverage:")
+	fmt.Printf("  Percentage: %.1f%%\n", report.Coverage.Percentage)
+	if report.Coverage.FilePath != "" {
+		fmt.Printf("  File:       %s\n", report.Coverage.FilePath)
+	}
+
+	if len(report.ArtifactFiles) > 0 {
+		fmt.Println("\nArtifact Files:")
+		for _, file := range report.ArtifactFiles {
+			fmt.Printf("  - %s\n", file)
+		}
+	}
+
+	if report.OutputPath != "" {
+		fmt.Printf("\nOutput Path: %s\n", report.OutputPath)
+	}
+
+	if report.ErrorMessage != "" {
+		fmt.Printf("\nError:       %s\n", report.ErrorMessage)
 	}
 }

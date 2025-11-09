@@ -439,8 +439,8 @@ build:
 | Makefile | Forge |
 |----------|-------|
 | `make build` | `forge build` |
-| `make test` | `forge test unit run` |
-| `make lint` | `forge test lint run` |
+| `make test` | `forge test run unit` |
+| `make lint` | `forge test run lint` |
 | `make clean` | Remove `./build/` directory |
 | `make install` | N/A - use go install or deployment tools |
 | `make all` | `forge build` (builds everything) |
@@ -462,9 +462,9 @@ make docker-build
 forge build
 
 # Run all tests
-forge test unit run
-forge test integration run
-forge test lint run
+forge test run unit
+forge test run integration
+forge test run lint
 ```
 
 ## Advantages of Migration
@@ -554,8 +554,8 @@ test:
 forge build
 
 # Run tests
-forge test unit run
-forge test lint run
+forge test run unit
+forge test run lint
 
 # Clean (just delete bin/)
 rm -rf bin/
@@ -572,10 +572,10 @@ build:
 	forge build
 
 test:
-	forge test unit run
+	forge test run unit
 
 lint:
-	forge test lint run
+	forge test run lint
 
 all: build test lint
 ```

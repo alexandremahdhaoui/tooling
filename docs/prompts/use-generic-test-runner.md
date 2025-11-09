@@ -157,7 +157,7 @@ test:
     runner: alias://golangci-lint
 ```
 
-**Usage**: `forge test lint run`
+**Usage**: `forge test run lint`
 
 ### Pattern 2: Security Scanner
 
@@ -176,7 +176,7 @@ test:
     runner: alias://gosec-scanner
 ```
 
-**Usage**: `forge test security run`
+**Usage**: `forge test run security`
 
 ### Pattern 3: Custom Test Framework (pytest)
 
@@ -430,9 +430,9 @@ test:
 forge build
 
 # Run all tests
-forge test unit run
-forge test lint run
-forge test security run
+forge test run unit
+forge test run lint
+forge test run security
 forge test static-analysis run
 forge test shell-lint run
 ```
@@ -503,9 +503,9 @@ jobs:
 
       - name: Run tests
         run: |
-          forge test unit run
-          forge test lint run
-          forge test security run
+          forge test run unit
+          forge test run lint
+          forge test run security
 ```
 
 ## Common Tools to Wrap

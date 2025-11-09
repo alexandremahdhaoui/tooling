@@ -725,10 +725,10 @@ func callSubengineWithRetry(subengine, testID, stage, tmpDir string, retries int
 forge build testenv-<your-name>
 
 # Test via forge
-forge test integration create
-forge test integration list
-forge test integration get <test-id>
-forge test integration delete <test-id>
+forge test create-env integration
+forge test list-env integration
+forge test get-env integration <ENV_ID>
+forge test delete-env integration <ENV_ID>
 
 # Verify tmpDir was created
 ls -la .forge/tmp/

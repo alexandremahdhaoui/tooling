@@ -184,7 +184,7 @@ Returns the same `TestEnvironment` structure as `test-create`.
 
 ### `test-list`
 
-List all test environments for a specific test stage.
+List all test reports for a specific test stage.
 
 **Input Schema:**
 ```json
@@ -196,25 +196,40 @@ List all test environments for a specific test stage.
 
 **Output:**
 
-Returns an array of `TestEnvironment` objects:
+Returns an array of `TestReport` objects:
 
 ```json
 {
   "content": [{
     "type": "text",
-    "text": "Successfully listed 2 test environment(s) for stage: integration"
+    "text": "Successfully listed 2 test report(s) for stage: unit"
   }],
   "artifact": [
     {
-      "id": "test-uuid-123",
-      "name": "integration",
+      "id": "test-report-unit-20251109-abc123",
+      "stage": "unit",
       "status": "passed",
+      "testStats": {
+        "total": 42,
+        "passed": 42,
+        "failed": 0,
+        "skipped": 0
+      },
+      "coverage": {
+        "percentage": 85.5
+      },
       ...
     },
     {
-      "id": "test-uuid-456",
-      "name": "integration",
-      "status": "created",
+      "id": "test-report-unit-20251109-def456",
+      "stage": "unit",
+      "status": "failed",
+      "testStats": {
+        "total": 42,
+        "passed": 40,
+        "failed": 2,
+        "skipped": 0
+      },
       ...
     }
   ]
@@ -474,9 +489,17 @@ forge build
 # Build specific artifact
 forge build myapp
 
-# Test operations
-forge test unit run
-forge test integration create
+# Test operations (new command structure)
+forge test run unit                 # Run tests
+forge test list unit                # List test reports
+forge test get unit <TEST_ID>       # Get test report details
+forge test delete unit <TEST_ID>    # Delete test report
+
+# Test environment management
+forge test list-env integration     # List test environments
+forge test get-env integration <ENV_ID>    # Get environment details
+forge test create-env integration   # Create test environment
+forge test delete-env integration <ENV_ID> # Delete test environment
 ```
 
 See [forge-usage.md](../../docs/forge-usage.md) for complete CLI documentation.
