@@ -51,7 +51,7 @@ func cmdDelete(testID string) error {
 			// Direct engine URI - call delete tool directly
 			fmt.Fprintf(os.Stderr, "Tearing down %s...\n", testSpec.Testenv)
 
-			binaryPath, err := resolveEngineURI(testSpec.Testenv)
+			command, args, err := resolveEngineURI(testSpec.Testenv)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Warning: failed to resolve engine %s: %v\n", testSpec.Testenv, err)
 			} else {
@@ -63,7 +63,7 @@ func cmdDelete(testID string) error {
 					params["testID"] = testID
 				}
 
-				_, err = callMCPEngine(binaryPath, "delete", params)
+				_, err = callMCPEngine(command, args, "delete", params)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to delete with %s: %v\n", testSpec.Testenv, err)
 				} else {
@@ -135,7 +135,7 @@ func orchestrateDelete(config forge.Spec, setupAlias string, env *forge.TestEnvi
 		fmt.Fprintf(os.Stderr, "Tearing down %s...\n", subengine.Engine)
 
 		// Resolve engine URI to binary path
-		binaryPath, err := resolveEngineURI(subengine.Engine)
+		command, args, err := resolveEngineURI(subengine.Engine)
 		if err != nil {
 			// Log error but continue with other subengines (best effort)
 			fmt.Fprintf(os.Stderr, "  Warning: failed to resolve engine %s: %v\n", subengine.Engine, err)
@@ -149,7 +149,7 @@ func orchestrateDelete(config forge.Spec, setupAlias string, env *forge.TestEnvi
 		}
 
 		// Call subengine's delete tool via MCP
-		_, err = callMCPEngine(binaryPath, "delete", params)
+		_, err = callMCPEngine(command, args, "delete", params)
 		if err != nil {
 			// Log error but continue with other subengines (best effort)
 			fmt.Fprintf(os.Stderr, "  Warning: failed to delete with %s: %v\n", subengine.Engine, err)

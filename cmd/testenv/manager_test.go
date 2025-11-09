@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/internal/forgepath"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
@@ -66,6 +67,15 @@ func TestCmdCreate_Integration(t *testing.T) {
 	// This test verifies cmdCreate works with a minimal forge.yaml
 	// It will fail if test-report engine isn't available (which is expected behavior)
 
+	// Find the forge repository path
+	forgeRepoPath, err := forgepath.FindForgeRepo()
+	if err != nil {
+		t.Fatalf("Failed to find forge repository: %v", err)
+	}
+
+	// Set FORGE_REPO_PATH so engines can be resolved from temp directory
+	t.Setenv("FORGE_REPO_PATH", forgeRepoPath)
+
 	// Create temporary directory for test
 	tmpDir := t.TempDir()
 	artifactStorePath := filepath.Join(tmpDir, "artifact-store.yaml")
@@ -78,7 +88,7 @@ test:
     runner: "go://test-runner-go"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
-	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
+	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
 	if err != nil {
 		t.Fatalf("Failed to write forge.yaml: %v", err)
 	}

@@ -62,3 +62,29 @@ func SuccessResultWithArtifact(message string, artifact any) (*mcp.CallToolResul
 	}
 	return result, artifact
 }
+
+// ErrorResultWithArtifact creates an error result that also returns an artifact.
+// This is useful when you want to return partial data even when an operation fails
+// (e.g., returning a TestReport even when tests fail).
+//
+// Parameters:
+//   - message: error message to display
+//   - artifact: the artifact to return (typically contains partial or error information)
+//
+// Returns:
+//   - result: the MCP CallToolResult with IsError set to true
+//   - artifact: the artifact (passed through for MCP handler return)
+//
+// Example usage:
+//
+//	result, artifact := mcputil.ErrorResultWithArtifact("Tests failed", testReport)
+//	return result, artifact, nil
+func ErrorResultWithArtifact(message string, artifact any) (*mcp.CallToolResult, any) {
+	result := &mcp.CallToolResult{
+		Content: []mcp.Content{
+			&mcp.TextContent{Text: message},
+		},
+		IsError: true,
+	}
+	return result, artifact
+}

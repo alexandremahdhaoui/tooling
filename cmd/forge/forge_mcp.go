@@ -7,6 +7,7 @@ import (
 
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/mcputil"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -49,6 +50,13 @@ type TestRunInput struct {
 // TestAllInput represents the input parameters for the test-all tool.
 type TestAllInput struct {
 	// No parameters - runs all tests
+}
+
+// TestAllResult represents the aggregated results from test-all command.
+type TestAllResult struct {
+	BuildArtifacts []forge.Artifact   `json:"buildArtifacts"`
+	TestReports    []forge.TestReport `json:"testReports"`
+	Summary        string             `json:"summary"`
 }
 
 // PromptListInput represents the input parameters for the prompt-list tool.
@@ -226,10 +234,11 @@ func handleBuildTool(
 	// Build each group using the appropriate engine
 	totalBuilt := 0
 	var buildErrors []string
+	var allArtifacts []forge.Artifact
 
 	for engineURI, specs := range engineSpecs {
 		// Parse engine URI
-		_, binaryPath, err := parseEngine(engineURI)
+		_, command, args, err := parseEngine(engineURI)
 		if err != nil {
 			buildErrors = append(buildErrors, fmt.Sprintf("Failed to parse engine %s: %v", engineURI, err))
 			continue
@@ -238,12 +247,12 @@ func handleBuildTool(
 		// Use buildBatch if multiple specs, otherwise use build
 		var result interface{}
 		if len(specs) == 1 {
-			result, err = callMCPEngine(binaryPath, "build", specs[0])
+			result, err = callMCPEngine(command, args, "build", specs[0])
 		} else {
 			params := map[string]any{
 				"specs": specs,
 			}
-			result, err = callMCPEngine(binaryPath, "buildBatch", params)
+			result, err = callMCPEngine(command, args, "buildBatch", params)
 		}
 
 		if err != nil {
@@ -254,9 +263,10 @@ func handleBuildTool(
 		// Parse artifacts from result
 		artifacts, err := parseArtifacts(result)
 		if err == nil {
-			// Update artifact store
+			// Update artifact store and collect artifacts
 			for _, artifact := range artifacts {
 				forge.AddOrUpdateArtifact(&store, artifact)
+				allArtifacts = append(allArtifacts, artifact)
 				totalBuilt++
 			}
 		}
@@ -273,19 +283,20 @@ func handleBuildTool(
 	}
 
 	if len(buildErrors) > 0 {
-		return &mcp.CallToolResult{
-			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Build completed with errors: %v. Successfully built %d artifact(s)", buildErrors, totalBuilt)},
-			},
-			IsError: true,
-		}, nil, nil
+		// Return with error but include artifacts that were successfully built
+		result, artifact := mcputil.ErrorResultWithArtifact(
+			fmt.Sprintf("Build completed with errors: %v. Successfully built %d artifact(s)", buildErrors, totalBuilt),
+			allArtifacts,
+		)
+		return result, artifact, nil
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully built %d artifact(s)", totalBuilt)},
-		},
-	}, nil, nil
+	// Return all built artifacts
+	result, artifact := mcputil.SuccessResultWithArtifact(
+		fmt.Sprintf("Successfully built %d artifact(s)", totalBuilt),
+		allArtifacts,
+	)
+	return result, artifact, nil
 }
 
 // handleTestCreateTool handles the "test-create" tool call from MCP clients.
@@ -318,8 +329,32 @@ func handleTestCreateTool(
 		}, nil, nil
 	}
 
-	// Call testCreate
-	if err := testCreate(testSpec); err != nil {
+	// Handle "noop" engine (no environment management)
+	if testSpec.Testenv == "" || testSpec.Testenv == "noop" {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Test stage %s has no engine configured (engine is 'noop')", testSpec.Name)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Resolve engine path
+	command, args, err := resolveEngine(testSpec.Testenv, &config)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to resolve engine: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Call engine create tool
+	result, err := callMCPEngine(command, args, "create", map[string]any{
+		"stage": testSpec.Name,
+	})
+	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
 				&mcp.TextContent{Text: fmt.Sprintf("Failed to create test environment: %v", err)},
@@ -328,11 +363,61 @@ func handleTestCreateTool(
 		}, nil, nil
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully created test environment for stage: %s", input.Stage)},
-		},
-	}, nil, nil
+	// Extract test ID from result
+	var testID string
+	if resultMap, ok := result.(map[string]any); ok {
+		if id, ok := resultMap["testID"].(string); ok {
+			testID = id
+		}
+	}
+
+	if testID == "" {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: "Failed to get test ID from engine response"},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Load artifact store to get the full TestEnvironment
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to get artifact store path: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to read artifact store: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Get the newly created test environment
+	env, err := forge.GetTestEnvironment(&store, testID)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Test environment created but not found in artifact store: %s", testID)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Return structured TestEnvironment data
+	mcpResult, artifact := mcputil.SuccessResultWithArtifact(
+		fmt.Sprintf("Successfully created test environment for stage: %s", input.Stage),
+		env,
+	)
+	return mcpResult, artifact, nil
 }
 
 // handleTestGetTool handles the "test-get" tool call from MCP clients.
@@ -365,27 +450,44 @@ func handleTestGetTool(
 		}, nil, nil
 	}
 
-	// Build args for testGet
-	args := []string{input.TestID}
-	if input.Format != "" {
-		args = append([]string{"-o", input.Format}, args...)
-	}
-
-	// Call testGet (note: it prints to stdout, we'll capture that behavior)
-	if err := testGet(testSpec, args); err != nil {
+	// Load artifact store directly (no stdout printing)
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Failed to get test environment: %v", err)},
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to get artifact store path: %v", err)},
 			},
 			IsError: true,
 		}, nil, nil
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully retrieved test environment: %s", input.TestID)},
-		},
-	}, nil, nil
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to read artifact store: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Get test environment
+	env, err := forge.GetTestEnvironment(&store, input.TestID)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Test environment not found: %s", input.TestID)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Return structured TestEnvironment data
+	result, artifact := mcputil.SuccessResultWithArtifact(
+		fmt.Sprintf("Successfully retrieved test environment: %s", input.TestID),
+		env,
+	)
+	return result, artifact, nil
 }
 
 // handleTestDeleteTool handles the "test-delete" tool call from MCP clients.
@@ -465,27 +567,36 @@ func handleTestListTool(
 		}, nil, nil
 	}
 
-	// Build args for testList
-	var args []string
-	if input.Format != "" {
-		args = []string{"-o", input.Format}
-	}
-
-	// Call testList (note: it prints to stdout)
-	if err := testList(testSpec, args); err != nil {
+	// Load artifact store directly (no stdout printing)
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Failed to list test environments: %v", err)},
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to get artifact store path: %v", err)},
 			},
 			IsError: true,
 		}, nil, nil
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully listed test environments for stage: %s", input.Stage)},
-		},
-	}, nil, nil
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Failed to read artifact store: %v", err)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// List test environments (filter by stage name)
+	envs := forge.ListTestEnvironments(&store, testSpec.Name)
+
+	// Return structured array of TestEnvironment objects
+	result, artifact := mcputil.SuccessResultWithArtifact(
+		fmt.Sprintf("Successfully listed %d test environment(s) for stage: %s", len(envs), input.Stage),
+		envs,
+	)
+	return result, artifact, nil
 }
 
 // handleTestRunTool handles the "test-run" tool call from MCP clients.
@@ -524,21 +635,98 @@ func handleTestRunTool(
 		args = []string{input.TestID}
 	}
 
-	// Call testRun
-	if err := testRun(&config, testSpec, args); err != nil {
+	// Call testRun - this will execute the tests and store the report
+	testRunErr := testRun(&config, testSpec, args)
+
+	// Try to retrieve the most recent test report for this stage from artifact store
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
+		// If we can't get the report but tests passed, return success without artifact
+		if testRunErr == nil {
+			result, artifact := mcputil.SuccessResultWithArtifact(
+				fmt.Sprintf("Successfully ran tests for stage: %s (test report unavailable)", input.Stage),
+				nil,
+			)
+			return result, artifact, nil
+		}
+		// If tests failed and we can't get the report, return error
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Test run failed: %v", err)},
+				&mcp.TextContent{Text: fmt.Sprintf("Test run failed: %v", testRunErr)},
 			},
 			IsError: true,
 		}, nil, nil
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully ran tests for stage: %s", input.Stage)},
-		},
-	}, nil, nil
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		// Same fallback logic as above
+		if testRunErr == nil {
+			result, artifact := mcputil.SuccessResultWithArtifact(
+				fmt.Sprintf("Successfully ran tests for stage: %s (test report unavailable)", input.Stage),
+				nil,
+			)
+			return result, artifact, nil
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Test run failed: %v", testRunErr)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Get the most recent test report for this stage
+	reports := forge.ListTestReports(&store, testSpec.Name)
+	var mostRecentReport *forge.TestReport
+	if len(reports) > 0 {
+		// Reports are sorted by CreatedAt descending, so first one is most recent
+		mostRecentReport = reports[0]
+	}
+
+	// Determine success/failure and return appropriate result
+	if testRunErr != nil {
+		// Test run failed
+		if mostRecentReport != nil {
+			result, artifact := mcputil.ErrorResultWithArtifact(
+				fmt.Sprintf("Tests failed for stage: %s", input.Stage),
+				mostRecentReport,
+			)
+			return result, artifact, nil
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Test run failed: %v", testRunErr)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Test run succeeded
+	if mostRecentReport != nil && mostRecentReport.Status == "failed" {
+		// Tests ran but had failures
+		result, artifact := mcputil.ErrorResultWithArtifact(
+			fmt.Sprintf("Tests failed for stage: %s", input.Stage),
+			mostRecentReport,
+		)
+		return result, artifact, nil
+	}
+
+	// Tests passed
+	if mostRecentReport != nil {
+		result, artifact := mcputil.SuccessResultWithArtifact(
+			fmt.Sprintf("Successfully ran tests for stage: %s", input.Stage),
+			mostRecentReport,
+		)
+		return result, artifact, nil
+	}
+
+	// Fallback: no report available but tests succeeded
+	result, artifact := mcputil.SuccessResultWithArtifact(
+		fmt.Sprintf("Successfully ran tests for stage: %s (test report unavailable)", input.Stage),
+		nil,
+	)
+	return result, artifact, nil
 }
 
 // handleTestAllTool handles the "test-all" tool call from MCP clients.
@@ -550,20 +738,114 @@ func handleTestAllTool(
 	log.Printf("Running test-all: build all + run all test stages")
 
 	// Call runTestAll
-	if err := runTestAll([]string{}); err != nil {
+	testAllErr := runTestAll([]string{})
+
+	// Load configuration to get artifact store path
+	config, err := loadConfig()
+	if err != nil {
+		// If we can't load config but test-all succeeded, return success without artifacts
+		if testAllErr == nil {
+			result, artifact := mcputil.SuccessResultWithArtifact(
+				"Successfully completed test-all (results unavailable)",
+				nil,
+			)
+			return result, artifact, nil
+		}
+		// If test-all failed and we can't load config, return error
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Test-all failed: %v", err)},
+				&mcp.TextContent{Text: fmt.Sprintf("Test-all failed: %v", testAllErr)},
 			},
 			IsError: true,
 		}, nil, nil
 	}
 
-	return &mcp.CallToolResult{
-		Content: []mcp.Content{
-			&mcp.TextContent{Text: "Successfully completed test-all"},
-		},
-	}, nil, nil
+	// Read artifact store to get all artifacts and test reports
+	artifactStorePath, err := forge.GetArtifactStorePath(config.ArtifactStorePath)
+	if err != nil {
+		// Same fallback logic
+		if testAllErr == nil {
+			result, artifact := mcputil.SuccessResultWithArtifact(
+				"Successfully completed test-all (results unavailable)",
+				nil,
+			)
+			return result, artifact, nil
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Test-all failed: %v", testAllErr)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	store, err := forge.ReadArtifactStore(artifactStorePath)
+	if err != nil {
+		// Same fallback logic
+		if testAllErr == nil {
+			result, artifact := mcputil.SuccessResultWithArtifact(
+				"Successfully completed test-all (results unavailable)",
+				nil,
+			)
+			return result, artifact, nil
+		}
+		return &mcp.CallToolResult{
+			Content: []mcp.Content{
+				&mcp.TextContent{Text: fmt.Sprintf("Test-all failed: %v", testAllErr)},
+			},
+			IsError: true,
+		}, nil, nil
+	}
+
+	// Collect all build artifacts (most recent ones)
+	buildArtifacts := store.Artifacts
+
+	// Collect test reports for all test stages
+	var testReports []forge.TestReport
+	for _, testSpec := range config.Test {
+		reports := forge.ListTestReports(&store, testSpec.Name)
+		// Get the most recent report for each stage
+		if len(reports) > 0 {
+			testReports = append(testReports, *reports[0])
+		}
+	}
+
+	// Create summary
+	summary := fmt.Sprintf("%d artifact(s) built, %d test stage(s) run", len(buildArtifacts), len(testReports))
+
+	// Count passed/failed test stages
+	passedStages := 0
+	failedStages := 0
+	for _, report := range testReports {
+		if report.Status == "passed" {
+			passedStages++
+		} else {
+			failedStages++
+		}
+	}
+	summary += fmt.Sprintf(", %d passed, %d failed", passedStages, failedStages)
+
+	// Create aggregated result
+	testAllResult := TestAllResult{
+		BuildArtifacts: buildArtifacts,
+		TestReports:    testReports,
+		Summary:        summary,
+	}
+
+	// Determine if we should return error or success
+	if testAllErr != nil || failedStages > 0 {
+		result, artifact := mcputil.ErrorResultWithArtifact(
+			fmt.Sprintf("Test-all completed with failures: %s", summary),
+			testAllResult,
+		)
+		return result, artifact, nil
+	}
+
+	result, artifact := mcputil.SuccessResultWithArtifact(
+		fmt.Sprintf("Successfully completed test-all: %s", summary),
+		testAllResult,
+	)
+	return result, artifact, nil
 }
 
 // handlePromptListTool handles the "prompt-list" tool call from MCP clients.

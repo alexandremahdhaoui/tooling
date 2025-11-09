@@ -75,109 +75,56 @@ func runBuild(args []string) error {
 		fmt.Printf("Building %d artifact(s) with %s...\n", len(specs), engineURI)
 
 		// Resolve engine URI (handles aliases)
-		binaryPath, err := resolveEngine(engineURI, &config)
+		command, args, err := resolveEngine(engineURI, &config)
 		if err != nil {
 			return fmt.Errorf("failed to resolve engine %s: %w", engineURI, err)
 		}
 
-		// Check if this is a multi-engine alias (binaryPath still contains "alias://")
+		// Check if this is a multi-engine alias
 		var artifacts []forge.Artifact
-		if strings.HasPrefix(binaryPath, "alias://") {
-			// Multi-engine builder - use orchestrator
-			aliasName := strings.TrimPrefix(binaryPath, "alias://")
+		if strings.HasPrefix(engineURI, "alias://") {
+			aliasName := strings.TrimPrefix(engineURI, "alias://")
 			engineConfig := getEngineConfig(aliasName, &config)
 			if engineConfig == nil {
 				return fmt.Errorf("engine alias not found: %s", aliasName)
 			}
 
-			if engineConfig.Type != forge.BuilderEngineConfigType {
-				return fmt.Errorf("alias %s is not a builder type", aliasName)
-			}
+			if engineConfig.Type == forge.BuilderEngineConfigType && len(engineConfig.Builder) > 1 {
+				// Multi-engine builder - use orchestrator
+				fmt.Printf("  Multi-engine builder detected (%d engines)\n", len(engineConfig.Builder))
 
-			fmt.Printf("  Multi-engine builder detected (%d engines)\n", len(engineConfig.Builder))
+				// Create builder orchestrator
+				orchestrator := orchestrate.NewBuilderOrchestrator(
+					callMCPEngine,
+					func(uri string) (string, []string, error) {
+						return resolveEngine(uri, &config)
+					},
+				)
 
-			// Create builder orchestrator
-			orchestrator := orchestrate.NewBuilderOrchestrator(
-				callMCPEngine,
-				func(uri string) (string, error) {
-					return resolveEngine(uri, &config)
-				},
-			)
+				// Prepare directories map
+				dirsMap := map[string]any{
+					"tmpDir":   dirs.TmpDir,
+					"buildDir": dirs.BuildDir,
+					"rootDir":  dirs.RootDir,
+				}
 
-			// Prepare directories map
-			dirsMap := map[string]any{
-				"tmpDir":   dirs.TmpDir,
-				"buildDir": dirs.BuildDir,
-				"rootDir":  dirs.RootDir,
-			}
-
-			// Execute orchestration
-			artifacts, err = orchestrator.Orchestrate(engineConfig.Builder, specs, dirsMap)
-			if err != nil {
-				return fmt.Errorf("multi-engine build failed: %w", err)
+				// Execute orchestration
+				artifacts, err = orchestrator.Orchestrate(engineConfig.Builder, specs, dirsMap)
+				if err != nil {
+					return fmt.Errorf("multi-engine build failed: %w", err)
+				}
+			} else {
+				// Single-engine alias or direct go:// URI
+				artifacts, err = buildWithSingleEngine(command, args, specs, dirs, engineConfig)
+				if err != nil {
+					return fmt.Errorf("build failed: %w", err)
+				}
 			}
 		} else {
-			// Single-engine builder - use existing logic
-			// Get engine config if this is an alias
-			var engineConfig *forge.EngineConfig
-			if strings.HasPrefix(engineURI, "alias://") {
-				aliasName := strings.TrimPrefix(engineURI, "alias://")
-				engineConfig = getEngineConfig(aliasName, &config)
-			}
-
-			// Inject directories into all specs
-			for i := range specs {
-				specs[i]["tmpDir"] = dirs.TmpDir
-				specs[i]["buildDir"] = dirs.BuildDir
-				specs[i]["rootDir"] = dirs.RootDir
-			}
-
-			// Inject engine config into specs if present
-			if engineConfig != nil && engineConfig.Type == forge.BuilderEngineConfigType {
-				// For builder aliases, use the first builder's spec
-				if len(engineConfig.Builder) > 0 {
-					builderSpec := engineConfig.Builder[0].Spec
-					for i := range specs {
-						// Inject command, args, env, envFile, workDir from engine config
-						if builderSpec.Command != "" {
-							specs[i]["command"] = builderSpec.Command
-						}
-						if len(builderSpec.Args) > 0 {
-							specs[i]["args"] = builderSpec.Args
-						}
-						if len(builderSpec.Env) > 0 {
-							specs[i]["env"] = builderSpec.Env
-						}
-						if builderSpec.EnvFile != "" {
-							specs[i]["envFile"] = builderSpec.EnvFile
-						}
-						if builderSpec.WorkDir != "" {
-							specs[i]["workDir"] = builderSpec.WorkDir
-						}
-					}
-				}
-			}
-
-			// Use buildBatch if multiple specs, otherwise use build
-			var result interface{}
-			if len(specs) == 1 {
-				result, err = callMCPEngine(binaryPath, "build", specs[0])
-			} else {
-				params := map[string]any{
-					"specs": specs,
-				}
-				result, err = callMCPEngine(binaryPath, "buildBatch", params)
-			}
-
+			// Direct go:// URI - single engine
+			artifacts, err = buildWithSingleEngine(command, args, specs, dirs, nil)
 			if err != nil {
 				return fmt.Errorf("build failed: %w", err)
-			}
-
-			// Parse artifacts from result
-			artifacts, err = parseArtifacts(result)
-			if err != nil {
-				fmt.Printf("Warning: could not parse artifacts: %v\n", err)
-				continue
 			}
 		}
 
@@ -195,6 +142,71 @@ func runBuild(args []string) error {
 
 	fmt.Printf("✅ Successfully built %d artifact(s)\n", totalBuilt)
 	return nil
+}
+
+// buildWithSingleEngine handles building with a single engine (either direct go:// URI or single-engine alias).
+func buildWithSingleEngine(
+	command string,
+	args []string,
+	specs []map[string]any,
+	dirs *ForgeDirs,
+	engineConfig *forge.EngineConfig,
+) ([]forge.Artifact, error) {
+	// Prepare specs with injected directories and config
+	specsWithConfig := make([]map[string]any, len(specs))
+	for i, spec := range specs {
+		// Clone the spec
+		clonedSpec := make(map[string]any)
+		for k, v := range spec {
+			clonedSpec[k] = v
+		}
+
+		// Inject directories
+		clonedSpec["tmpDir"] = dirs.TmpDir
+		clonedSpec["buildDir"] = dirs.BuildDir
+		clonedSpec["rootDir"] = dirs.RootDir
+
+		// Inject engine-specific config if provided
+		if engineConfig != nil && engineConfig.Type == forge.BuilderEngineConfigType && len(engineConfig.Builder) > 0 {
+			builderSpec := engineConfig.Builder[0].Spec
+			if builderSpec.Command != "" {
+				clonedSpec["command"] = builderSpec.Command
+			}
+			if len(builderSpec.Args) > 0 {
+				clonedSpec["args"] = builderSpec.Args
+			}
+			if len(builderSpec.Env) > 0 {
+				clonedSpec["env"] = builderSpec.Env
+			}
+			if builderSpec.EnvFile != "" {
+				clonedSpec["envFile"] = builderSpec.EnvFile
+			}
+			if builderSpec.WorkDir != "" {
+				clonedSpec["workDir"] = builderSpec.WorkDir
+			}
+		}
+
+		specsWithConfig[i] = clonedSpec
+	}
+
+	// Call MCP engine (use build for single spec, buildBatch for multiple)
+	var result interface{}
+	var err error
+	if len(specsWithConfig) == 1 {
+		result, err = callMCPEngine(command, args, "build", specsWithConfig[0])
+	} else {
+		params := map[string]any{
+			"specs": specsWithConfig,
+		}
+		result, err = callMCPEngine(command, args, "buildBatch", params)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse and return artifacts
+	return parseArtifacts(result)
 }
 
 // parseArtifacts converts MCP result to forge.Artifact slice.

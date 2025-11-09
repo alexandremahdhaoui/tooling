@@ -44,8 +44,8 @@ func (o *BuilderOrchestrator) Orchestrate(
 
 	// Execute each builder in sequence
 	for i, builderSpec := range builderSpecs {
-		// Resolve engine URI to binary path
-		binaryPath, err := o.resolveURI(builderSpec.Engine)
+		// Resolve engine URI to command and args
+		command, args, err := o.resolveURI(builderSpec.Engine)
 		if err != nil {
 			return nil, fmt.Errorf("builder[%d] %s: failed to resolve engine: %w",
 				i, builderSpec.Engine, err)
@@ -88,12 +88,12 @@ func (o *BuilderOrchestrator) Orchestrate(
 		// Call builder engine (use build or buildBatch based on spec count)
 		var result interface{}
 		if len(specsForBuilder) == 1 {
-			result, err = o.callMCP(binaryPath, "build", specsForBuilder[0])
+			result, err = o.callMCP(command, args, "build", specsForBuilder[0])
 		} else {
 			params := map[string]any{
 				"specs": specsForBuilder,
 			}
-			result, err = o.callMCP(binaryPath, "buildBatch", params)
+			result, err = o.callMCP(command, args, "buildBatch", params)
 		}
 
 		if err != nil {

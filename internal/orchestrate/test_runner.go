@@ -41,8 +41,8 @@ func (o *TestRunnerOrchestrator) Orchestrate(
 
 	// Execute each test runner in sequence
 	for i, runnerSpec := range runnerSpecs {
-		// Resolve engine URI to binary path
-		binaryPath, err := o.resolveURI(runnerSpec.Engine)
+		// Resolve engine URI to command and args
+		command, args, err := o.resolveURI(runnerSpec.Engine)
 		if err != nil {
 			return nil, fmt.Errorf("runner[%d] %s: failed to resolve engine: %w",
 				i, runnerSpec.Engine, err)
@@ -72,7 +72,7 @@ func (o *TestRunnerOrchestrator) Orchestrate(
 		}
 
 		// Call test runner
-		result, err := o.callMCP(binaryPath, "run", runnerParams)
+		result, err := o.callMCP(command, args, "run", runnerParams)
 		if err != nil {
 			return nil, fmt.Errorf("runner[%d] %s: run failed: %w",
 				i, runnerSpec.Engine, err)

@@ -6,19 +6,24 @@ package orchestrate
 // MCPCaller is a function type for calling MCP engines.
 // It abstracts the actual MCP communication so orchestrators can be tested
 // with mock implementations.
-type MCPCaller func(binaryPath string, toolName string, params interface{}) (interface{}, error)
+// Updated to support go run: accepts (command, args, toolName, params)
+type MCPCaller func(command string, args []string, toolName string, params interface{}) (interface{}, error)
 
-// EngineResolver is a function type for resolving engine URIs to binary paths.
+// EngineResolver is a function type for resolving engine URIs to command and args.
 // It handles both direct URIs (e.g., "go://build-go") and alias URIs (e.g., "alias://my-builder").
-type EngineResolver func(engineURI string) (string, error)
+// Updated to return (command, args, error) to support go run.
+type EngineResolver func(engineURI string) (command string, args []string, err error)
 
 // EngineCall represents a single MCP engine invocation.
 type EngineCall struct {
 	// EngineName is the human-readable name of the engine (for logging/errors)
 	EngineName string
 
-	// BinaryPath is the resolved path to the MCP server binary
-	BinaryPath string
+	// Command is the command to execute (e.g., "go" for go run)
+	Command string
+
+	// Args are the command arguments (e.g., ["run", "package/path"])
+	Args []string
 
 	// ToolName is the MCP tool to invoke (e.g., "build", "run")
 	ToolName string

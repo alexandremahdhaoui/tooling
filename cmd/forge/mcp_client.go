@@ -11,9 +11,14 @@ import (
 
 // callMCPEngine calls an MCP engine with the specified tool and parameters.
 // It spawns the engine process with --mcp flag, sets up stdio transport, and calls the tool.
-func callMCPEngine(binaryPath string, toolName string, params interface{}) (interface{}, error) {
+// The command and args parameters specify how to execute the MCP server:
+//   - For go run: command="go", args=["run", "package/path"]
+//   - For binary: command="binary-path", args=nil
+func callMCPEngine(command string, args []string, toolName string, params interface{}) (interface{}, error) {
 	// Create command to spawn MCP server
-	cmd := exec.Command(binaryPath, "--mcp")
+	// Append --mcp flag to the args
+	cmdArgs := append(args, "--mcp")
+	cmd := exec.Command(command, cmdArgs...)
 
 	// Inherit environment variables from parent process
 	cmd.Env = os.Environ()
@@ -37,7 +42,7 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 	ctx := context.Background()
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MCP server %s: %w", binaryPath, err)
+		return nil, fmt.Errorf("failed to connect to MCP server %s %v: %w", command, args, err)
 	}
 	defer func() { _ = session.Close() }()
 

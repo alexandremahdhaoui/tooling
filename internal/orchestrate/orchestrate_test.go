@@ -19,9 +19,10 @@ type mockMCPCaller struct {
 }
 
 type mockCall struct {
-	binaryPath string
-	toolName   string
-	params     interface{}
+	command  string
+	args     []string
+	toolName string
+	params   interface{}
 }
 
 func newMockMCPCaller(results []interface{}, errors []error) *mockMCPCaller {
@@ -33,8 +34,8 @@ func newMockMCPCaller(results []interface{}, errors []error) *mockMCPCaller {
 	}
 }
 
-func (m *mockMCPCaller) call(binaryPath string, toolName string, params interface{}) (interface{}, error) {
-	m.calls = append(m.calls, mockCall{binaryPath, toolName, params})
+func (m *mockMCPCaller) call(command string, args []string, toolName string, params interface{}) (interface{}, error) {
+	m.calls = append(m.calls, mockCall{command, args, toolName, params})
 	if m.index >= len(m.results) {
 		return nil, fmt.Errorf("mock: no more results")
 	}
@@ -44,20 +45,27 @@ func (m *mockMCPCaller) call(binaryPath string, toolName string, params interfac
 	return result, err
 }
 
-// Mock engine resolver that returns fake binary paths
+// Mock engine resolver that returns fake command and args
 type mockEngineResolver struct {
-	paths map[string]string
-}
-
-func newMockEngineResolver(paths map[string]string) *mockEngineResolver {
-	return &mockEngineResolver{paths: paths}
-}
-
-func (m *mockEngineResolver) resolve(engineURI string) (string, error) {
-	if path, ok := m.paths[engineURI]; ok {
-		return path, nil
+	engines map[string]struct {
+		command string
+		args    []string
 	}
-	return "", fmt.Errorf("mock: engine not found: %s", engineURI)
+}
+
+func newMockEngineResolver(engines map[string]struct {
+	command string
+	args    []string
+},
+) *mockEngineResolver {
+	return &mockEngineResolver{engines: engines}
+}
+
+func (m *mockEngineResolver) resolve(engineURI string) (string, []string, error) {
+	if engine, ok := m.engines[engineURI]; ok {
+		return engine.command, engine.args, nil
+	}
+	return "", nil, fmt.Errorf("mock: engine not found: %s", engineURI)
 }
 
 // Helper to create artifact response
@@ -100,8 +108,11 @@ func TestBuilderOrchestrator_SingleEngine(t *testing.T) {
 		[]interface{}{createArtifactResponse("test-app")},
 		[]error{nil},
 	)
-	mockResolver := newMockEngineResolver(map[string]string{
-		"go://build-go": "/usr/bin/build-go",
+	mockResolver := newMockEngineResolver(map[string]struct {
+		command string
+		args    []string
+	}{
+		"go://build-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/build-go"}},
 	})
 
 	// Create orchestrator
@@ -154,9 +165,12 @@ func TestBuilderOrchestrator_MultipleEngines(t *testing.T) {
 		},
 		[]error{nil, nil, nil},
 	)
-	mockResolver := newMockEngineResolver(map[string]string{
-		"go://build-go":        "/usr/bin/build-go",
-		"go://generic-builder": "/usr/bin/generic-builder",
+	mockResolver := newMockEngineResolver(map[string]struct {
+		command string
+		args    []string
+	}{
+		"go://build-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/build-go"}},
+		"go://generic-builder": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/generic-builder"}},
 	})
 
 	// Create orchestrator
@@ -186,11 +200,17 @@ func TestBuilderOrchestrator_MultipleEngines(t *testing.T) {
 		t.Errorf("Expected 3 MCP calls (sequential), got %d", len(mockMCP.calls))
 	}
 	// Verify sequential execution order
-	if mockMCP.calls[0].binaryPath != "/usr/bin/build-go" {
-		t.Errorf("Expected first call to build-go, got %s", mockMCP.calls[0].binaryPath)
+	if mockMCP.calls[0].command != "go" {
+		t.Errorf("Expected first call command 'go', got %s", mockMCP.calls[0].command)
 	}
-	if mockMCP.calls[1].binaryPath != "/usr/bin/generic-builder" {
-		t.Errorf("Expected second call to generic-builder, got %s", mockMCP.calls[1].binaryPath)
+	if len(mockMCP.calls[0].args) < 2 || mockMCP.calls[0].args[1] != "github.com/alexandremahdhaoui/forge/cmd/build-go" {
+		t.Errorf("Expected first call to build-go package, got %v", mockMCP.calls[0].args)
+	}
+	if mockMCP.calls[1].command != "go" {
+		t.Errorf("Expected second call command 'go', got %s", mockMCP.calls[1].command)
+	}
+	if len(mockMCP.calls[1].args) < 2 || mockMCP.calls[1].args[1] != "github.com/alexandremahdhaoui/forge/cmd/generic-builder" {
+		t.Errorf("Expected second call to generic-builder package, got %v", mockMCP.calls[1].args)
 	}
 }
 
@@ -207,9 +227,12 @@ func TestBuilderOrchestrator_EngineFailure(t *testing.T) {
 			fmt.Errorf("build failed"),
 		},
 	)
-	mockResolver := newMockEngineResolver(map[string]string{
-		"go://build-go":        "/usr/bin/build-go",
-		"go://generic-builder": "/usr/bin/generic-builder",
+	mockResolver := newMockEngineResolver(map[string]struct {
+		command string
+		args    []string
+	}{
+		"go://build-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/build-go"}},
+		"go://generic-builder": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/generic-builder"}},
 	})
 
 	// Create orchestrator
@@ -248,8 +271,11 @@ func TestBuilderOrchestrator_ConfigInjection(t *testing.T) {
 		[]interface{}{createArtifactResponse("test-app")},
 		[]error{nil},
 	)
-	mockResolver := newMockEngineResolver(map[string]string{
-		"go://generic-builder": "/usr/bin/generic-builder",
+	mockResolver := newMockEngineResolver(map[string]struct {
+		command string
+		args    []string
+	}{
+		"go://generic-builder": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/generic-builder"}},
 	})
 
 	// Create orchestrator
@@ -301,8 +327,11 @@ func TestTestRunnerOrchestrator_SingleRunner(t *testing.T) {
 		[]interface{}{createTestReportResponse(10, 10, 0, "passed")},
 		[]error{nil},
 	)
-	mockResolver := newMockEngineResolver(map[string]string{
-		"go://test-runner-go": "/usr/bin/test-runner-go",
+	mockResolver := newMockEngineResolver(map[string]struct {
+		command string
+		args    []string
+	}{
+		"go://test-runner-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/test-runner-go"}},
 	})
 
 	// Create orchestrator
@@ -350,9 +379,12 @@ func TestTestRunnerOrchestrator_MultipleRunners(t *testing.T) {
 		},
 		[]error{nil, nil},
 	)
-	mockResolver := newMockEngineResolver(map[string]string{
-		"go://test-runner-go": "/usr/bin/test-runner-go",
-		"go://lint-go":        "/usr/bin/lint-go",
+	mockResolver := newMockEngineResolver(map[string]struct {
+		command string
+		args    []string
+	}{
+		"go://test-runner-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/test-runner-go"}},
+		"go://lint-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/lint-go"}},
 	})
 
 	// Create orchestrator
@@ -404,9 +436,12 @@ func TestTestRunnerOrchestrator_RunnerFailure(t *testing.T) {
 		[]interface{}{nil},
 		[]error{fmt.Errorf("runner failed")},
 	)
-	mockResolver := newMockEngineResolver(map[string]string{
-		"go://test-runner-go": "/usr/bin/test-runner-go",
-		"go://lint-go":        "/usr/bin/lint-go",
+	mockResolver := newMockEngineResolver(map[string]struct {
+		command string
+		args    []string
+	}{
+		"go://test-runner-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/test-runner-go"}},
+		"go://lint-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/lint-go"}},
 	})
 
 	// Create orchestrator

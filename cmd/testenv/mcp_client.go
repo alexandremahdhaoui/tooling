@@ -5,50 +5,34 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/internal/forgepath"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// projectRoot is determined at package initialization to handle cases
-// where tests or code changes the working directory.
-var projectRoot string
-
-func init() {
-	// Find project root at startup
-	cwd, err := os.Getwd()
-	if err != nil {
-		return
-	}
-
-	// Walk up to find forge.yaml or go.mod
-	for cwd != "/" && cwd != "." {
-		if _, err := os.Stat(filepath.Join(cwd, "forge.yaml")); err == nil {
-			projectRoot = cwd
-			return
-		}
-		if _, err := os.Stat(filepath.Join(cwd, "go.mod")); err == nil {
-			projectRoot = cwd
-			return
-		}
-		parent := filepath.Dir(cwd)
-		if parent == cwd {
-			break
-		}
-		cwd = parent
-	}
-}
-
 // callMCPEngine calls an MCP engine with the specified tool and parameters.
 // It spawns the engine process with --mcp flag, sets up stdio transport, and calls the tool.
-func callMCPEngine(binaryPath string, toolName string, params interface{}) (interface{}, error) {
-	// Create command to spawn MCP server (without context to avoid premature termination)
-	cmd := exec.Command(binaryPath, "--mcp")
+// The command and args parameters specify how to execute the MCP server:
+//   - For go run: command="go", args=["run", "package/path"]
+//   - For binary: command="binary-path", args=nil
+func callMCPEngine(command string, args []string, toolName string, params interface{}) (interface{}, error) {
+	// Create command to spawn MCP server
+	// Append --mcp flag to the args
+	cmdArgs := append(args, "--mcp")
+	cmd := exec.Command(command, cmdArgs...)
 
 	// Inherit environment variables from parent process
 	cmd.Env = os.Environ()
+
+	// If this is a "go run" command, set working directory to forge repository
+	// This ensures go run can find the go.mod file
+	if command == "go" && len(args) > 0 && args[0] == "run" {
+		if forgeRepo, err := forgepath.FindForgeRepo(); err == nil {
+			cmd.Dir = forgeRepo
+		}
+	}
 
 	// Forward stderr from the MCP server to show logs
 	// Stdin/Stdout are used for JSON-RPC, but stderr is free for logs
@@ -71,7 +55,7 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 
 	session, err := client.Connect(ctx, transport, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to MCP server %s: %w", binaryPath, err)
+		return nil, fmt.Errorf("failed to connect to MCP server %s %v: %w", command, args, err)
 	}
 	defer func() { _ = session.Close() }()
 
@@ -122,17 +106,17 @@ func callMCPEngine(binaryPath string, toolName string, params interface{}) (inte
 	return nil, nil
 }
 
-// resolveEngineURI resolves an engine URI (go://package) to a binary path.
-// It returns an absolute path to handle cases where tests change working directory.
-func resolveEngineURI(engineURI string) (string, error) {
+// resolveEngineURI resolves an engine URI (go://package) to command and args for execution.
+// Returns command, args, and error.
+func resolveEngineURI(engineURI string) (string, []string, error) {
 	if !strings.HasPrefix(engineURI, "go://") {
-		return "", fmt.Errorf("unsupported engine protocol: %s (must start with go://)", engineURI)
+		return "", nil, fmt.Errorf("unsupported engine protocol: %s (must start with go://)", engineURI)
 	}
 
 	// Remove go:// prefix
 	packagePath := strings.TrimPrefix(engineURI, "go://")
 	if packagePath == "" {
-		return "", fmt.Errorf("empty engine path after go://")
+		return "", nil, fmt.Errorf("empty engine path after go://")
 	}
 
 	// Remove version if present (go://testenv-kind@v1.0.0 -> testenv-kind)
@@ -140,11 +124,18 @@ func resolveEngineURI(engineURI string) (string, error) {
 		packagePath = packagePath[:idx]
 	}
 
-	// If we have projectRoot from init, use it
-	if projectRoot != "" {
-		return filepath.Join(projectRoot, "build", "bin", packagePath), nil
+	// Extract package name (handle full paths like "github.com/user/repo/cmd/tool")
+	if strings.Contains(packagePath, "/") {
+		parts := strings.Split(packagePath, "/")
+		packagePath = parts[len(parts)-1]
 	}
 
-	// Fallback: use relative path from current directory
-	return fmt.Sprintf("./build/bin/%s", packagePath), nil
+	// Use forgepath to build the go run command
+	runArgs, err := forgepath.BuildGoRunCommand(packagePath)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to build go run command for %s: %w", packagePath, err)
+	}
+
+	// Return command and args for go run
+	return "go", runArgs, nil
 }

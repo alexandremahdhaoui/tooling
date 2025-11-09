@@ -46,9 +46,34 @@ Build artifacts defined in forge.yaml configuration. Can build all artifacts or 
 - Invokes appropriate build engines via MCP
 
 **Output:**
-```text
-Successfully built N artifact(s)
+
+Returns both a text message and a structured artifact containing an array of `Artifact` objects:
+
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "Successfully built N artifact(s)"
+  }],
+  "artifact": [
+    {
+      "name": "myapp",
+      "type": "binary",
+      "location": "./build/bin/myapp",
+      "timestamp": "2025-01-15T10:30:00Z",
+      "version": "abc123def"
+    }
+  ]
+}
 ```
+
+**Artifact Schema:**
+Each artifact in the array contains:
+- `name` (string): Artifact name
+- `type` (string): Artifact type (e.g., "binary", "container")
+- `location` (string): File path or URL to the artifact
+- `timestamp` (string): Build timestamp (RFC3339 format)
+- `version` (string): Git commit hash or version identifier
 
 Or on error:
 ```text
@@ -79,6 +104,327 @@ Build completed with errors: <error list>. Successfully built N artifact(s)
   }
 }
 ```
+
+---
+
+### `test-create`
+
+Create a test environment for a specific test stage.
+
+**Input Schema:**
+```json
+{
+  "stage": "string (required)"  // Test stage name (e.g., "integration", "e2e")
+}
+```
+
+**Output:**
+
+Returns a structured `TestEnvironment` object with complete environment details:
+
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "Successfully created test environment for stage: integration"
+  }],
+  "artifact": {
+    "id": "test-uuid-123",
+    "name": "integration",
+    "status": "created",
+    "createdAt": "2025-01-15T10:30:00Z",
+    "updatedAt": "2025-01-15T10:30:00Z",
+    "tmpDir": "/tmp/forge-test-integration-test-uuid-123",
+    "files": {
+      "testenv-kind.kubeconfig": "kubeconfig",
+      "testenv-lcr.credentials": "credentials.json"
+    },
+    "managedResources": [
+      "/tmp/forge-test-integration-test-uuid-123"
+    ],
+    "metadata": {
+      "testenv-kind.clusterName": "forge-integration-test-uuid-123",
+      "testenv-lcr.registryURL": "https://localhost:5000"
+    }
+  }
+}
+```
+
+**TestEnvironment Schema:**
+- `id` (string): Unique test environment identifier
+- `name` (string): Test stage name
+- `status` (string): Environment status ("created", "running", "passed", "failed", "partially_deleted")
+- `createdAt` (string): Creation timestamp (RFC3339)
+- `updatedAt` (string): Last update timestamp (RFC3339)
+- `tmpDir` (string): Temporary directory path for this environment
+- `files` (object): Map of file keys to relative paths (relative to tmpDir)
+- `managedResources` (array): List of files/directories managed by this environment
+- `metadata` (object): Engine-specific metadata (namespaced by engine name)
+
+---
+
+### `test-get`
+
+Retrieve details of a specific test environment.
+
+**Input Schema:**
+```json
+{
+  "stage": "string (required)",   // Test stage name
+  "testID": "string (required)",  // Test environment ID
+  "format": "string (optional)"   // Output format: "json", "yaml", or "table" (default)
+}
+```
+
+**Output:**
+
+Returns the same `TestEnvironment` structure as `test-create`.
+
+---
+
+### `test-list`
+
+List all test environments for a specific test stage.
+
+**Input Schema:**
+```json
+{
+  "stage": "string (required)",  // Test stage name
+  "format": "string (optional)"  // Output format: "json", "yaml", or "table" (default)
+}
+```
+
+**Output:**
+
+Returns an array of `TestEnvironment` objects:
+
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "Successfully listed 2 test environment(s) for stage: integration"
+  }],
+  "artifact": [
+    {
+      "id": "test-uuid-123",
+      "name": "integration",
+      "status": "passed",
+      ...
+    },
+    {
+      "id": "test-uuid-456",
+      "name": "integration",
+      "status": "created",
+      ...
+    }
+  ]
+}
+```
+
+---
+
+### `test-run`
+
+Run tests for a specific test stage.
+
+**Input Schema:**
+```json
+{
+  "stage": "string (required)",   // Test stage name
+  "testID": "string (optional)"   // Existing test environment ID (auto-creates if not provided)
+}
+```
+
+**Output:**
+
+Returns a structured `TestReport` object with detailed test results:
+
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "Successfully ran tests for stage: unit"
+  }],
+  "isError": false,
+  "artifact": {
+    "id": "report-uuid-789",
+    "stage": "unit",
+    "status": "passed",
+    "startTime": "2025-01-15T10:30:00Z",
+    "duration": 12.5,
+    "testStats": {
+      "total": 42,
+      "passed": 42,
+      "failed": 0,
+      "skipped": 0
+    },
+    "coverage": {
+      "percentage": 85.5,
+      "filePath": ".forge/tmp/coverage.out"
+    },
+    "artifactFiles": [
+      ".forge/tmp/test-report.xml"
+    ],
+    "outputPath": ".forge/tmp/test-output.log",
+    "errorMessage": "",
+    "createdAt": "2025-01-15T10:30:12Z",
+    "updatedAt": "2025-01-15T10:30:12Z"
+  }
+}
+```
+
+**TestReport Schema:**
+- `id` (string): Unique test report identifier
+- `stage` (string): Test stage name
+- `status` (string): Test result ("passed" or "failed")
+- `startTime` (string): Test start timestamp (RFC3339)
+- `duration` (number): Test duration in seconds
+- `testStats` (object):
+  - `total` (number): Total number of tests
+  - `passed` (number): Number of passed tests
+  - `failed` (number): Number of failed tests
+  - `skipped` (number): Number of skipped tests
+- `coverage` (object):
+  - `percentage` (number): Code coverage percentage (0-100)
+  - `filePath` (string): Path to coverage file
+- `artifactFiles` (array): List of artifact files generated (e.g., XML reports)
+- `outputPath` (string): Path to detailed test output
+- `errorMessage` (string): Error message if tests failed
+- `createdAt` (string): Report creation timestamp (RFC3339)
+- `updatedAt` (string): Last update timestamp (RFC3339)
+
+**Note:** If tests fail, `isError` is set to `true` but the artifact still contains the full `TestReport`.
+
+---
+
+### `test-delete`
+
+Delete a test environment.
+
+**Input Schema:**
+```json
+{
+  "stage": "string (required)",  // Test stage name
+  "testID": "string (required)"  // Test environment ID to delete
+}
+```
+
+**Output:**
+```text
+Successfully deleted test environment: test-uuid-123
+```
+
+---
+
+### `test-all`
+
+Build all artifacts and run all test stages sequentially.
+
+**Input Schema:**
+```json
+{}  // No parameters required
+```
+
+**Output:**
+
+Returns an aggregated `TestAllResult` object containing all build artifacts and test reports:
+
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "Successfully completed test-all: 3 artifact(s) built, 4 test stage(s) run, 4 passed, 0 failed"
+  }],
+  "artifact": {
+    "buildArtifacts": [
+      {
+        "name": "myapp",
+        "type": "binary",
+        "location": "./build/bin/myapp",
+        "timestamp": "2025-01-15T10:30:00Z",
+        "version": "abc123def"
+      }
+    ],
+    "testReports": [
+      {
+        "id": "report-uuid-1",
+        "stage": "verify-tags",
+        "status": "passed",
+        ...
+      },
+      {
+        "id": "report-uuid-2",
+        "stage": "unit",
+        "status": "passed",
+        ...
+      }
+    ],
+    "summary": "3 artifact(s) built, 4 test stage(s) run, 4 passed, 0 failed"
+  }
+}
+```
+
+**TestAllResult Schema:**
+- `buildArtifacts` (array): Array of `Artifact` objects (see `build` tool schema)
+- `testReports` (array): Array of `TestReport` objects (see `test-run` tool schema)
+- `summary` (string): Human-readable summary of results
+
+**Note:** If any tests fail, `isError` is set to `true` but the artifact still contains all results.
+
+---
+
+### `config-validate`
+
+Validate forge.yaml configuration file.
+
+**Input Schema:**
+```json
+{
+  "configPath": "string (optional)"  // Path to config file (defaults to "forge.yaml")
+}
+```
+
+**Output:**
+```text
+Configuration is valid
+```
+
+Or on error:
+```text
+Configuration validation failed: <error details>
+```
+
+---
+
+### `prompt-list`
+
+List all available AI assistant prompts.
+
+**Input Schema:**
+```json
+{}  // No parameters
+```
+
+**Output:**
+Lists available prompts for AI-assisted development tasks.
+
+---
+
+### `prompt-get`
+
+Retrieve a specific AI assistant prompt.
+
+**Input Schema:**
+```json
+{
+  "name": "string (required)"  // Prompt name
+}
+```
+
+**Output:**
+Returns the requested prompt content.
+
+---
 
 ## How It Works
 

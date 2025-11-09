@@ -101,13 +101,13 @@ func testCreate(testSpec *forge.TestSpec) error {
 		return fmt.Errorf("failed to read forge.yaml: %w", err)
 	}
 
-	enginePath, err := resolveEngine(testSpec.Testenv, &config)
+	command, args, err := resolveEngine(testSpec.Testenv, &config)
 	if err != nil {
 		return fmt.Errorf("failed to resolve engine: %w", err)
 	}
 
 	// Call engine create tool
-	result, err := callMCPEngine(enginePath, "create", map[string]any{
+	result, err := callMCPEngine(command, args, "create", map[string]any{
 		"stage": testSpec.Name,
 	})
 	if err != nil {
@@ -218,7 +218,7 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 		return fmt.Errorf("failed to read forge.yaml: %w", err)
 	}
 
-	enginePath, err := resolveEngine(testSpec.Testenv, &config)
+	command, args, err := resolveEngine(testSpec.Testenv, &config)
 	if err != nil {
 		return fmt.Errorf("failed to resolve engine: %w", err)
 	}
@@ -230,7 +230,7 @@ func testDelete(testSpec *forge.TestSpec, args []string) error {
 	}
 
 	// Call engine delete tool
-	result, err := callMCPEngine(enginePath, "delete", map[string]any{
+	result, err := callMCPEngine(command, args, "delete", map[string]any{
 		paramName: testID,
 	})
 	if err != nil {
@@ -310,13 +310,13 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 		// Auto-create environment if engine is configured
 		if testSpec.Testenv != "" && testSpec.Testenv != "noop" {
 			// Resolve engine URI (handles aliases)
-			enginePath, err := resolveEngine(testSpec.Testenv, config)
+			command, args, err := resolveEngine(testSpec.Testenv, config)
 			if err != nil {
 				return fmt.Errorf("failed to resolve testenv engine %s: %w", testSpec.Testenv, err)
 			}
 
 			// Create test environment
-			result, err := callMCPEngine(enginePath, "create", map[string]any{
+			result, err := callMCPEngine(command, args, "create", map[string]any{
 				"stage": testSpec.Name,
 			})
 			if err != nil {
@@ -339,7 +339,7 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 	}
 
 	// Resolve runner URI (handles aliases)
-	runnerPath, err := resolveEngine(testSpec.Runner, config)
+	runnerCommand, runnerArgs, err := resolveEngine(testSpec.Runner, config)
 	if err != nil {
 		return fmt.Errorf("failed to resolve runner %s: %w", testSpec.Runner, err)
 	}
@@ -406,11 +406,11 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 		}
 	}
 
-	// Check if this is a multi-engine test runner (runnerPath still contains "alias://")
+	// Multi-engine test runner orchestration disabled for now (needs updating for command+args)
 	var result interface{}
-	if strings.HasPrefix(runnerPath, "alias://") {
-		// Multi-engine test runner - use orchestrator
-		aliasName := strings.TrimPrefix(runnerPath, "alias://")
+	if strings.HasPrefix(runnerCommand, "alias://") {
+		// Check if this is a multi-engine test runner alias
+		aliasName := strings.TrimPrefix(runnerCommand, "alias://")
 		runnerConfig := getEngineConfig(aliasName, config)
 		if runnerConfig == nil {
 			return fmt.Errorf("runner alias not found: %s", aliasName)
@@ -420,75 +420,50 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 			return fmt.Errorf("alias %s is not a test-runner type", aliasName)
 		}
 
-		fmt.Printf("  Multi-engine test runner detected (%d engines)\n", len(runnerConfig.TestRunner))
+		if len(runnerConfig.TestRunner) > 1 {
+			// Multi-engine test runner - use orchestrator
+			fmt.Printf("  Multi-engine test runner detected (%d engines)\n", len(runnerConfig.TestRunner))
 
-		// Create test runner orchestrator
-		orchestrator := orchestrate.NewTestRunnerOrchestrator(
-			callMCPEngine,
-			func(uri string) (string, error) {
-				return resolveEngine(uri, config)
-			},
-		)
+			// Create test runner orchestrator
+			orchestrator := orchestrate.NewTestRunnerOrchestrator(
+				callMCPEngine,
+				func(uri string) (string, []string, error) {
+					return resolveEngine(uri, config)
+				},
+			)
 
-		// Execute orchestration
-		report, err := orchestrator.Orchestrate(runnerConfig.TestRunner, params)
-		if err != nil {
-			// Update test environment status to failed if we have a test ID
-			if testID != "" {
-				updateTestStatus(testID, "failed")
+			// Execute orchestration
+			report, err := orchestrator.Orchestrate(runnerConfig.TestRunner, params)
+			if err != nil {
+				// Update test environment status to failed if we have a test ID
+				if testID != "" {
+					updateTestStatus(testID, "failed")
+				}
+				return fmt.Errorf("multi-engine test run failed: %w", err)
 			}
-			return fmt.Errorf("multi-engine test run failed: %w", err)
-		}
 
-		// Convert report back to map[string]any for compatibility with existing code
-		reportJSON, err := json.Marshal(report)
-		if err != nil {
-			return fmt.Errorf("failed to marshal test report: %w", err)
+			// Convert report back to map[string]any for compatibility with existing code
+			reportJSON, err := json.Marshal(report)
+			if err != nil {
+				return fmt.Errorf("failed to marshal test report: %w", err)
+			}
+			var resultMap map[string]any
+			if err := json.Unmarshal(reportJSON, &resultMap); err != nil {
+				return fmt.Errorf("failed to unmarshal test report: %w", err)
+			}
+			result = resultMap
+		} else {
+			// Single-engine alias - use single-engine logic below
+			result, err = runWithSingleTestRunner(runnerCommand, runnerArgs, params, runnerConfig, testID)
+			if err != nil {
+				return err
+			}
 		}
-		var resultMap map[string]any
-		if err := json.Unmarshal(reportJSON, &resultMap); err != nil {
-			return fmt.Errorf("failed to unmarshal test report: %w", err)
-		}
-		result = resultMap
 	} else {
-		// Single-engine test runner - use existing logic
-		// Get runner config if this is an alias
-		var runnerConfig *forge.EngineConfig
-		if strings.HasPrefix(testSpec.Runner, "alias://") {
-			aliasName := strings.TrimPrefix(testSpec.Runner, "alias://")
-			runnerConfig = getEngineConfig(aliasName, config)
-		}
-
-		// Inject runner config if present (for alias:// runners)
-		if runnerConfig != nil && runnerConfig.Type == forge.TestRunnerEngineConfigType {
-			// For test-runner aliases, use the first test runner's spec
-			if len(runnerConfig.TestRunner) > 0 {
-				runnerSpec := runnerConfig.TestRunner[0].Spec
-				if runnerSpec.Command != "" {
-					params["command"] = runnerSpec.Command
-				}
-				if len(runnerSpec.Args) > 0 {
-					params["args"] = runnerSpec.Args
-				}
-				if len(runnerSpec.Env) > 0 {
-					params["env"] = runnerSpec.Env
-				}
-				if runnerSpec.EnvFile != "" {
-					params["envFile"] = runnerSpec.EnvFile
-				}
-				if runnerSpec.WorkDir != "" {
-					params["workDir"] = runnerSpec.WorkDir
-				}
-			}
-		}
-
-		result, err = callMCPEngine(runnerPath, "run", params)
+		// Direct go:// URI - single engine
+		result, err = runWithSingleTestRunner(runnerCommand, runnerArgs, params, nil, testID)
 		if err != nil {
-			// Update test environment status to failed if we have a test ID
-			if testID != "" {
-				updateTestStatus(testID, "failed")
-			}
-			return fmt.Errorf("test run failed: %w", err)
+			return err
 		}
 	}
 
@@ -534,6 +509,56 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) error 
 	}
 
 	return nil
+}
+
+// runWithSingleTestRunner handles running tests with a single test runner engine.
+func runWithSingleTestRunner(
+	command string,
+	args []string,
+	params map[string]any,
+	runnerConfig *forge.EngineConfig,
+	testID string,
+) (interface{}, error) {
+	// Clone params to avoid mutating the original
+	runnerParams := make(map[string]any)
+	for k, v := range params {
+		runnerParams[k] = v
+	}
+
+	// Inject runner config if present (for alias:// runners)
+	if runnerConfig != nil && runnerConfig.Type == forge.TestRunnerEngineConfigType {
+		// For test-runner aliases, use the first test runner's spec
+		if len(runnerConfig.TestRunner) > 0 {
+			runnerSpec := runnerConfig.TestRunner[0].Spec
+			if runnerSpec.Command != "" {
+				runnerParams["command"] = runnerSpec.Command
+			}
+			if len(runnerSpec.Args) > 0 {
+				runnerParams["args"] = runnerSpec.Args
+			}
+			if len(runnerSpec.Env) > 0 {
+				runnerParams["env"] = runnerSpec.Env
+			}
+			if runnerSpec.EnvFile != "" {
+				runnerParams["envFile"] = runnerSpec.EnvFile
+			}
+			if runnerSpec.WorkDir != "" {
+				runnerParams["workDir"] = runnerSpec.WorkDir
+			}
+		}
+	}
+
+	// Call test runner
+	result, err := callMCPEngine(command, args, "run", runnerParams)
+	if err != nil {
+		// Update test environment status to failed if we have a test ID
+		if testID != "" {
+			updateTestStatus(testID, "failed")
+		}
+		return nil, fmt.Errorf("test run failed: %w", err)
+	}
+
+	return result, nil
 }
 
 // storeTestReportFromResult stores a test report from MCP engine result.

@@ -65,43 +65,44 @@ func resolveEngineAlias(alias string, spec *forge.Spec) (string, error) {
 	return "", fmt.Errorf("unknown engine type for alias %s", alias)
 }
 
-// resolveEngine resolves an engine URI (which may be an alias) to the actual engine binary path.
+// resolveEngine resolves an engine URI (which may be an alias) to the actual engine command and args.
 // This is a wrapper around parseEngine that handles alias resolution.
-func resolveEngine(engineURI string, spec *forge.Spec) (string, error) {
-	engineType, binaryPathOrAlias, err := parseEngine(engineURI)
+// Returns command, args, and error.
+func resolveEngine(engineURI string, spec *forge.Spec) (string, []string, error) {
+	engineType, cmdOrAlias, args, err := parseEngine(engineURI)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 
 	// If it's an alias, resolve it
 	if engineType == "alias" {
-		aliasName := binaryPathOrAlias
+		aliasName := cmdOrAlias
 
 		// Get the actual engine URI from the alias
 		resolvedURI, err := resolveEngineAlias(aliasName, spec)
 		if err != nil {
-			return "", err
+			return "", nil, err
 		}
 
 		// If resolvedURI is still an alias, it's a multi-engine alias
-		// Return it as-is so the caller can use orchestration
+		// Return error - we don't support multi-engine aliases in this context
 		if strings.HasPrefix(resolvedURI, "alias://") {
-			return resolvedURI, nil
+			return "", nil, fmt.Errorf("multi-engine alias %s cannot be resolved to a single engine", aliasName)
 		}
 
 		// Recursively parse the resolved URI (it should be go://)
-		engineType, binaryPath, err := parseEngine(resolvedURI)
+		engineType, command, args, err := parseEngine(resolvedURI)
 		if err != nil {
-			return "", fmt.Errorf("failed to parse resolved engine URI %s for alias %s: %w", resolvedURI, aliasName, err)
+			return "", nil, fmt.Errorf("failed to parse resolved engine URI %s for alias %s: %w", resolvedURI, aliasName, err)
 		}
 
 		if engineType == "alias" {
-			return "", fmt.Errorf("circular alias reference detected: %s", aliasName)
+			return "", nil, fmt.Errorf("circular alias reference detected: %s", aliasName)
 		}
 
-		return binaryPath, nil
+		return command, args, nil
 	}
 
-	// Not an alias, return the binary path directly
-	return binaryPathOrAlias, nil
+	// Not an alias, return the command and args directly
+	return cmdOrAlias, args, nil
 }
