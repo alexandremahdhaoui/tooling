@@ -85,7 +85,7 @@ func TestCmdCreate_Integration(t *testing.T) {
 artifactStorePath: ` + artifactStorePath + `
 test:
   - name: integration
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
 	err = os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)

@@ -264,14 +264,15 @@ Example (via MCP):
 
   engines:
     - alias: my-linter
-      engine: go://generic-test-runner
-      config:
-        command: "golangci-lint"
-        args: ["run", "./..."]
+      type: test-runner
+      testRunner:
+        - engine: go://generic-test-runner
+          spec:
+            command: "golangci-lint"
+            args: ["run", "./..."]
 
   test:
     - name: lint
-      engine: "noop"
       runner: alias://my-linter
 `)
 }

@@ -91,7 +91,7 @@ test:
   - name: integration
     stage: integration
     engine: go://testenv
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 Run with:

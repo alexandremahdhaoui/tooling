@@ -7,7 +7,7 @@ RUN go mod download
 FROM downloader as builder
 
 ARG GO_BUILD_LDFLAGS
-ARG NAME=build-container
+ARG NAME=container-build
 ARG INPUT_CMD="./cmd/${NAME}"
 ARG OUTPUT_BIN="/bin/${NAME}"
 WORKDIR /workdir
@@ -22,8 +22,8 @@ RUN CGO_ENABLED=0 \
 
 FROM docker.io/alpine:3.20.1
 
-ARG NAME=build-container
+ARG NAME=container-build
 ARG OUTPUT_BIN="/bin/${NAME}"
 COPY --from=builder ${OUTPUT_BIN} ${OUTPUT_BIN}
-CMD [ "build-container" ]
+CMD [ "container-build" ]
 

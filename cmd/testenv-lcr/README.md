@@ -54,8 +54,8 @@ build:
   artifactStorePath: .ignore.artifact-store.yaml
   specs:
     - container:
-        name: build-container
-        file: ./containers/build-container/Containerfile
+        name: container-build
+        file: ./containers/container-build/Containerfile
 ```
 
 ### Environment Variables
@@ -111,7 +111,7 @@ CONTAINER_ENGINE=docker PREPEND_CMD=sudo go run ./cmd/local-container-registry t
 CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push nginx:latest
 
 # Push a locally built image
-CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push build-container:abc123
+CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push container-build:abc123
 ```
 
 **What happens during push:**
@@ -324,7 +324,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 fi
 ```
 
-### Workflow with build-container
+### Workflow with container-build
 
 ```bash
 #!/bin/bash
@@ -336,7 +336,7 @@ KIND_BINARY=kind KIND_BINARY_PREFIX=sudo go run ./cmd/kindenv setup
 
 # 2. Build containers from config
 echo "Building containers..."
-CONTAINER_ENGINE=docker go run ./cmd/build-container
+CONTAINER_ENGINE=docker go run ./cmd/container-build
 
 # 3. Setup registry (auto-pushes if autoPushImages: true)
 echo "Setting up local container registry..."
@@ -348,7 +348,7 @@ CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push-all
 
 # 5. Or push single image
 echo "Pushing single image..."
-CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push build-container:latest
+CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push container-build:latest
 
 echo "✅ Success!"
 
@@ -376,4 +376,4 @@ See [ARCHITECTURE.md](../../ARCHITECTURE.md#local-container-registry) for detail
 
 - **kindenv** - Creates Kind clusters
 - **e2e** - End-to-end tests
-- **build-container** - Builds container images
+- **container-build** - Builds container images

@@ -4,17 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/mcpserver"
+	"github.com/alexandremahdhaoui/forge/internal/testutil"
 	"github.com/alexandremahdhaoui/forge/internal/version"
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -111,43 +111,74 @@ type Test struct {
 	Parallel bool
 }
 
+// TestFilters holds test filtering configuration
+type TestFilters struct {
+	Category    string
+	NamePattern string
+}
+
+// newTestFilters creates TestFilters from environment variables
+func newTestFilters() TestFilters {
+	return TestFilters{
+		Category:    os.Getenv("TEST_CATEGORY"),
+		NamePattern: os.Getenv("TEST_NAME_PATTERN"),
+	}
+}
+
+// shouldRunTest determines if a test should run based on filters
+func (tf TestFilters) shouldRunTest(test Test) bool {
+	if tf.Category != "" && string(test.Category) != tf.Category {
+		return false
+	}
+	if tf.NamePattern != "" && !matchesPattern(test.Name, tf.NamePattern) {
+		return false
+	}
+	return true
+}
+
+// matchesPattern checks if name matches the pattern (case-insensitive substring)
+func matchesPattern(name, pattern string) bool {
+	return strings.Contains(strings.ToLower(name), strings.ToLower(pattern))
+}
+
 // TestSuite manages and executes tests
 type TestSuite struct {
-	tests             []Test
-	results           []TestResult
-	categories        map[TestCategory]*CategoryStats
-	filterCategory    string
-	filterNamePattern string
-	sharedTestEnvID   string // Shared test environment ID for testenv-dependent tests
+	tests           []Test
+	results         []TestResult
+	filters         TestFilters
+	sharedTestEnvID string // Shared test environment ID for testenv-dependent tests
 }
 
 // NewTestSuite creates a new test suite
 func NewTestSuite() *TestSuite {
 	return &TestSuite{
-		tests:             make([]Test, 0),
-		results:           make([]TestResult, 0),
-		categories:        make(map[TestCategory]*CategoryStats),
-		filterCategory:    os.Getenv("TEST_CATEGORY"),
-		filterNamePattern: os.Getenv("TEST_NAME_PATTERN"),
+		tests:   make([]Test, 0),
+		results: make([]TestResult, 0),
+		filters: newTestFilters(),
 	}
 }
 
 // AddTest adds a test to the suite
 func (ts *TestSuite) AddTest(test Test) {
-	// Apply filters if set
-	if ts.filterCategory != "" && string(test.Category) != ts.filterCategory {
-		return // Skip tests not matching category filter
-	}
-
-	if ts.filterNamePattern != "" && !strings.Contains(strings.ToLower(test.Name), strings.ToLower(ts.filterNamePattern)) {
-		return // Skip tests not matching name pattern
+	// Apply filters
+	if !ts.filters.shouldRunTest(test) {
+		return
 	}
 
 	ts.tests = append(ts.tests, test)
 }
 
-// Setup performs global test suite setup
-func (ts *TestSuite) Setup() error {
+// suiteEnvironment manages test environment lifecycle
+type suiteEnvironment struct {
+	sharedTestEnvID string
+	needsShared     bool
+	skipCleanup     bool
+}
+
+// setup performs complete environment setup
+func (se *suiteEnvironment) setup(tests []Test) error {
+	se.skipCleanup = os.Getenv("SKIP_CLEANUP") != ""
+
 	// Check if forge binary exists
 	if _, err := os.Stat("./build/bin/forge"); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: ./build/bin/forge not found, attempting to build...\n")
@@ -159,36 +190,80 @@ func (ts *TestSuite) Setup() error {
 	}
 
 	// Force cleanup of any leftover test environments
-	if err := forceCleanupLeftovers(); err != nil {
+	if err := testutil.ForceCleanupLeftovers(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup leftover resources: %v\n", err)
 	}
 
-	// Check if we need to create a shared test environment
-	if ts.needsSharedTestEnv() {
+	// Determine if we need a shared test environment
+	se.needsShared = se.shouldCreateSharedTestEnv(tests)
+
+	// Create shared test environment if needed
+	if se.needsShared {
 		fmt.Fprintf(os.Stderr, "\n=== Creating Shared Test Environment ===\n")
-		testID, err := ts.createSharedTestEnv()
+		testID, err := se.createSharedTestEnv()
 		if err != nil {
 			return fmt.Errorf("failed to create shared test environment: %w", err)
 		}
-		ts.sharedTestEnvID = testID
+		se.sharedTestEnvID = testID
 		fmt.Fprintf(os.Stderr, "✓ Shared test environment created: %s\n\n", testID)
 	}
 
 	return nil
 }
 
-// Teardown performs global test suite teardown
-func (ts *TestSuite) Teardown() {
-	// Check for leftover resources unless SKIP_CLEANUP is set
-	if os.Getenv("SKIP_CLEANUP") != "" {
+// shouldCreateSharedTestEnv checks if any tests need a shared test environment
+func (se *suiteEnvironment) shouldCreateSharedTestEnv(tests []Test) bool {
+	// Check if KIND_BINARY is available
+	if shouldSkipTestEnvTests() {
+		return false
+	}
+
+	// Check if any tests are testenv-dependent
+	for _, test := range tests {
+		switch test.Category {
+		case CategoryTestEnv, CategoryTestRunner, CategoryPerformance, CategoryCleanup, CategoryError, CategoryArtifactStore:
+			if !test.Skip {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// createSharedTestEnv creates a shared test environment for reuse across tests
+func (se *suiteEnvironment) createSharedTestEnv() (string, error) {
+	cmd := exec.Command("./build/bin/forge", "test", "create-env", "integration")
+	cmd.Env = os.Environ()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to create shared environment: %w\nOutput: %s", err, output)
+	}
+
+	testID := testutil.ExtractTestID(string(output))
+	if testID == "" {
+		return "", fmt.Errorf("failed to extract testID from output: %s", output)
+	}
+
+	// Verify cluster was created successfully
+	if err := testutil.VerifyClusterExists(testID); err != nil {
+		_ = testutil.ForceCleanupTestEnv(testID)
+		return "", fmt.Errorf("cluster verification failed: %w", err)
+	}
+
+	return testID, nil
+}
+
+// teardown performs environment cleanup
+func (se *suiteEnvironment) teardown() {
+	if se.skipCleanup {
 		fmt.Fprintf(os.Stderr, "\n⚠️  SKIP_CLEANUP set, leaving test resources intact for inspection\n")
 		return
 	}
 
 	// Cleanup shared test environment if it was created
-	if ts.sharedTestEnvID != "" {
+	if se.sharedTestEnvID != "" {
 		fmt.Fprintf(os.Stderr, "\n=== Cleaning Up Shared Test Environment ===\n")
-		if err := forceCleanupTestEnv(ts.sharedTestEnvID); err != nil {
+		if err := testutil.ForceCleanupTestEnv(se.sharedTestEnvID); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to cleanup shared environment: %v\n", err)
 		} else {
 			fmt.Fprintf(os.Stderr, "✓ Shared test environment cleaned up\n")
@@ -196,8 +271,152 @@ func (ts *TestSuite) Teardown() {
 	}
 
 	// Force cleanup any remaining leftovers
-	if err := forceCleanupLeftovers(); err != nil {
+	if err := testutil.ForceCleanupLeftovers(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to cleanup leftover resources: %v\n", err)
+	}
+}
+
+// getSharedTestEnvID returns the shared test environment ID
+func (se *suiteEnvironment) getSharedTestEnvID() string {
+	return se.sharedTestEnvID
+}
+
+// Setup performs global test suite setup
+func (ts *TestSuite) Setup() error {
+	env := &suiteEnvironment{}
+	if err := env.setup(ts.tests); err != nil {
+		return err
+	}
+	ts.sharedTestEnvID = env.getSharedTestEnvID()
+	return nil
+}
+
+// Teardown performs global test suite teardown
+func (ts *TestSuite) Teardown() {
+	env := &suiteEnvironment{
+		sharedTestEnvID: ts.sharedTestEnvID,
+		skipCleanup:     os.Getenv("SKIP_CLEANUP") != "",
+	}
+	env.teardown()
+}
+
+// testExecutor handles test execution with thread-safe result recording
+type testExecutor struct {
+	suite *TestSuite
+	mu    sync.Mutex
+}
+
+// executeTest runs a single test and returns the result (no side effects)
+func (te *testExecutor) executeTest(test Test) TestResult {
+	testStart := time.Now()
+
+	var result TestResult
+	result.Name = test.Name
+	result.Category = test.Category
+
+	// Check if test should be skipped
+	if test.Skip {
+		result.Status = "skipped"
+		result.Output = test.SkipReason
+		result.Duration = 0
+		return result
+	}
+
+	// Run the test with test suite context
+	err := test.Run(te.suite)
+	result.Duration = time.Since(testStart).Seconds()
+
+	if err != nil {
+		result.Status = "failed"
+		result.Error = err.Error()
+	} else {
+		result.Status = "passed"
+	}
+
+	return result
+}
+
+// recordResult records a test result in a thread-safe manner
+func (te *testExecutor) recordResult(result TestResult) {
+	te.mu.Lock()
+	defer te.mu.Unlock()
+	te.suite.results = append(te.suite.results, result)
+}
+
+// testReporter handles all test output formatting
+type testReporter struct {
+	writer io.Writer
+}
+
+// newTestReporter creates a new test reporter
+func newTestReporter() *testReporter {
+	return &testReporter{writer: os.Stderr}
+}
+
+// printTestResult prints a single test result
+func (tr *testReporter) printTestResult(result TestResult, parallel bool) {
+	parallelMarker := ""
+	if parallel {
+		parallelMarker = " [parallel]"
+	}
+
+	switch result.Status {
+	case "skipped":
+		_, _ = fmt.Fprintf(tr.writer, "🔹 %s%s ⏭️  SKIPPED: %s\n", result.Name, parallelMarker, result.Output)
+	case "passed":
+		_, _ = fmt.Fprintf(tr.writer, "🔹 %s%s ✅ PASSED (%.2fs)\n", result.Name, parallelMarker, result.Duration)
+	case "failed":
+		_, _ = fmt.Fprintf(tr.writer, "🔹 %s%s ❌ FAILED (%.2fs): %v\n", result.Name, parallelMarker, result.Duration, result.Error)
+	}
+}
+
+// printCategoryHeader prints a category header
+func (tr *testReporter) printCategoryHeader(category TestCategory, testCount int) {
+	_, _ = fmt.Fprintf(tr.writer, "\n=== Category: %s (%d tests) ===\n", category, testCount)
+}
+
+// printSuiteHeader prints the test suite header
+func (tr *testReporter) printSuiteHeader(totalTests, categoryCount int, filters TestFilters) {
+	_, _ = fmt.Fprintf(tr.writer, "\n=== Forge E2E Test Suite ===\n")
+
+	// Display active filters
+	if filters.Category != "" {
+		_, _ = fmt.Fprintf(tr.writer, "Filter: Category = %s\n", filters.Category)
+	}
+	if filters.NamePattern != "" {
+		_, _ = fmt.Fprintf(tr.writer, "Filter: Name Pattern = %s\n", filters.NamePattern)
+	}
+
+	_, _ = fmt.Fprintf(tr.writer, "Running %d tests across %d categories\n\n", totalTests, categoryCount)
+}
+
+// printSummary prints the test summary
+func (tr *testReporter) printSummary(status string, total, passed, failed, skipped int, duration float64, errorMessage string) {
+	_, _ = fmt.Fprintf(tr.writer, "\n=== Test Summary ===\n")
+	_, _ = fmt.Fprintf(tr.writer, "Status: %s\n", status)
+	_, _ = fmt.Fprintf(tr.writer, "Total: %d\n", total)
+	_, _ = fmt.Fprintf(tr.writer, "Passed: %d\n", passed)
+	_, _ = fmt.Fprintf(tr.writer, "Failed: %d\n", failed)
+	if skipped > 0 {
+		_, _ = fmt.Fprintf(tr.writer, "Skipped: %d\n", skipped)
+	}
+	_, _ = fmt.Fprintf(tr.writer, "Duration: %.2fs\n", duration)
+
+	if errorMessage != "" {
+		_, _ = fmt.Fprintf(tr.writer, "\nErrors: %s\n", errorMessage)
+	}
+}
+
+// printCategoryBreakdown prints the category breakdown
+func (tr *testReporter) printCategoryBreakdown(categories map[TestCategory]CategoryStats) {
+	if len(categories) == 0 {
+		return
+	}
+
+	_, _ = fmt.Fprintf(tr.writer, "\n=== Category Breakdown ===\n")
+	for category, stats := range categories {
+		_, _ = fmt.Fprintf(tr.writer, "%s: %d/%d passed (%.2fs)\n",
+			category, stats.Passed, stats.Total, stats.Duration)
 	}
 }
 
@@ -223,18 +442,10 @@ func (ts *TestSuite) RunAll() *DetailedTestReport {
 	defer ts.Teardown()
 
 	startTime := time.Now()
+	reporter := newTestReporter()
 
-	fmt.Fprintf(os.Stderr, "\n=== Forge E2E Test Suite ===\n")
-
-	// Display active filters
-	if ts.filterCategory != "" {
-		fmt.Fprintf(os.Stderr, "Filter: Category = %s\n", ts.filterCategory)
-	}
-	if ts.filterNamePattern != "" {
-		fmt.Fprintf(os.Stderr, "Filter: Name Pattern = %s\n", ts.filterNamePattern)
-	}
-
-	fmt.Fprintf(os.Stderr, "Running %d tests across %d categories\n\n", len(ts.tests), len(ts.getCategoriesUsed()))
+	// Print suite header
+	reporter.printSuiteHeader(len(ts.tests), len(ts.getCategoriesUsed()), ts.filters)
 
 	// Group tests by category for display
 	testsByCategory := make(map[TestCategory][]Test)
@@ -255,7 +466,7 @@ func (ts *TestSuite) RunAll() *DetailedTestReport {
 			continue
 		}
 
-		fmt.Fprintf(os.Stderr, "\n=== Category: %s (%d tests) ===\n", category, len(tests))
+		reporter.printCategoryHeader(category, len(tests))
 
 		// Separate parallel and sequential tests
 		var parallelTests, sequentialTests []Test
@@ -269,125 +480,72 @@ func (ts *TestSuite) RunAll() *DetailedTestReport {
 
 		// Run sequential tests first
 		for _, test := range sequentialTests {
-			ts.runTest(test)
+			ts.runTest(test, reporter)
 		}
 
 		// Run parallel tests concurrently
 		if len(parallelTests) > 0 {
-			ts.runTestsParallel(parallelTests)
+			ts.runTestsParallel(parallelTests, reporter)
 		}
 	}
 
 	// Calculate final statistics
 	duration := time.Since(startTime).Seconds()
-	return ts.generateReport(duration)
+	return ts.generateReport(duration, reporter)
 }
 
 // runTest executes a single test and records the result
-func (ts *TestSuite) runTest(test Test) {
-	testStart := time.Now()
-
-	fmt.Fprintf(os.Stderr, "🔹 %s", test.Name)
-
-	var result TestResult
-	result.Name = test.Name
-	result.Category = test.Category
-
-	// Check if test should be skipped
-	if test.Skip {
-		result.Status = "skipped"
-		result.Output = test.SkipReason
-		result.Duration = 0
-		ts.results = append(ts.results, result)
-		ts.updateCategoryStats(test.Category, result)
-		fmt.Fprintf(os.Stderr, " ⏭️  SKIPPED: %s\n", test.SkipReason)
-		return
-	}
-
-	// Run the test with test suite context
-	err := test.Run(ts)
-	result.Duration = time.Since(testStart).Seconds()
-
-	if err != nil {
-		result.Status = "failed"
-		result.Error = err.Error()
-		ts.results = append(ts.results, result)
-		ts.updateCategoryStats(test.Category, result)
-		fmt.Fprintf(os.Stderr, " ❌ FAILED (%.2fs): %v\n", result.Duration, err)
-	} else {
-		result.Status = "passed"
-		ts.results = append(ts.results, result)
-		ts.updateCategoryStats(test.Category, result)
-		fmt.Fprintf(os.Stderr, " ✅ PASSED (%.2fs)\n", result.Duration)
-	}
+func (ts *TestSuite) runTest(test Test, reporter *testReporter) {
+	executor := &testExecutor{suite: ts}
+	result := executor.executeTest(test)
+	executor.recordResult(result)
+	reporter.printTestResult(result, false)
 }
 
 // runTestsParallel executes multiple tests in parallel
-func (ts *TestSuite) runTestsParallel(tests []Test) {
+func (ts *TestSuite) runTestsParallel(tests []Test, reporter *testReporter) {
 	var wg sync.WaitGroup
-	var mu sync.Mutex // Protect shared state (results, categories)
+	executor := &testExecutor{suite: ts}
 
 	for _, test := range tests {
 		wg.Add(1)
 		go func(t Test) {
 			defer wg.Done()
-
-			testStart := time.Now()
-			fmt.Fprintf(os.Stderr, "🔹 %s [parallel]", t.Name)
-
-			var result TestResult
-			result.Name = t.Name
-			result.Category = t.Category
-
-			// Run the test
-			err := t.Run(ts)
-			result.Duration = time.Since(testStart).Seconds()
-
-			// Lock for updating shared state
-			mu.Lock()
-			defer mu.Unlock()
-
-			if err != nil {
-				result.Status = "failed"
-				result.Error = err.Error()
-				ts.results = append(ts.results, result)
-				ts.updateCategoryStats(t.Category, result)
-				fmt.Fprintf(os.Stderr, " ❌ FAILED (%.2fs): %v\n", result.Duration, err)
-			} else {
-				result.Status = "passed"
-				ts.results = append(ts.results, result)
-				ts.updateCategoryStats(t.Category, result)
-				fmt.Fprintf(os.Stderr, " ✅ PASSED (%.2fs)\n", result.Duration)
-			}
+			result := executor.executeTest(t)
+			executor.recordResult(result)
+			reporter.printTestResult(result, true)
 		}(test)
 	}
 
 	wg.Wait()
 }
 
-// updateCategoryStats updates statistics for a category
-func (ts *TestSuite) updateCategoryStats(category TestCategory, result TestResult) {
-	stats, exists := ts.categories[category]
-	if !exists {
-		stats = &CategoryStats{}
-		ts.categories[category] = stats
+// computeStatistics computes category statistics on-demand from test results
+func computeStatistics(results []TestResult) map[TestCategory]CategoryStats {
+	categories := make(map[TestCategory]CategoryStats)
+
+	for _, result := range results {
+		stats := categories[result.Category]
+		stats.Total++
+		stats.Duration += result.Duration
+
+		switch result.Status {
+		case "passed":
+			stats.Passed++
+		case "failed":
+			stats.Failed++
+		case "skipped":
+			stats.Skipped++
+		}
+
+		categories[result.Category] = stats
 	}
 
-	stats.Total++
-	stats.Duration += result.Duration
-
-	switch result.Status {
-	case "passed":
-		stats.Passed++
-	case "failed":
-		stats.Failed++
-	case "skipped":
-		stats.Skipped++
-	}
+	return categories
 }
 
 // generateReport generates the final test report
-func (ts *TestSuite) generateReport(duration float64) *DetailedTestReport {
+func (ts *TestSuite) generateReport(duration float64, reporter *testReporter) *DetailedTestReport {
 	var total, passed, failed, skipped int
 	var errors []string
 
@@ -411,29 +569,12 @@ func (ts *TestSuite) generateReport(duration float64) *DetailedTestReport {
 
 	errorMessage := strings.Join(errors, "; ")
 
-	// Print summary
-	fmt.Fprintf(os.Stderr, "\n=== Test Summary ===\n")
-	fmt.Fprintf(os.Stderr, "Status: %s\n", status)
-	fmt.Fprintf(os.Stderr, "Total: %d\n", total)
-	fmt.Fprintf(os.Stderr, "Passed: %d\n", passed)
-	fmt.Fprintf(os.Stderr, "Failed: %d\n", failed)
-	if skipped > 0 {
-		fmt.Fprintf(os.Stderr, "Skipped: %d\n", skipped)
-	}
-	fmt.Fprintf(os.Stderr, "Duration: %.2fs\n", duration)
+	// Compute category statistics on-demand
+	categories := computeStatistics(ts.results)
 
-	// Print category breakdown
-	if len(ts.categories) > 0 {
-		fmt.Fprintf(os.Stderr, "\n=== Category Breakdown ===\n")
-		for category, stats := range ts.categories {
-			fmt.Fprintf(os.Stderr, "%s: %d/%d passed (%.2fs)\n",
-				category, stats.Passed, stats.Total, stats.Duration)
-		}
-	}
-
-	if errorMessage != "" {
-		fmt.Fprintf(os.Stderr, "\nErrors: %s\n", errorMessage)
-	}
+	// Print summary and category breakdown using reporter
+	reporter.printSummary(status, total, passed, failed, skipped, duration, errorMessage)
+	reporter.printCategoryBreakdown(categories)
 
 	return &DetailedTestReport{
 		TestReport: TestReport{
@@ -446,7 +587,7 @@ func (ts *TestSuite) generateReport(duration float64) *DetailedTestReport {
 			Skipped:      skipped,
 		},
 		Results:    ts.results,
-		Categories: ts.categoriesToMap(),
+		Categories: categories,
 	}
 }
 
@@ -457,15 +598,6 @@ func (ts *TestSuite) getCategoriesUsed() map[TestCategory]bool {
 		used[test.Category] = true
 	}
 	return used
-}
-
-// categoriesToMap converts category stats to a map
-func (ts *TestSuite) categoriesToMap() map[TestCategory]CategoryStats {
-	result := make(map[TestCategory]CategoryStats)
-	for cat, stats := range ts.categories {
-		result[cat] = *stats
-	}
-	return result
 }
 
 func main() {
@@ -918,236 +1050,7 @@ func shouldSkipTestEnvTests() bool {
 
 // Utility functions for testenv tests
 
-// extractTestID extracts testID from command output
-func extractTestID(output string) string {
-	// testID format: test-<stage>-YYYYMMDD-XXXXXXXX
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "test-") && len(line) > 10 {
-			// Verify format
-			parts := strings.Split(line, "-")
-			if len(parts) >= 4 {
-				return line
-			}
-		}
-	}
-	return ""
-}
-
-// verifyClusterExists checks if a kind cluster exists
-func verifyClusterExists(testID string) error {
-	kindBinary := os.Getenv("KIND_BINARY")
-	if kindBinary == "" {
-		kindBinary = "kind"
-	}
-
-	expectedClusterName := fmt.Sprintf("forge-%s", testID)
-
-	cmd := exec.Command(kindBinary, "get", "clusters")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to get clusters: %w\nOutput: %s", err, output)
-	}
-
-	if !strings.Contains(string(output), expectedClusterName) {
-		return fmt.Errorf("cluster %s not found in kind clusters", expectedClusterName)
-	}
-
-	return nil
-}
-
-// cleanupTestEnv deletes a test environment
-func cleanupTestEnv(testID string) {
-	if testID == "" {
-		return
-	}
-
-	// Try to delete via forge
-	cmd := exec.Command("./build/bin/forge", "test", "delete-env", "integration", testID)
-	cmd.Env = os.Environ()
-	_ = cmd.Run() // Ignore errors during cleanup
-}
-
-// verifyArtifactStoreHasTestEnv checks if artifact store contains a test environment
-func verifyArtifactStoreHasTestEnv(testID string) error {
-	storePath, err := forge.GetArtifactStorePath(".forge/artifacts.json")
-	if err != nil {
-		return fmt.Errorf("failed to get artifact store path: %w", err)
-	}
-	data, err := os.ReadFile(storePath)
-	if err != nil {
-		return fmt.Errorf("failed to read artifact store: %w", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, testID) {
-		return fmt.Errorf("testID %s not found in artifact store", testID)
-	}
-
-	// Should contain test environment structure
-	if !strings.Contains(content, "testEnvironments") && !strings.Contains(content, "\"id\"") {
-		return fmt.Errorf("artifact store missing test environment structure")
-	}
-
-	return nil
-}
-
-// verifyArtifactStoreMissingTestEnv checks that artifact store doesn't contain a test environment
-func verifyArtifactStoreMissingTestEnv(testID string) error {
-	storePath, err := forge.GetArtifactStorePath(".forge/artifacts.json")
-	if err != nil {
-		return fmt.Errorf("failed to get artifact store path: %w", err)
-	}
-	data, err := os.ReadFile(storePath)
-	if err != nil {
-		return fmt.Errorf("failed to read artifact store: %w", err)
-	}
-
-	content := string(data)
-	if strings.Contains(content, testID) {
-		return fmt.Errorf("testID %s still found in artifact store after deletion", testID)
-	}
-
-	return nil
-}
-
-// forceCleanupLeftovers cleans up leftover resources without depending on artifact store
-func forceCleanupLeftovers() error {
-	var errors []error
-
-	// Cleanup KIND clusters
-	kindBinary := os.Getenv("KIND_BINARY")
-	if kindBinary == "" {
-		kindBinary = "kind"
-	}
-
-	cmd := exec.Command(kindBinary, "get", "clusters")
-	output, err := cmd.CombinedOutput()
-	if err == nil {
-		clusters := strings.Split(strings.TrimSpace(string(output)), "\n")
-		for _, cluster := range clusters {
-			cluster = strings.TrimSpace(cluster)
-			if strings.HasPrefix(cluster, "forge-test-") && cluster != "" {
-				fmt.Fprintf(os.Stderr, "Cleaning up leftover cluster: %s\n", cluster)
-				deleteCmd := exec.Command(kindBinary, "delete", "cluster", "--name", cluster)
-				if err := deleteCmd.Run(); err != nil {
-					errors = append(errors, fmt.Errorf("failed to delete cluster %s: %w", cluster, err))
-				}
-			}
-		}
-	}
-
-	// Cleanup tmp directories
-	rootDir, err := os.Getwd()
-	if err == nil {
-		tmpBase := filepath.Join(rootDir, "tmp")
-		entries, err := os.ReadDir(tmpBase)
-		if err == nil {
-			for _, entry := range entries {
-				if strings.HasPrefix(entry.Name(), "test-integration-") || strings.HasPrefix(entry.Name(), "tmp-") {
-					dirPath := filepath.Join(tmpBase, entry.Name())
-					if err := os.RemoveAll(dirPath); err != nil {
-						errors = append(errors, fmt.Errorf("failed to remove %s: %w", dirPath, err))
-					}
-				}
-			}
-		}
-	}
-
-	if len(errors) > 0 {
-		return fmt.Errorf("cleanup errors: %v", errors)
-	}
-	return nil
-}
-
-// forceCleanupTestEnv forcefully cleans up a test environment without artifact store dependency
-func forceCleanupTestEnv(testID string) error {
-	if testID == "" {
-		return nil
-	}
-
-	var errors []error
-
-	// Delete KIND cluster
-	kindBinary := os.Getenv("KIND_BINARY")
-	if kindBinary == "" {
-		kindBinary = "kind"
-	}
-
-	clusterName := fmt.Sprintf("forge-%s", testID)
-	fmt.Fprintf(os.Stderr, "Deleting cluster: %s\n", clusterName)
-	deleteCmd := exec.Command(kindBinary, "delete", "cluster", "--name", clusterName)
-	if err := deleteCmd.Run(); err != nil {
-		// Only add error if cluster might exist (ignore "not found" errors)
-		errors = append(errors, fmt.Errorf("failed to delete cluster %s: %w", clusterName, err))
-	}
-
-	// Delete tmp directory
-	rootDir, err := os.Getwd()
-	if err == nil {
-		tmpDir := filepath.Join(rootDir, "tmp", testID)
-		if err := os.RemoveAll(tmpDir); err != nil {
-			errors = append(errors, fmt.Errorf("failed to remove tmpDir %s: %w", tmpDir, err))
-		}
-	}
-
-	// Try to remove from artifact store (best effort)
-	cleanupTestEnv(testID)
-
-	if len(errors) > 0 {
-		return fmt.Errorf("cleanup errors: %v", errors)
-	}
-	return nil
-}
-
-// needsSharedTestEnv checks if any tests in the suite need a shared test environment
-func (ts *TestSuite) needsSharedTestEnv() bool {
-	// Check if KIND_BINARY is available
-	if shouldSkipTestEnvTests() {
-		return false
-	}
-
-	// Check if any tests in the suite are testenv-dependent
-	for _, test := range ts.tests {
-		switch test.Category {
-		case CategoryTestEnv, CategoryTestRunner, CategoryPerformance, CategoryCleanup, CategoryError, CategoryArtifactStore:
-			if !test.Skip {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// createSharedTestEnv creates a shared test environment for reuse across tests
-func (ts *TestSuite) createSharedTestEnv() (string, error) {
-	cmd := exec.Command("./build/bin/forge", "test", "create-env", "integration")
-	cmd.Env = os.Environ()
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", fmt.Errorf("failed to create shared environment: %w\nOutput: %s", err, output)
-	}
-
-	testID := extractTestID(string(output))
-	if testID == "" {
-		return "", fmt.Errorf("failed to extract testID from output: %s", output)
-	}
-
-	// Verify cluster was created successfully
-	if err := verifyClusterExists(testID); err != nil {
-		_ = forceCleanupTestEnv(testID)
-		return "", fmt.Errorf("cluster verification failed: %w", err)
-	}
-
-	return testID, nil
-}
-
-// getSharedTestEnv returns the shared test environment ID or creates one if needed
-func (ts *TestSuite) getSharedTestEnv() string {
-	return ts.sharedTestEnvID
-}
-
+// Test functions
 func testForgeBuild(ts *TestSuite) error {
 	cmd := exec.Command("go", "run", "./cmd/forge", "build", "forge")
 	output, err := cmd.CombinedOutput()
@@ -1169,7 +1072,7 @@ func testForgeBuild(ts *TestSuite) error {
 }
 
 func testForgeBuildSpecific(ts *TestSuite) error {
-	cmd := exec.Command("go", "run", "./cmd/forge", "build", "build-go")
+	cmd := exec.Command("go", "run", "./cmd/forge", "build", "go-build")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
@@ -1181,8 +1084,8 @@ func testForgeBuildSpecific(ts *TestSuite) error {
 	}
 
 	// Verify binary exists
-	if _, err := os.Stat("./build/bin/build-go"); err != nil {
-		return fmt.Errorf("build-go binary not found: %w", err)
+	if _, err := os.Stat("./build/bin/go-build"); err != nil {
+		return fmt.Errorf("go-build binary not found: %w", err)
 	}
 
 	return nil
@@ -1395,21 +1298,21 @@ func testTestEnvCreate(ts *TestSuite) error {
 	}
 
 	// Extract testID
-	testID := extractTestID(string(output))
+	testID := testutil.ExtractTestID(string(output))
 	if testID == "" {
 		return fmt.Errorf("no testID found in output: %s", output)
 	}
 
 	// Cleanup immediately after test
-	defer func() { _ = forceCleanupTestEnv(testID) }()
+	defer func() { _ = testutil.ForceCleanupTestEnv(testID) }()
 
 	// Verify cluster exists
-	if err := verifyClusterExists(testID); err != nil {
+	if err := testutil.VerifyClusterExists(testID); err != nil {
 		return fmt.Errorf("cluster verification failed: %w", err)
 	}
 
 	// Verify artifact store entry
-	if err := verifyArtifactStoreHasTestEnv(testID); err != nil {
+	if err := testutil.VerifyArtifactStoreHasTestEnv(testID); err != nil {
 		return fmt.Errorf("artifact store verification failed: %w", err)
 	}
 
@@ -1418,7 +1321,7 @@ func testTestEnvCreate(ts *TestSuite) error {
 
 func testTestEnvList(ts *TestSuite) error {
 	// Use shared test environment instead of creating a new one
-	testID := ts.getSharedTestEnv()
+	testID := ts.sharedTestEnvID
 	if testID == "" {
 		return fmt.Errorf("shared test environment not available")
 	}
@@ -1445,7 +1348,7 @@ func testTestEnvList(ts *TestSuite) error {
 
 func testTestEnvGet(ts *TestSuite) error {
 	// Use shared test environment
-	testID := ts.getSharedTestEnv()
+	testID := ts.sharedTestEnvID
 	if testID == "" {
 		return fmt.Errorf("shared test environment not available")
 	}
@@ -1475,7 +1378,7 @@ func testTestEnvGet(ts *TestSuite) error {
 
 func testTestEnvGetJSON(ts *TestSuite) error {
 	// Use shared test environment
-	testID := ts.getSharedTestEnv()
+	testID := ts.sharedTestEnvID
 	if testID == "" {
 		return fmt.Errorf("shared test environment not available")
 	}
@@ -1513,13 +1416,13 @@ func testTestEnvDelete(ts *TestSuite) error {
 		return fmt.Errorf("create command failed: %w\nOutput: %s", err, createOutput)
 	}
 
-	testID := extractTestID(string(createOutput))
+	testID := testutil.ExtractTestID(string(createOutput))
 	if testID == "" {
 		return fmt.Errorf("failed to extract testID")
 	}
 
 	// Verify cluster exists before deletion
-	if err := verifyClusterExists(testID); err != nil {
+	if err := testutil.VerifyClusterExists(testID); err != nil {
 		return fmt.Errorf("cluster not found before deletion: %w", err)
 	}
 
@@ -1546,7 +1449,7 @@ func testTestEnvDelete(ts *TestSuite) error {
 	}
 
 	// Verify artifact store no longer contains testID
-	if err := verifyArtifactStoreMissingTestEnv(testID); err != nil {
+	if err := testutil.VerifyArtifactStoreMissingTestEnv(testID); err != nil {
 		return fmt.Errorf("artifact store verification failed: %w", err)
 	}
 
@@ -1563,7 +1466,7 @@ func testTestEnvSpecOverride(ts *TestSuite) error {
 
 func testIntegrationTestRunner(ts *TestSuite) error {
 	// Use shared test environment
-	testID := ts.getSharedTestEnv()
+	testID := ts.sharedTestEnvID
 	if testID == "" {
 		return fmt.Errorf("shared test environment not available")
 	}

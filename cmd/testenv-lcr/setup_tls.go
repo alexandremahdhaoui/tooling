@@ -66,11 +66,13 @@ func (t *TLS) Setup(ctx context.Context) error {
 	}
 
 	helmInstall := exec.Command("helm", strings.Split(
-		"install cert-manager jetstack/cert-manager "+
+		"upgrade --install cert-manager jetstack/cert-manager "+
 			"--namespace cert-manager "+
 			"--create-namespace "+
 			"--version v1.15.1 "+
-			"--set crds.enabled=true", " ")...)
+			"--set crds.enabled=true "+
+			"--wait "+
+			"--timeout 5m", " ")...)
 	if err := util.RunCmdWithStdPipes(helmInstall); err != nil {
 		return flaterrors.Join(err, errSettingUpTLS)
 	}

@@ -77,12 +77,14 @@ Example (via MCP):
 
   engines:
     - alias: my-formatter
-      engine: go://generic-builder
-      config:
-        command: "gofmt"
-        args: ["-w", "."]
-        env:
-          GOFMT_STYLE: "google"
+      type: builder
+      builder:
+        - engine: go://generic-builder
+          spec:
+            command: "gofmt"
+            args: ["-w", "."]
+            env:
+              GOFMT_STYLE: "google"
 
   build:
     - name: format-code

@@ -181,25 +181,29 @@ func (r *ContainerRegistry) createDeployment(ctx context.Context, labels map[str
 var errAwaitingDeploymentReadiness = errors.New("awaiting deployment readiness")
 
 func (r *ContainerRegistry) awaitDeployment(ctx context.Context) error {
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
 	for {
-		deploy := &appsv1.Deployment{} //nolint:exhaustruct
-		nsName := types.NamespacedName{
-			Namespace: r.namespace,
-			Name:      Name,
-		}
+		select {
+		case <-ctx.Done():
+			return flaterrors.Join(ctx.Err(), errAwaitingDeploymentReadiness)
+		case <-ticker.C:
+			deploy := &appsv1.Deployment{} //nolint:exhaustruct
+			nsName := types.NamespacedName{
+				Namespace: r.namespace,
+				Name:      Name,
+			}
 
-		if err := r.client.Get(ctx, nsName, deploy); err != nil {
-			return flaterrors.Join(err, errAwaitingDeploymentReadiness)
-		}
+			if err := r.client.Get(ctx, nsName, deploy); err != nil {
+				return flaterrors.Join(err, errAwaitingDeploymentReadiness)
+			}
 
-		if deploy.Status.ReadyReplicas > 0 {
-			break
+			if deploy.Status.ReadyReplicas > 0 {
+				return nil
+			}
 		}
-
-		time.Sleep(1 * time.Second)
 	}
-
-	return nil
 }
 
 var errCreatingService = errors.New("creating service")

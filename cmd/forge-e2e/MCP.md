@@ -184,6 +184,6 @@ forge test e2e run
 ## See Also
 
 - [forge MCP Server](../forge/MCP.md)
-- [test-runner-go MCP Server](../test-runner-go/MCP.md)
+- [go-test MCP Server](../go-test/MCP.md)
 - [Forge Test Documentation](../../docs/forge-test-usage.md)
 - [Forge Architecture](../../ARCHITECTURE.md)

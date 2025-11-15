@@ -135,6 +135,6 @@ build:
 
 ## See Also
 
-- [build-go MCP Server](../build-go/MCP.md)
-- [build-container MCP Server](../build-container/MCP.md)
+- [go-build MCP Server](../go-build/MCP.md)
+- [container-build MCP Server](../container-build/MCP.md)
 - [generic-test-runner MCP Server](../generic-test-runner/MCP.md)

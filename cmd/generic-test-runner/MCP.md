@@ -138,6 +138,6 @@ TestReport.errorMessage contains stdout/stderr on failure.
 
 ## See Also
 
-- [test-runner-go MCP Server](../test-runner-go/MCP.md)
-- [test-runner-go-verify-tags MCP Server](../test-runner-go-verify-tags/MCP.md)
+- [go-test MCP Server](../go-test/MCP.md)
+- [go-lint-tags MCP Server](../go-lint-tags/MCP.md)
 - [generic-builder MCP Server](../generic-builder/MCP.md)
