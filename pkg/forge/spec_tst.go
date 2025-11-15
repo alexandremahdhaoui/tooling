@@ -14,7 +14,7 @@ type TestSpec struct {
 	Testenv string `json:"testenv,omitempty"`
 
 	// Runner implements the run method to execute tests
-	// Examples: "go://test-runner-go", "shell://bash ./scripts/run-test.sh"
+	// Examples: "go://go-test", "shell://bash ./scripts/run-test.sh"
 	Runner string `json:"runner"`
 }
 

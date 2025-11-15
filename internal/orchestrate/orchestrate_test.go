@@ -112,7 +112,7 @@ func TestBuilderOrchestrator_SingleEngine(t *testing.T) {
 		command string
 		args    []string
 	}{
-		"go://build-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/build-go"}},
+		"go://go-build": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-build"}},
 	})
 
 	// Create orchestrator
@@ -121,7 +121,7 @@ func TestBuilderOrchestrator_SingleEngine(t *testing.T) {
 	// Prepare specs
 	builderSpecs := []forge.BuilderEngineSpec{
 		{
-			Engine: "go://build-go",
+			Engine: "go://go-build",
 			Spec:   forge.EngineSpec{},
 		},
 	}
@@ -169,7 +169,7 @@ func TestBuilderOrchestrator_MultipleEngines(t *testing.T) {
 		command string
 		args    []string
 	}{
-		"go://build-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/build-go"}},
+		"go://go-build":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-build"}},
 		"go://generic-builder": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/generic-builder"}},
 	})
 
@@ -178,9 +178,9 @@ func TestBuilderOrchestrator_MultipleEngines(t *testing.T) {
 
 	// Prepare specs - 3 builders
 	builderSpecs := []forge.BuilderEngineSpec{
-		{Engine: "go://build-go", Spec: forge.EngineSpec{}},
+		{Engine: "go://go-build", Spec: forge.EngineSpec{}},
 		{Engine: "go://generic-builder", Spec: forge.EngineSpec{Command: "echo"}},
-		{Engine: "go://build-go", Spec: forge.EngineSpec{}},
+		{Engine: "go://go-build", Spec: forge.EngineSpec{}},
 	}
 	buildSpecs := []map[string]any{
 		{"name": "test-app", "src": "./cmd/test-app"},
@@ -203,8 +203,8 @@ func TestBuilderOrchestrator_MultipleEngines(t *testing.T) {
 	if mockMCP.calls[0].command != "go" {
 		t.Errorf("Expected first call command 'go', got %s", mockMCP.calls[0].command)
 	}
-	if len(mockMCP.calls[0].args) < 2 || mockMCP.calls[0].args[1] != "github.com/alexandremahdhaoui/forge/cmd/build-go" {
-		t.Errorf("Expected first call to build-go package, got %v", mockMCP.calls[0].args)
+	if len(mockMCP.calls[0].args) < 2 || mockMCP.calls[0].args[1] != "github.com/alexandremahdhaoui/forge/cmd/go-build" {
+		t.Errorf("Expected first call to go-build package, got %v", mockMCP.calls[0].args)
 	}
 	if mockMCP.calls[1].command != "go" {
 		t.Errorf("Expected second call command 'go', got %s", mockMCP.calls[1].command)
@@ -231,7 +231,7 @@ func TestBuilderOrchestrator_EngineFailure(t *testing.T) {
 		command string
 		args    []string
 	}{
-		"go://build-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/build-go"}},
+		"go://go-build":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-build"}},
 		"go://generic-builder": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/generic-builder"}},
 	})
 
@@ -240,9 +240,9 @@ func TestBuilderOrchestrator_EngineFailure(t *testing.T) {
 
 	// Prepare specs - 3 builders (should stop at 2nd)
 	builderSpecs := []forge.BuilderEngineSpec{
-		{Engine: "go://build-go", Spec: forge.EngineSpec{}},
+		{Engine: "go://go-build", Spec: forge.EngineSpec{}},
 		{Engine: "go://generic-builder", Spec: forge.EngineSpec{}},
-		{Engine: "go://build-go", Spec: forge.EngineSpec{}}, // Should not be called
+		{Engine: "go://go-build", Spec: forge.EngineSpec{}}, // Should not be called
 	}
 	buildSpecs := []map[string]any{
 		{"name": "test-app", "src": "./cmd/test-app"},
@@ -331,7 +331,7 @@ func TestTestRunnerOrchestrator_SingleRunner(t *testing.T) {
 		command string
 		args    []string
 	}{
-		"go://test-runner-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/test-runner-go"}},
+		"go://go-test": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-test"}},
 	})
 
 	// Create orchestrator
@@ -340,7 +340,7 @@ func TestTestRunnerOrchestrator_SingleRunner(t *testing.T) {
 	// Prepare specs
 	runnerSpecs := []forge.TestRunnerSpec{
 		{
-			Engine: "go://test-runner-go",
+			Engine: "go://go-test",
 			Spec:   forge.EngineSpec{},
 		},
 	}
@@ -383,8 +383,8 @@ func TestTestRunnerOrchestrator_MultipleRunners(t *testing.T) {
 		command string
 		args    []string
 	}{
-		"go://test-runner-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/test-runner-go"}},
-		"go://lint-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/lint-go"}},
+		"go://go-test": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-test"}},
+		"go://go-lint": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-lint"}},
 	})
 
 	// Create orchestrator
@@ -392,8 +392,8 @@ func TestTestRunnerOrchestrator_MultipleRunners(t *testing.T) {
 
 	// Prepare specs
 	runnerSpecs := []forge.TestRunnerSpec{
-		{Engine: "go://test-runner-go", Spec: forge.EngineSpec{}},
-		{Engine: "go://lint-go", Spec: forge.EngineSpec{}},
+		{Engine: "go://go-test", Spec: forge.EngineSpec{}},
+		{Engine: "go://go-lint", Spec: forge.EngineSpec{}},
 	}
 	params := map[string]any{
 		"stage": "unit",
@@ -440,8 +440,8 @@ func TestTestRunnerOrchestrator_RunnerFailure(t *testing.T) {
 		command string
 		args    []string
 	}{
-		"go://test-runner-go": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/test-runner-go"}},
-		"go://lint-go":        {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/lint-go"}},
+		"go://go-test": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-test"}},
+		"go://go-lint": {command: "go", args: []string{"run", "github.com/alexandremahdhaoui/forge/cmd/go-lint"}},
 	})
 
 	// Create orchestrator
@@ -449,8 +449,8 @@ func TestTestRunnerOrchestrator_RunnerFailure(t *testing.T) {
 
 	// Prepare specs
 	runnerSpecs := []forge.TestRunnerSpec{
-		{Engine: "go://test-runner-go", Spec: forge.EngineSpec{}},
-		{Engine: "go://lint-go", Spec: forge.EngineSpec{}}, // Should not be called
+		{Engine: "go://go-test", Spec: forge.EngineSpec{}},
+		{Engine: "go://go-lint", Spec: forge.EngineSpec{}}, // Should not be called
 	}
 	params := map[string]any{"stage": "unit"}
 

@@ -16,9 +16,13 @@ type BuildSpec struct {
 	// - can be left empty for container images
 	Dest string `json:"dest,omitempty"`
 	// Engine that will build this artifact, e.g.:
-	// - go://build-container (go://github.com/alexandremahdhaoui/forge/cmd/build-container)
-	// - go://build-go        (go://github.com/alexandremahdhaoui/forge/cmd/build-go)
+	// - go://container-build (go://github.com/alexandremahdhaoui/forge/cmd/container-build)
+	// - go://go-build        (go://github.com/alexandremahdhaoui/forge/cmd/go-build)
 	Engine string `json:"engine"`
+	// Spec contains engine-specific configuration (free-form)
+	// Supports fields like: command, args, env, envFile, workDir
+	// The exact fields supported depend on the engine being used
+	Spec map[string]interface{} `json:"spec,omitempty"`
 }
 
 // Validate validates the BuildSpec

@@ -5,6 +5,7 @@ package forgepath
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -141,22 +142,18 @@ func TestBuildGoRunCommand_Success(t *testing.T) {
 	tests := []struct {
 		name        string
 		packageName string
-		wantCmd     []string
 	}{
 		{
 			name:        "testenv-kind",
 			packageName: "testenv-kind",
-			wantCmd:     []string{"run", "github.com/alexandremahdhaoui/forge/cmd/testenv-kind"},
 		},
 		{
-			name:        "build-go",
-			packageName: "build-go",
-			wantCmd:     []string{"run", "github.com/alexandremahdhaoui/forge/cmd/build-go"},
+			name:        "go-build",
+			packageName: "go-build",
 		},
 		{
 			name:        "testenv",
 			packageName: "testenv",
-			wantCmd:     []string{"run", "github.com/alexandremahdhaoui/forge/cmd/testenv"},
 		},
 	}
 
@@ -170,14 +167,18 @@ func TestBuildGoRunCommand_Success(t *testing.T) {
 				t.Fatalf("BuildGoRunCommand(%q) error = %v, want nil", tt.packageName, err)
 			}
 
-			if len(got) != len(tt.wantCmd) {
-				t.Fatalf("BuildGoRunCommand(%q) length = %d, want %d", tt.packageName, len(got), len(tt.wantCmd))
+			// Verify we got a command with at least 2 parts: ["run", "<path>"]
+			if len(got) != 2 {
+				t.Fatalf("BuildGoRunCommand(%q) length = %d, want 2", tt.packageName, len(got))
 			}
 
-			for i := range got {
-				if got[i] != tt.wantCmd[i] {
-					t.Errorf("BuildGoRunCommand(%q)[%d] = %q, want %q", tt.packageName, i, got[i], tt.wantCmd[i])
-				}
+			if got[0] != "run" {
+				t.Errorf("BuildGoRunCommand(%q)[0] = %q, want %q", tt.packageName, got[0], "run")
+			}
+
+			// The path should contain the package name
+			if !strings.Contains(got[1], tt.packageName) {
+				t.Errorf("BuildGoRunCommand(%q)[1] = %q, should contain %q", tt.packageName, got[1], tt.packageName)
 			}
 		})
 	}

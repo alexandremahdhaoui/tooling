@@ -9,7 +9,7 @@ import (
 
 // Config holds the configuration for CLI bootstrap.
 type Config struct {
-	// Name is the command name (e.g., "build-go", "test-integration")
+	// Name is the command name (e.g., "go-build", "test-integration")
 	Name string
 
 	// Version information (typically set via ldflags)

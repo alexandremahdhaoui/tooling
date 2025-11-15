@@ -45,6 +45,6 @@ type GenerateOpenAPIDefaults struct {
 	SourceDir string `json:"sourceDir"`
 	// DestinationDir is the default directory where the generated code will be placed.
 	DestinationDir string `json:"destinationDir"`
-	// Engine is the code generation engine to use (e.g., "go://generate-openapi-go")
+	// Engine is the code generation engine to use (e.g., "go://go-gen-openapi")
 	Engine string `json:"engine"`
 }

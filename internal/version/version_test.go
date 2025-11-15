@@ -98,7 +98,7 @@ func TestStringContainsToolName(t *testing.T) {
 		version  string
 	}{
 		{"forge", "forge", "v1.0.0"},
-		{"build-go", "build-go", "v2.0.0"},
+		{"go-build", "go-build", "v2.0.0"},
 		{"test-tool", "test-tool", "dev"},
 	}
 

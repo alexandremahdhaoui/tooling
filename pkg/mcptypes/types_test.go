@@ -156,7 +156,7 @@ func TestBuildInputJSONMarshaling(t *testing.T) {
 				Name:   "my-app",
 				Src:    "./cmd/app",
 				Dest:   "./build/bin",
-				Engine: "go://build-go",
+				Engine: "go://go-build",
 			},
 		},
 		{
@@ -165,7 +165,7 @@ func TestBuildInputJSONMarshaling(t *testing.T) {
 				Name:   "my-app",
 				Src:    "./cmd/app",
 				Dest:   "./build/bin",
-				Engine: "go://build-go",
+				Engine: "go://go-build",
 				DirectoryParams: DirectoryParams{
 					TmpDir:   "/tmp/build-123",
 					BuildDir: "/build",
@@ -194,7 +194,7 @@ func TestBuildInputJSONMarshaling(t *testing.T) {
 				Name:   "format-code",
 				Path:   "./cmd",
 				Src:    ".",
-				Engine: "go://format-go",
+				Engine: "go://go-format",
 			},
 		},
 	}
@@ -243,13 +243,13 @@ func TestBatchBuildInputJSONMarshaling(t *testing.T) {
 				Name:   "app1",
 				Src:    "./cmd/app1",
 				Dest:   "./build/bin",
-				Engine: "go://build-go",
+				Engine: "go://go-build",
 			},
 			{
 				Name:   "app2",
 				Src:    "./cmd/app2",
 				Dest:   "./build/bin",
-				Engine: "go://build-go",
+				Engine: "go://go-build",
 			},
 		},
 	}
@@ -296,7 +296,7 @@ func TestRunInputRequiredFields(t *testing.T) {
 func TestBuildInputRequiredFields(t *testing.T) {
 	input := BuildInput{
 		Name:   "my-artifact",
-		Engine: "go://build-go",
+		Engine: "go://go-build",
 	}
 
 	if input.Name == "" {

@@ -10,7 +10,7 @@ package orchestrate
 type MCPCaller func(command string, args []string, toolName string, params interface{}) (interface{}, error)
 
 // EngineResolver is a function type for resolving engine URIs to command and args.
-// It handles both direct URIs (e.g., "go://build-go") and alias URIs (e.g., "alias://my-builder").
+// It handles both direct URIs (e.g., "go://go-build") and alias URIs (e.g., "alias://my-builder").
 // Updated to return (command, args, error) to support go run.
 type EngineResolver func(engineURI string) (command string, args []string, err error)
 
@@ -57,7 +57,7 @@ type EngineSpec struct {
 	// EngineName is a human-readable identifier for this engine (for errors/logging)
 	EngineName string
 
-	// EngineURI is the engine reference (e.g., "go://build-go", "alias://my-builder")
+	// EngineURI is the engine reference (e.g., "go://go-build", "alias://my-builder")
 	EngineURI string
 
 	// Spec contains engine-specific configuration (command, args, env, etc.)
