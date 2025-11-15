@@ -465,15 +465,15 @@ artifactStorePath: .forge/artifacts.yaml
 build:
   - name: myapp
     src: ./cmd/myapp
-    engine: go://build-go      # Invokes build-go MCP server
+    engine: go://go-build      # Invokes go-build MCP server
 
   - name: myimage
     src: ./Containerfile
-    engine: go://build-container  # Invokes build-container MCP server
+    engine: go://container-build  # Invokes container-build MCP server
 ```
 
 When you call the forge `build` tool, it:
-1. Parses the engine URIs (e.g., `go://build-go`)
+1. Parses the engine URIs (e.g., `go://go-build`)
 2. Launches the corresponding MCP server binary
 3. Calls the appropriate tool on that server
 4. Aggregates results
@@ -522,15 +522,15 @@ The forge MCP server acts as an orchestrator, coordinating multiple specialized 
        ├──────────────┬─────────────┐
        │              │             │
 ┌──────▼──────┐ ┌────▼────┐  ┌─────▼─────┐
-│  build-go   │ │ testenv │  │test-runner│
+│  go-build   │ │ testenv │  │test-runner│
 │ MCP Server  │ │   MCP   │  │    MCP    │
 └─────────────┘ └─────────┘  └───────────┘
 ```
 
 ## See Also
 
-- [build-go MCP Server](../build-go/MCP.md)
-- [build-container MCP Server](../build-container/MCP.md)
+- [go-build MCP Server](../go-build/MCP.md)
+- [container-build MCP Server](../container-build/MCP.md)
 - [testenv MCP Server](../testenv/MCP.md)
 - [Forge CLI Documentation](../../docs/forge-usage.md)
 - [Forge Architecture](../../ARCHITECTURE.md)

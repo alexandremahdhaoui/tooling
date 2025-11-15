@@ -30,7 +30,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -160,7 +160,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -211,7 +211,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -257,7 +257,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -311,7 +311,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -365,7 +365,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -444,7 +444,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -495,7 +495,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {
@@ -550,7 +550,7 @@ artifactStorePath: .ignore.artifact-store.yaml
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: go://test-report
 `
 	if err := os.WriteFile(forgeYaml, []byte(content), 0o644); err != nil {

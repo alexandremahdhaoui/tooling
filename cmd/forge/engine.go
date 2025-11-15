@@ -9,7 +9,7 @@ import (
 
 // parseEngine parses an engine URI and returns the engine type, command, and args for execution.
 // Supports go:// and alias:// protocols:
-//   - go://build-go -> executes via `go run github.com/alexandremahdhaoui/forge/cmd/build-go`
+//   - go://go-build -> executes via `go run github.com/alexandremahdhaoui/forge/cmd/go-build`
 //   - go://testenv-kind -> executes via `go run github.com/alexandremahdhaoui/forge/cmd/testenv-kind`
 //   - alias://my-engine -> resolves alias from forge.yaml engines section
 //

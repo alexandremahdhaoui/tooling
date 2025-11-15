@@ -29,7 +29,7 @@ func TestResolveEngine_MultiEngineAlias(t *testing.T) {
 				Alias: "single-builder",
 				Type:  forge.BuilderEngineConfigType,
 				Builder: []forge.BuilderEngineSpec{
-					{Engine: "go://build-go"},
+					{Engine: "go://go-build"},
 				},
 			},
 		},
@@ -70,7 +70,7 @@ func TestResolveEngine_MultiEngineAlias(t *testing.T) {
 
 	// Test direct go:// URI (should work)
 	t.Run("direct go:// URI", func(t *testing.T) {
-		command, args, err := resolveEngine("go://build-go", spec)
+		command, args, err := resolveEngine("go://go-build", spec)
 		if err != nil {
 			t.Fatalf("Direct go:// URI should resolve successfully: %v", err)
 		}

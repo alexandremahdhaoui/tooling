@@ -22,12 +22,12 @@ build:
   - name: test-binary
     src: ./cmd/test
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
 test:
   - name: integration
     testenv: go://testenv
-    runner: go://test-runner-go
+    runner: go://go-test
 `
 	if err := os.WriteFile(filepath.Join(tmpDir, "forge.yaml"), []byte(forgeYAML), 0o644); err != nil {
 		t.Fatalf("Failed to create forge.yaml: %v", err)
@@ -77,8 +77,8 @@ test:
 		wantCmd   string
 	}{
 		{
-			name:      "build-go engine",
-			engineURI: "go://build-go",
+			name:      "go-build engine",
+			engineURI: "go://go-build",
 			wantType:  "mcp",
 			wantCmd:   "go",
 		},
@@ -95,8 +95,8 @@ test:
 			wantCmd:   "go",
 		},
 		{
-			name:      "test-runner-go engine",
-			engineURI: "go://test-runner-go",
+			name:      "go-test engine",
+			engineURI: "go://go-test",
 			wantType:  "mcp",
 			wantCmd:   "go",
 		},
@@ -129,8 +129,8 @@ test:
 			if len(gotArgs) < 2 {
 				t.Errorf("parseEngine(%q) args = %v, want at least 2 args", tc.engineURI, gotArgs)
 			} else {
-				// Args should be like ["run", "github.com/alexandremahdhaoui/forge/cmd/build-go"]
-				// or ["run", "/path/to/forge/cmd/build-go"]
+				// Args should be like ["run", "github.com/alexandremahdhaoui/forge/cmd/go-build"]
+				// or ["run", "/path/to/forge/cmd/go-build"]
 				packagePath := gotArgs[1]
 				if packagePath == "" {
 					t.Errorf("parseEngine(%q) package path is empty", tc.engineURI)
@@ -155,12 +155,12 @@ engines:
   - alias: my-builder
     type: builder
     builder:
-      - engine: go://build-go
+      - engine: go://go-build
 
 test:
   - name: unit
     testenv: alias://my-testenv
-    runner: go://test-runner-go
+    runner: go://go-test
 `
 	if err := os.WriteFile(filepath.Join(tmpDir, "forge.yaml"), []byte(forgeYAML), 0o644); err != nil {
 		t.Fatalf("Failed to create forge.yaml: %v", err)
