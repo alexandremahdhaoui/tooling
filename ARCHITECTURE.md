@@ -185,8 +185,8 @@ All 20 tools are standalone binaries in `cmd/`. Tools marked with ⚡ provide MC
 
 ```
 Build Engines (3):
-  ⚡ build-go              - Go binary builder
-  ⚡ build-container       - Container image builder (Kaniko)
+  ⚡ go-build              - Go binary builder
+  ⚡ container-build       - Multi-mode container image builder (docker/kaniko/podman)
   ⚡ generic-builder       - Generic command executor
 
 Test Engines (3):
@@ -195,20 +195,20 @@ Test Engines (3):
   ⚡ testenv-lcr          - Local container registry manager
 
 Test Runners (3):
-  ⚡ test-runner-go       - Go test runner with JUnit/coverage
-  ⚡ test-runner-go-verify-tags - Build tag verifier
+  ⚡ go-test       - Go test runner with JUnit/coverage
+  ⚡ go-lint-tags - Build tag verifier
   ⚡ generic-test-runner  - Generic test command executor
 
 Test Management (1):
   ⚡ test-report          - Test report aggregator
 
 Code Quality (2):
-  format-go              - Go code formatter
-  lint-go                - Go linter wrapper
+  go-format              - Go code formatter
+  go-lint                - Go linter wrapper
 
 Code Generation (2):
-  generate-mocks         - Mock generator
-  generate-openapi-go    - OpenAPI code generator
+  go-gen-mocks         - Mock generator
+  go-gen-openapi    - OpenAPI code generator
 
 Orchestration (2):
   forge                  - Main CLI orchestrator
@@ -274,8 +274,8 @@ GO_BUILD_LDFLAGS # Linker flags for build metadata
 |--------|-------------|
 | `generate` | Generates code (OpenAPI, CRDs, mocks, protobuf) |
 | `build` | Builds all artifacts using forge |
-| `build-go` | Builds Go binaries using forge |
-| `build-container` | Builds container images using forge |
+| `go-build` | Builds Go binaries using forge |
+| `container-build` | Builds container images using forge |
 | `fmt` | Formats code with gofumpt |
 | `lint` | Runs golangci-lint |
 | `test-unit` | Runs unit tests |
@@ -309,7 +309,7 @@ Forge uses Model Context Protocol (MCP) for communication between the orchestrat
        ├────────────────┬────────────────┬────────────────┐
        │                │                │                │
 ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐
-│  build-go   │  │   testenv   │  │ test-runner │  │   generic   │
+│  go-build   │  │   testenv   │  │ test-runner │  │   generic   │
 │  (server)   │  │  (server)   │  │   (server)  │  │  (server)   │
 └─────────────┘  └──────┬──────┘  └─────────────┘  └─────────────┘
                         │ Orchestrates sub-engines
@@ -326,13 +326,13 @@ Forge uses Model Context Protocol (MCP) for communication between the orchestrat
 ### MCP Servers (10 total)
 
 **Build Engines** (communicate via `build` tool):
-- `build-go --mcp` - Returns Artifact
-- `build-container --mcp` - Returns Artifact
+- `go-build --mcp` - Returns Artifact
+- `container-build --mcp` - Returns Artifact
 - `generic-builder --mcp` - Returns Artifact
 
 **Test Runners** (communicate via `run` tool):
-- `test-runner-go --mcp` - Returns TestReport
-- `test-runner-go-verify-tags --mcp` - Returns TestReport
+- `go-test --mcp` - Returns TestReport
+- `go-lint-tags --mcp` - Returns TestReport
 - `generic-test-runner --mcp` - Returns TestReport
 
 **Test Engines** (complex orchestration):
@@ -350,12 +350,12 @@ build:
   specs:
     - name: my-app
       src: ./cmd/my-app
-      builder: go://build-go      # References MCP server
+      builder: go://go-build      # References MCP server
 
 test:
   - name: unit
     engine: go://testenv          # References MCP server
-    runner: go://test-runner-go   # References MCP server
+    runner: go://go-test   # References MCP server
 ```
 
 The `go://` protocol indicates forge should spawn the binary with `--mcp` flag and communicate via stdio.
@@ -429,7 +429,7 @@ type TestEnvironment struct {
 
 ```
 forge test create unit      # Create test environment with testenv
-forge test run unit         # Run tests with test-runner-go
+forge test run unit         # Run tests with go-test
 forge test delete <testID>  # Clean up test environment
 ```
 
@@ -661,19 +661,65 @@ type BuildSpec struct {
     Name   string `yaml:"name"`   // Artifact name
     Src    string `yaml:"src"`    // Source directory/file
     Dest   string `yaml:"dest"`   // Destination directory
-    Engine string `yaml:"engine"` // Engine URI (e.g., "go://build-go")
+    Engine string `yaml:"engine"` // Engine URI (e.g., "go://go-build")
 }
 ```
 
 **Engine URI Format:** `<protocol>://<engine-name>`
 
 Supported engines:
-- `go://build-go` - Go binary builder
-- `container://build-container` - Container image builder
+- `go://go-build` - Go binary builder
+- `container://container-build` - Container image builder
 
 #### 2. Build Engines (MCP Servers)
 
 Build engines are MCP servers that implement the build protocol via stdio communication.
+
+##### container-build Multi-Mode Architecture
+
+The `container-build` engine implements a dispatcher pattern to support multiple container build backends through a single unified interface. This design enables users to choose the most appropriate build method for their environment while maintaining a consistent API.
+
+**Dispatcher Pattern Implementation:**
+
+```go
+// buildContainer dispatches to mode-specific implementations
+func buildContainer(
+    envs Envs,
+    spec forge.BuildSpec,
+    version, timestamp string,
+    store *forge.ArtifactStore,
+    isMCPMode bool,
+) error {
+    switch envs.BuildEngine {
+    case "docker":
+        return buildContainerDocker(...)
+    case "kaniko":
+        return buildContainerKaniko(...)
+    case "podman":
+        return buildContainerPodman(...)
+    default:
+        return errUnsupportedEngine
+    }
+}
+```
+
+**Mode Characteristics:**
+
+| Mode | Build Method | Requirements | Rootless | Use Case |
+|------|-------------|--------------|----------|----------|
+| docker | Native `docker build` | Docker daemon | No | Fast local development |
+| kaniko | Kaniko executor in container | Docker/Podman to run Kaniko | Yes | Secure CI/CD builds |
+| podman | Native `podman build` | Podman daemon | Yes | Rootless workflows |
+
+**Shared Utilities:**
+
+The implementation extracts common functionality into shared utility functions:
+- `tagImage()` - Tags container images
+- `addArtifactToStore()` - Records build artifacts
+- `printBuildStart()` / `printBuildSuccess()` - User feedback
+- `runCmd()` - Command execution with MCP-aware output routing
+
+This reduces code duplication across the three mode implementations.
 
 **MCP Server Architecture:**
 
@@ -693,14 +739,18 @@ Build Artifact
 
 **Available Engines:**
 
-1. **build-go** (`cmd/build-go/`)
+1. **go-build** (`cmd/go-build/`)
    - Builds Go binaries
    - Supports ldflags injection
    - MCP tool: `build`
 
-2. **build-container** (`cmd/build-container/`)
-   - Builds container images using Kaniko
-   - Supports custom Containerfiles
+2. **container-build** (`cmd/container-build/`)
+   - Multi-mode container image builder with three backends:
+     - **docker mode:** Native `docker build` (fast, requires Docker daemon)
+     - **kaniko mode:** Rootless builds via Kaniko executor (secure, runs in container)
+     - **podman mode:** Native `podman build` (rootless, daemonless)
+   - Mode selected via `CONTAINER_BUILD_ENGINE` environment variable
+   - Supports custom Containerfiles and build arguments
    - MCP tool: `build`
 
 **MCP Communication Example:**
@@ -716,7 +766,7 @@ Build Artifact
       "name": "my-binary",
       "src": "./cmd/my-app",
       "dest": "./build/bin",
-      "engine": "go://build-go"
+      "engine": "go://go-build"
     }
   }
 }
@@ -741,13 +791,13 @@ artifacts:
     src: ./cmd/build-binary
     dest: ./build/bin
 
-  - name: build-container
+  - name: container-build
     type: container
     version: v1.2.3-abc1234
     timestamp: "2025-01-03T10:31:00Z"
-    containerfile: ./containers/build-container/Containerfile
+    containerfile: ./containers/container-build/Containerfile
     context: .
-    image: localhost:5000/build-container:v1.2.3-abc1234
+    image: localhost:5000/container-build:v1.2.3-abc1234
 ```
 
 **Artifact Types:**
@@ -822,17 +872,17 @@ build:
   - name: build-binary
     src: ./cmd/build-binary
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
-  - name: build-container
-    src: ./cmd/build-container
+  - name: container-build
+    src: ./cmd/container-build
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
-  - name: build-container-image
-    src: ./containers/build-container/Containerfile
+  - name: container-build-image
+    src: ./containers/container-build/Containerfile
     dest: localhost:5000
-    engine: container://build-container
+    engine: container://container-build
 ```
 
 **Configuration Fields:**
@@ -850,9 +900,11 @@ forge build
 ```
 
 **Environment Variables:**
-- `CONTAINER_ENGINE` - Container engine (docker/podman)
+- `CONTAINER_BUILD_ENGINE` - Container build mode (docker/kaniko/podman)
 - `GO_BUILD_LDFLAGS` - Go linker flags
 - `PREPEND_CMD` - Command prefix (e.g., sudo)
+- `BUILD_ARGS` - Build arguments for container builds
+- `KANIKO_CACHE_DIR` - Cache directory for kaniko mode (default: ~/.kaniko-cache)
 
 **Outputs:**
 - Built artifacts in specified destinations
@@ -991,9 +1043,9 @@ Each build engine must:
 3. Provide `build` tool with BuildSpec parameters
 4. Return success/failure with detailed messages
 
-#### Example: build-go Engine
+#### Example: go-build Engine
 
-**Location:** `cmd/build-go/main.go`
+**Location:** `cmd/go-build/main.go`
 
 **Capabilities:**
 
@@ -1057,7 +1109,7 @@ export PATH="$GOBIN_PATH:$PATH"
 ```makefile
 FORGE := GO_BUILD_LDFLAGS="$(GO_BUILD_LDFLAGS)" \
          $(KINDENV_ENVS) \
-         CONTAINER_ENGINE="$(CONTAINER_ENGINE)" \
+         CONTAINER_BUILD_ENGINE="$(CONTAINER_BUILD_ENGINE)" \
          forge
 
 BUILD_GO := $(FORGE) build
@@ -1071,12 +1123,12 @@ BUILD_CONTAINER := $(FORGE) build
 build: ## Build all artifacts using forge
 	$(FORGE) build
 
-.PHONY: build-go
-build-go: ## Build Go binaries using forge
+.PHONY: go-build
+go-build: ## Build Go binaries using forge
 	$(BUILD_GO)
 
-.PHONY: build-container
-build-container: ## Build container images using forge
+.PHONY: container-build
+container-build: ## Build container images using forge
 	$(BUILD_CONTAINER)
 ```
 
@@ -1133,7 +1185,7 @@ func TestBuildIntegration(t *testing.T) {
 
 ```bash
 # Build containers using forge
-CONTAINER_ENGINE="${CONTAINER_ENGINE}" \
+CONTAINER_BUILD_ENGINE="${CONTAINER_BUILD_ENGINE}" \
 GO_BUILD_LDFLAGS="${GO_BUILD_LDFLAGS:-}" \
 forge build
 ```
@@ -1234,18 +1286,25 @@ func DeleteEnvironment(store *IntegrationEnvStore, idOrName string) error
          ┌─────────────────────┴─────────────────────┐
          │                                             │
          v                                             v
-┌────────────────────┐                      ┌────────────────────┐
-│  build-go          │                      │ build-container    │
-│  (MCP Server)      │                      │ (MCP Server)       │
-│                    │                      │                    │
-│  ┌──────────────┐  │                      │ ┌──────────────┐  │
-│  │ MCP Protocol │  │                      │ │ MCP Protocol │  │
-│  └──────┬───────┘  │                      │ └──────┬───────┘  │
-│         v          │                      │        v          │
-│  ┌──────────────┐  │                      │ ┌──────────────┐  │
-│  │ go build     │  │                      │ │ kaniko       │  │
-│  └──────────────┘  │                      │ └──────────────┘  │
-└────────────────────┘                      └────────────────────┘
+┌────────────────────┐                      ┌────────────────────────────┐
+│  go-build          │                      │  container-build           │
+│  (MCP Server)      │                      │  (MCP Server)              │
+│                    │                      │                            │
+│  ┌──────────────┐  │                      │  ┌──────────────────────┐ │
+│  │ MCP Protocol │  │                      │  │   MCP Protocol       │ │
+│  └──────┬───────┘  │                      │  └──────┬───────────────┘ │
+│         v          │                      │         v                 │
+│  ┌──────────────┐  │                      │  ┌──────────────────────┐ │
+│  │ go build     │  │                      │  │   Dispatcher         │ │
+│  └──────────────┘  │                      │  └──────┬───────────────┘ │
+└────────────────────┘                      │         │                 │
+                                             │    ┌────┴────┬────────┐  │
+                                             │    v         v        v  │
+                                             │  ┌───────┐ ┌──────┐ ┌──┐│
+                                             │  │docker │ │kaniko│ │pod││
+                                             │  │build  │ │exec  │ │man││
+                                             │  └───────┘ └──────┘ └──┘│
+                                             └────────────────────────────┘
 ```
 
 ### Future Enhancements
@@ -1301,14 +1360,14 @@ build:
     - name: forge
       src: ./cmd/forge
       dest: ./build/bin
-      builder: go://build-go
+      builder: go://go-build
 
 # Test specifications
 test:
   - name: unit
     stage: unit
     engine: go://testenv
-    runner: go://test-runner-go
+    runner: go://go-test
 
 # Kind cluster configuration
 kindenv:
@@ -1340,8 +1399,12 @@ Tools support environment variable configuration with standardized naming:
 # Forge
 FORGE_ARTIFACT_STORE_PATH=.forge/artifacts.yaml
 
-# Container engine
-CONTAINER_ENGINE=docker  # or podman
+# Container build engine
+CONTAINER_BUILD_ENGINE=docker  # docker, kaniko, or podman
+
+# Container build options
+BUILD_ARGS="GO_VERSION=1.24"  # Build arguments
+KANIKO_CACHE_DIR=~/.kaniko-cache  # Kaniko cache directory
 
 # Test environment
 KUBECONFIG=.forge/kubeconfig

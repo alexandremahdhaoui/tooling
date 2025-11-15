@@ -14,7 +14,7 @@ import (
 
 // Engine represents a tool/engine to be tested.
 type Engine struct {
-	// Name is the engine name (e.g., "forge", "build-go")
+	// Name is the engine name (e.g., "forge", "go-build")
 	Name string
 	// BinaryPath is the path to the binary (e.g., "./build/bin/forge")
 	BinaryPath string
@@ -185,21 +185,21 @@ func AllEngines(repoRoot string) []Engine {
 
 	return []Engine{
 		{Name: "forge", BinaryPath: filepath.Join(buildBin, "forge"), SupportsMCP: true},
-		{Name: "build-go", BinaryPath: filepath.Join(buildBin, "build-go"), SupportsMCP: true},
-		{Name: "build-container", BinaryPath: filepath.Join(buildBin, "build-container"), SupportsMCP: true},
+		{Name: "go-build", BinaryPath: filepath.Join(buildBin, "go-build"), SupportsMCP: true},
+		{Name: "container-build", BinaryPath: filepath.Join(buildBin, "container-build"), SupportsMCP: true},
 		{Name: "generic-builder", BinaryPath: filepath.Join(buildBin, "generic-builder"), SupportsMCP: true},
 		{Name: "testenv", BinaryPath: filepath.Join(buildBin, "testenv"), SupportsMCP: true},
 		{Name: "testenv-kind", BinaryPath: filepath.Join(buildBin, "testenv-kind"), SupportsMCP: true},
 		{Name: "testenv-lcr", BinaryPath: filepath.Join(buildBin, "testenv-lcr"), SupportsMCP: true},
 		{Name: "testenv-helm-install", BinaryPath: filepath.Join(buildBin, "testenv-helm-install"), SupportsMCP: true},
-		{Name: "test-runner-go", BinaryPath: filepath.Join(buildBin, "test-runner-go"), SupportsMCP: true},
-		{Name: "test-runner-go-verify-tags", BinaryPath: filepath.Join(buildBin, "test-runner-go-verify-tags"), SupportsMCP: true},
+		{Name: "go-test", BinaryPath: filepath.Join(buildBin, "go-test"), SupportsMCP: true},
+		{Name: "go-lint-tags", BinaryPath: filepath.Join(buildBin, "go-lint-tags"), SupportsMCP: true},
 		{Name: "generic-test-runner", BinaryPath: filepath.Join(buildBin, "generic-test-runner"), SupportsMCP: true},
 		{Name: "test-report", BinaryPath: filepath.Join(buildBin, "test-report"), SupportsMCP: true},
-		{Name: "format-go", BinaryPath: filepath.Join(buildBin, "format-go"), SupportsMCP: true},
-		{Name: "lint-go", BinaryPath: filepath.Join(buildBin, "lint-go"), SupportsMCP: true},
-		{Name: "generate-mocks", BinaryPath: filepath.Join(buildBin, "generate-mocks"), SupportsMCP: true},
-		{Name: "generate-openapi-go", BinaryPath: filepath.Join(buildBin, "generate-openapi-go"), SupportsMCP: true},
+		{Name: "go-format", BinaryPath: filepath.Join(buildBin, "go-format"), SupportsMCP: true},
+		{Name: "go-lint", BinaryPath: filepath.Join(buildBin, "go-lint"), SupportsMCP: true},
+		{Name: "go-gen-mocks", BinaryPath: filepath.Join(buildBin, "go-gen-mocks"), SupportsMCP: true},
+		{Name: "go-gen-openapi", BinaryPath: filepath.Join(buildBin, "go-gen-openapi"), SupportsMCP: true},
 		{Name: "ci-orchestrator", BinaryPath: filepath.Join(buildBin, "ci-orchestrator"), SupportsMCP: true},
 		{Name: "forge-e2e", BinaryPath: filepath.Join(buildBin, "forge-e2e"), SupportsMCP: true},
 	}

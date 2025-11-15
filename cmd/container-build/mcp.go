@@ -11,23 +11,24 @@ import (
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/alexandremahdhaoui/forge/pkg/mcputil"
+	"github.com/caarlos0/env/v11"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// runMCPServer starts the build-container MCP server with stdio transport.
+// runMCPServer starts the container-build MCP server with stdio transport.
 func runMCPServer() error {
 	server := mcpserver.New(Name, Version)
 
 	// Register build tool
 	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "build",
-		Description: "Build a container image using Kaniko",
+		Description: "Build a container image using docker, kaniko, or podman (set CONTAINER_BUILD_ENGINE)",
 	}, handleBuildTool)
 
 	// Register buildBatch tool
 	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "buildBatch",
-		Description: "Build multiple container images using Kaniko",
+		Description: "Build multiple container images using docker, kaniko, or podman (set CONTAINER_BUILD_ENGINE)",
 	}, handleBuildBatchTool)
 
 	// Run the MCP server
@@ -66,9 +67,16 @@ func handleBuildTool(
 
 	// Build the container
 	timestamp := time.Now().UTC().Format(time.RFC3339)
-	envs := Envs{
-		ContainerEngine: "docker", // Default for MCP mode
-		KanikoCacheDir:  "~/.kaniko-cache",
+
+	// Parse environment variables (CONTAINER_BUILD_ENGINE is required)
+	envs := Envs{} //nolint:exhaustruct
+	if err := env.Parse(&envs); err != nil {
+		return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v (CONTAINER_BUILD_ENGINE required)", err)), nil, nil
+	}
+
+	// Validate container engine
+	if err := validateContainerEngine(envs.BuildEngine); err != nil {
+		return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v", err)), nil, nil
 	}
 
 	var dummyStore forge.ArtifactStore

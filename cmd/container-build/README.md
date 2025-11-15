@@ -1,25 +1,49 @@
-# build-container
+# container-build
 
-A tool for building container images from declarative configuration and tracking them in an artifact store.
+A tool for building container images from declarative configuration with support for multiple build engines and artifact tracking.
 
 ## Overview
 
-`build-container` reads container build specifications from `forge.yaml`, builds all defined containers using Kaniko, and writes artifact metadata to an artifact store for version tracking.
+`container-build` reads container build specifications from `forge.yaml`, builds all defined containers using docker, kaniko, or podman, and writes artifact metadata to an artifact store for version tracking.
 
 ## Features
 
+- **Multi-mode support** - Choose between docker, kaniko, or podman build engines
 - **Declarative configuration** - Define container builds in `forge.yaml`
 - **Git-based versioning** - Uses git commit hash for artifact versions
 - **Artifact tracking** - Maintains artifact store with timestamps and versions
-- **Kaniko-based builds** - Rootless container builds
+- **Rootless builds** - Support for rootless builds via kaniko or podman
 - **Automatic tagging** - Tags images with both version and `latest`
 
 ## Prerequisites
 
 - Go 1.22.5 or later
-- Docker or Podman
+- One of: Docker, Podman, or Docker (for kaniko mode)
 - Git repository (for version tracking)
-- Kaniko executor image available
+- For kaniko mode: Kaniko executor image available
+
+## Build Modes
+
+### docker
+Native Docker builds. Fast, requires Docker daemon.
+
+```bash
+CONTAINER_BUILD_ENGINE=docker go run ./cmd/container-build
+```
+
+### kaniko
+Rootless builds using Kaniko executor (runs in container via docker). Secure, supports layer caching.
+
+```bash
+CONTAINER_BUILD_ENGINE=kaniko go run ./cmd/container-build
+```
+
+### podman
+Native Podman builds. Rootless, requires Podman.
+
+```bash
+CONTAINER_BUILD_ENGINE=podman go run ./cmd/container-build
+```
 
 ## Configuration
 
@@ -32,8 +56,8 @@ build:
   artifactStorePath: .ignore.artifact-store.yaml
   specs:
     - container:
-        name: build-container
-        file: ./containers/build-container/Containerfile
+        name: container-build
+        file: ./containers/container-build/Containerfile
     - container:
         name: my-app
         file: ./containers/my-app/Containerfile
@@ -43,37 +67,50 @@ build:
 
 | Variable | Description | Required | Default |
 |----------|-------------|----------|---------|
-| `CONTAINER_ENGINE` | Container engine (docker/podman) | Yes | - |
-| `BUILD_ARGS` | List of build arguments for kaniko | No | [] |
+| `CONTAINER_BUILD_ENGINE` | Build engine (docker/kaniko/podman) | Yes | - |
+| `BUILD_ARGS` | List of build arguments | No | [] |
+| `KANIKO_CACHE_DIR` | Cache directory for kaniko mode | No | ~/.kaniko-cache |
 
 ## Usage
 
 ### Basic Build
 
 ```bash
-# Build all containers defined in forge.yaml
-CONTAINER_ENGINE=docker go run ./cmd/build-container
+# Build all containers defined in forge.yaml using docker
+CONTAINER_BUILD_ENGINE=docker go run ./cmd/container-build
 ```
 
 ### With Build Arguments
 
 ```bash
-# Pass build arguments to kaniko
-CONTAINER_ENGINE=docker \
+# Pass build arguments to the build engine
+CONTAINER_BUILD_ENGINE=docker \
   BUILD_ARGS="GO_BUILD_LDFLAGS=-X main.Version=1.0.0" \
-  go run ./cmd/build-container
+  go run ./cmd/container-build
+```
+
+### Kaniko Mode with Custom Cache
+
+```bash
+# Use kaniko with custom cache directory
+CONTAINER_BUILD_ENGINE=kaniko \
+  KANIKO_CACHE_DIR=/custom/cache \
+  go run ./cmd/container-build
 ```
 
 ## How It Works
 
 1. **Read Configuration** - Loads `forge.yaml` to get container specs
 2. **Get Git Version** - Runs `git rev-parse HEAD` to get current commit hash
-3. **Build Each Container**:
-   - Runs Kaniko to build container from specified Containerfile
-   - Exports build to tar file
-   - Loads tar into container engine
-   - Tags with `{name}:{version}` and `{name}:latest`
-   - Cleans up tar file
+3. **Build Each Container** (mode-specific):
+   - **docker mode**: Runs `docker build` with tags
+   - **kaniko mode**:
+     - Runs Kaniko executor in container via docker
+     - Exports build to tar file
+     - Loads tar into docker
+     - Tags with `{name}:{version}` and `{name}:latest`
+     - Cleans up tar file
+   - **podman mode**: Runs `podman build` with tags
 4. **Update Artifact Store** - Writes artifact metadata to store file
 
 ## Artifact Store
@@ -82,9 +119,9 @@ The artifact store (`. ignore.artifact-store.yaml`) contains metadata for all bu
 
 ```yaml
 artifacts:
-  - name: build-container
+  - name: container-build
     type: container
-    location: build-container:2be2494abc123...
+    location: container-build:2be2494abc123...
     timestamp: "2025-11-02T21:00:00Z"
     version: 2be2494abc123...
   - name: my-app
@@ -123,8 +160,12 @@ FROM alpine:3.20
 CMD ["echo", "Hello from my-app"]
 EOF
 
-# 3. Build
-CONTAINER_ENGINE=docker go run ./cmd/build-container
+# 3. Build (choose your mode)
+CONTAINER_BUILD_ENGINE=docker go run ./cmd/container-build
+# or
+CONTAINER_BUILD_ENGINE=kaniko go run ./cmd/container-build
+# or
+CONTAINER_BUILD_ENGINE=podman go run ./cmd/container-build
 
 # 4. Verify images
 docker images | grep my-app
@@ -141,7 +182,7 @@ Built images can be pushed to the local container registry:
 
 ```bash
 # Build containers
-CONTAINER_ENGINE=docker go run ./cmd/build-container
+CONTAINER_BUILD_ENGINE=docker go run ./cmd/container-build
 
 # Setup registry (auto-pushes if autoPushImages: true)
 CONTAINER_ENGINE=docker PREPEND_CMD=sudo go run ./cmd/local-container-registry
@@ -152,6 +193,8 @@ CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push-all
 # Or push single image
 CONTAINER_ENGINE=docker go run ./cmd/local-container-registry push my-app:latest
 ```
+
+**Note**: The local-container-registry tool uses `CONTAINER_ENGINE` (not `CONTAINER_BUILD_ENGINE`) to specify which container runtime to use for pushing images.
 
 ## Troubleshooting
 
@@ -199,7 +242,7 @@ The tool creates the artifact store automatically if it doesn't exist. If you se
 
 ## Architecture
 
-See [ARCHITECTURE.md](../../ARCHITECTURE.md#build-container) for detailed architecture documentation.
+See [ARCHITECTURE.md](../../ARCHITECTURE.md#container-build) for detailed architecture documentation.
 
 ## Related Tools
 

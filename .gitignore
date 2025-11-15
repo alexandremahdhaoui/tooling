@@ -26,3 +26,8 @@ build/*
 tmp/
 .forge/
 .envrc
+/forge
+/go-build
+/forge-e2e
+/build-container
+/container-build

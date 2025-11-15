@@ -235,7 +235,7 @@ func pushImagesFromArtifactStore(ctx context.Context, config forge.Spec, envs En
 		// II. For each container spec in the config, find the latest artifact and push it
 		for _, spec := range config.Build {
 			// Skip if not a container spec (check engine field)
-			if spec.Engine != "go://build-container" {
+			if spec.Engine != "go://container-build" {
 				continue
 			}
 

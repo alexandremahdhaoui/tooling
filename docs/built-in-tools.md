@@ -25,11 +25,11 @@ All tools are MCP servers and can be used directly via their `go://` URI or wrap
 
 ## Build Engines
 
-### build-go
+### go-build
 
 **Purpose:** Build Go binaries with automatic version injection from git
 
-**URI:** `go://build-go`
+**URI:** `go://go-build`
 
 **Features:**
 - Automatic version metadata injection via ldflags
@@ -43,7 +43,7 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 **Version Injection:**
@@ -56,14 +56,14 @@ Automatically injects:
 
 ---
 
-### build-container
+### container-build
 
-**Purpose:** Build container images using Kaniko (rootless, secure)
+**Purpose:** Build container images with support for docker, kaniko, or podman
 
-**URI:** `go://build-container`
+**URI:** `go://container-build`
 
 **Features:**
-- Rootless container builds (no Docker daemon required)
+- Multi-mode support: docker (native), kaniko (rootless), or podman (rootless)
 - Supports both Dockerfile and Containerfile
 - Automatic image tagging with git versions
 - Build caching
@@ -74,14 +74,20 @@ Automatically injects:
 build:
   - name: myapp-image
     src: ./Containerfile
-    engine: go://build-container
+    engine: go://container-build
 ```
 
 **Environment Variables:**
-- `CONTAINER_ENGINE` - docker or podman (default: docker)
-- `PREPEND_CMD` - Command prefix (e.g., sudo)
+- `CONTAINER_BUILD_ENGINE` - Build mode: docker, kaniko, or podman (required)
+- `BUILD_ARGS` - Build arguments to pass to the build engine (optional)
+- `KANIKO_CACHE_DIR` - Cache directory for kaniko mode (optional, default: ~/.kaniko-cache)
 
-**When to use:** For building container images from Dockerfiles/Containerfiles.
+**Build Modes:**
+- **docker**: Native Docker builds (fast, requires Docker daemon)
+- **kaniko**: Rootless builds using Kaniko executor (runs in container via docker, secure)
+- **podman**: Native Podman builds (rootless, requires Podman)
+
+**When to use:** For building container images from Dockerfiles/Containerfiles with flexible backend selection.
 
 ---
 
@@ -121,11 +127,11 @@ build:
 
 ---
 
-### format-go
+### go-format
 
 **Purpose:** Format Go code using gofmt and goimports
 
-**URI:** `go://format-go`
+**URI:** `go://go-format`
 
 **Features:**
 - Runs gofmt -s -w
@@ -138,7 +144,7 @@ build:
 build:
   - name: format-code
     src: .
-    engine: go://format-go
+    engine: go://go-format
 ```
 
 **When to use:** To ensure consistent Go code formatting before builds.
@@ -147,11 +153,11 @@ build:
 
 ## Test Runners
 
-### test-runner-go
+### go-test
 
 **Purpose:** Run Go tests with coverage and reporting
 
-**URI:** `go://test-runner-go`
+**URI:** `go://go-test`
 
 **Features:**
 - Uses gotestsum for better test output
@@ -165,11 +171,11 @@ build:
 ```yaml
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
 
   - name: integration
     testenv: "alias://my-testenv"
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 **Build Tags:** Automatically uses `-tags=<stage-name>` (e.g., `-tags=unit`, `-tags=integration`)
@@ -183,11 +189,11 @@ test:
 
 ---
 
-### test-runner-go-verify-tags
+### go-lint-tags
 
 **Purpose:** Verify all test files have proper build tags
 
-**URI:** `go://test-runner-go-verify-tags`
+**URI:** `go://go-lint-tags`
 
 **Features:**
 - Scans all *_test.go files
@@ -199,7 +205,7 @@ test:
 ```yaml
 test:
   - name: verify-tags
-    runner: go://test-runner-go-verify-tags
+    runner: go://go-lint-tags
 ```
 
 **When to use:** As a pre-test validation step to ensure test isolation.
@@ -240,11 +246,11 @@ test:
 
 ---
 
-### lint-go
+### go-lint
 
 **Purpose:** Run golangci-lint with auto-fix
 
-**URI:** `go://lint-go`
+**URI:** `go://go-lint`
 
 **Features:**
 - Runs golangci-lint run --fix ./...
@@ -256,7 +262,7 @@ test:
 ```yaml
 test:
   - name: lint
-    runner: go://lint-go
+    runner: go://go-lint
 ```
 
 **When to use:** For Go code linting. Prefer this over wrapping golangci-lint manually.
@@ -308,7 +314,7 @@ test:
 test:
   - name: integration
     testenv: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
 # Option 2: Use custom alias
 engines:
@@ -323,7 +329,7 @@ engines:
 test:
   - name: integration
     testenv: "alias://my-testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 ```
 
 **When to use:** For integration tests requiring Kubernetes clusters and container registries.
@@ -448,11 +454,11 @@ forge test report delete <report-id>
 
 ---
 
-### generate-mocks
+### go-gen-mocks
 
 **Purpose:** Generate Go mocks using mockery
 
-**URI:** `go://generate-mocks`
+**URI:** `go://go-gen-mocks`
 
 **Features:**
 - Generates mocks for Go interfaces
@@ -462,21 +468,21 @@ forge test report delete <report-id>
 **Usage:**
 ```yaml
 build:
-  - name: generate-mocks
+  - name: go-gen-mocks
     src: ./pkg
     dest: ./mocks
-    engine: go://generate-mocks
+    engine: go://go-gen-mocks
 ```
 
 **When to use:** For automated mock generation in Go projects.
 
 ---
 
-### generate-openapi-go
+### go-gen-openapi
 
 **Purpose:** Generate Go client/server code from OpenAPI specs
 
-**URI:** `go://generate-openapi-go`
+**URI:** `go://go-gen-openapi`
 
 **Features:**
 - Generates Go code from OpenAPI 3.0 specs
@@ -510,22 +516,22 @@ build:
 
 | Tool | Category | URI | Primary Use |
 |------|----------|-----|-------------|
-| build-go | Build | `go://build-go` | Build Go binaries |
-| build-container | Build | `go://build-container` | Build container images |
+| go-build | Build | `go://go-build` | Build Go binaries |
+| container-build | Build | `go://container-build` | Build container images |
 | generic-builder | Build | `go://generic-builder` | Wrap custom build tools |
-| format-go | Build | `go://format-go` | Format Go code |
-| test-runner-go | Test Runner | `go://test-runner-go` | Run Go tests |
-| test-runner-go-verify-tags | Test Runner | `go://test-runner-go-verify-tags` | Verify build tags |
+| go-format | Build | `go://go-format` | Format Go code |
+| go-test | Test Runner | `go://go-test` | Run Go tests |
+| go-lint-tags | Test Runner | `go://go-lint-tags` | Verify build tags |
 | generic-test-runner | Test Runner | `go://generic-test-runner` | Wrap custom test tools |
-| lint-go | Test Runner | `go://lint-go` | Run golangci-lint |
+| go-lint | Test Runner | `go://go-lint` | Run golangci-lint |
 | forge-e2e | Test Runner | `go://forge-e2e` | Forge system tests |
 | testenv | Testenv | `go://testenv` | Full test environment |
 | testenv-kind | Testenv | `go://testenv-kind` | Kind clusters |
 | testenv-lcr | Testenv | `go://testenv-lcr` | Local container registry |
 | testenv-helm-install | Testenv | `go://testenv-helm-install` | Helm chart installation |
 | test-report | Utility | `go://test-report` | Test report management |
-| generate-mocks | Utility | `go://generate-mocks` | Mock generation |
-| generate-openapi-go | Utility | `go://generate-openapi-go` | OpenAPI code gen |
+| go-gen-mocks | Utility | `go://go-gen-mocks` | Mock generation |
+| go-gen-openapi | Utility | `go://go-gen-openapi` | OpenAPI code gen |
 | ci-orchestrator | Utility | `go://ci-orchestrator` | CI orchestration (NYI) |
 
 ## Usage Patterns
@@ -536,26 +542,26 @@ build:
 build:
   - name: format-code
     src: .
-    engine: go://format-go
+    engine: go://go-format
 
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
 test:
   - name: verify-tags
-    runner: go://test-runner-go-verify-tags
+    runner: go://go-lint-tags
 
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
 
   - name: lint
-    runner: go://lint-go
+    runner: go://go-lint
 
   - name: integration
     testenv: "go://testenv"
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 ### With Container Builds
@@ -565,16 +571,16 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
   - name: myapp-image
     src: ./Containerfile
-    engine: go://build-container
+    engine: go://container-build
 
 test:
   - name: integration
     testenv: "go://testenv"  # Includes registry
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 ### Custom Tools Integration
@@ -611,8 +617,8 @@ test:
 ## Best Practices
 
 1. **Prefer built-in tools over generic wrappers**
-   - Use `go://build-go` instead of wrapping `go build`
-   - Use `go://test-runner-go` instead of wrapping `go test`
+   - Use `go://go-build` instead of wrapping `go build`
+   - Use `go://go-test` instead of wrapping `go test`
 
 2. **Use generic-* tools for third-party integrations**
    - `generic-builder` for npm, protoc, custom scripts
@@ -628,7 +634,7 @@ test:
    - Consistent across developers and CI
 
 5. **Format before building**
-   - Add `format-go` as first build step
+   - Add `go-format` as first build step
    - Ensures consistent code style
 
 ## Related Documentation

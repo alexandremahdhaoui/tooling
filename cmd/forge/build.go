@@ -10,6 +10,20 @@ import (
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
+// normalizeEngineURI maps deprecated engine URIs to their current equivalents.
+// Returns the normalized URI and whether a deprecated URI was used.
+func normalizeEngineURI(uri string) (string, bool) {
+	deprecated := map[string]string{
+		"go://build-container": "go://container-build",
+	}
+
+	if newURI, ok := deprecated[uri]; ok {
+		return newURI, true // deprecated
+	}
+
+	return uri, false // not deprecated
+}
+
 func runBuild(args []string) error {
 	// Load forge.yaml configuration
 	config, err := loadConfig()
@@ -38,14 +52,30 @@ func runBuild(args []string) error {
 			continue
 		}
 
-		// Use the engine specified in the BuildSpec
-		engine := spec.Engine
+		// Normalize engine URI and warn if deprecated
+		normalizedEngine, wasDeprecated := normalizeEngineURI(spec.Engine)
+		if wasDeprecated {
+			_, _ = fmt.Fprintf(os.Stderr,
+				"⚠️  DEPRECATED: %s is deprecated, use %s instead (in spec: %s)\n",
+				spec.Engine, normalizedEngine, spec.Name)
+		}
+
+		// Use the normalized engine
+		engine := normalizedEngine
 		params := map[string]any{
 			"name":   spec.Name,
 			"src":    spec.Src,
 			"dest":   spec.Dest,
 			"engine": engine,
 		}
+
+		// Merge spec fields from BuildSpec into params
+		if len(spec.Spec) > 0 {
+			for k, v := range spec.Spec {
+				params[k] = v
+			}
+		}
+
 		engineSpecs[engine] = append(engineSpecs[engine], params)
 	}
 

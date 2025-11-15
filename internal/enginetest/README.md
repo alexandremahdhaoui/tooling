@@ -6,7 +6,7 @@ This package provides standardized unit tests for all forge engines/tools.
 
 The `enginetest` package ensures that all engines in the forge repository implement:
 1. **Version commands**: All engines must support `version`, `--version`, and `-v` flags
-2. **MCP mode**: Build engines (build-go, build-container) must support `--mcp` flag for MCP server mode
+2. **MCP mode**: Build engines (go-build, container-build) must support `--mcp` flag for MCP server mode
 3. **Binary existence**: All binaries must exist and be executable
 
 ## Usage
@@ -28,21 +28,21 @@ The package tests all 18 engines:
 | Engine | Version Support | MCP Support |
 |--------|----------------|-------------|
 | forge | ✅ | ✅ |
-| build-go | ✅ | ✅ |
-| build-container | ✅ | ✅ |
+| go-build | ✅ | ✅ |
+| container-build | ✅ | ✅ |
 | generic-builder | ✅ | ✅ |
 | testenv | ✅ | ✅ |
 | testenv-kind | ✅ | ✅ |
 | testenv-lcr | ✅ | ✅ |
 | testenv-helm-install | ✅ | ✅ |
-| test-runner-go | ✅ | ✅ |
-| test-runner-go-verify-tags | ✅ | ✅ |
+| go-test | ✅ | ✅ |
+| go-lint-tags | ✅ | ✅ |
 | generic-test-runner | ✅ | ✅ |
 | test-report | ✅ | ✅ |
-| format-go | ✅ | ✅ |
-| lint-go | ✅ | ✅ |
-| generate-mocks | ✅ | ✅ |
-| generate-openapi-go | ✅ | ✅ |
+| go-format | ✅ | ✅ |
+| go-lint | ✅ | ✅ |
+| go-gen-mocks | ✅ | ✅ |
+| go-gen-openapi | ✅ | ✅ |
 | ci-orchestrator | ✅ | ✅ |
 | forge-e2e | ✅ | ✅ |
 
@@ -62,7 +62,7 @@ Verifies that the output contains:
 - Platform information
 
 ### `TestAllMCPEnginesHaveMCPSupport`
-Tests that MCP engines (build-go, build-container) support MCP server mode:
+Tests that MCP engines (go-build, container-build) support MCP server mode:
 - Can be started with `--mcp` flag
 - Accept JSON-RPC requests on stdin
 - Respond with JSON-RPC on stdout

@@ -1,20 +1,20 @@
-# build-container MCP Server
+# container-build MCP Server
 
-MCP server for building container images using Kaniko.
+MCP server for building container images with multiple backend engines.
 
 ## Purpose
 
-Provides MCP tools for building container images with rootless Kaniko builder, automatic git versioning, and artifact tracking.
+Provides MCP tools for building container images with support for docker, kaniko (rootless), and podman. Features automatic git versioning and artifact tracking.
 
 ## Invocation
 
 ```bash
-build-container --mcp
+container-build --mcp
 ```
 
 Forge invokes this automatically via:
 ```yaml
-builder: go://build-container
+builder: go://container-build
 ```
 
 ## Available Tools
@@ -88,7 +88,7 @@ build:
     - name: my-app-image
       src: ./Containerfile
       dest: localhost:5000
-      builder: go://build-container
+      builder: go://container-build
 ```
 
 Run with:
@@ -98,20 +98,40 @@ forge build
 
 ## Implementation Details
 
-- Uses Kaniko for rootless container builds
+- Supports three build modes: docker, kaniko, and podman
 - Automatically tags with git commit SHA
 - Tags both `<name>:<version>` and `<name>:latest`
 - Stores artifacts in artifact store
-- Exports to tar, loads into container engine
-- Supports Docker and Podman
+- Kaniko mode: exports to tar, loads into container engine (requires docker to run Kaniko executor)
+- Docker/Podman modes: native builds (faster, direct integration)
+
+## Build Modes
+
+### docker
+Native Docker builds using `docker build`. Fast and requires Docker daemon.
+
+### kaniko
+Rootless builds using Kaniko executor (runs in container via docker). Secure, supports layer caching.
+
+### podman
+Native Podman builds using `podman build`. Rootless and requires Podman.
 
 ## Environment Variables
 
-- `CONTAINER_ENGINE` - docker or podman (required)
+- `CONTAINER_BUILD_ENGINE` - Build mode: docker, kaniko, or podman (required)
 - `BUILD_ARGS` - Additional build arguments (optional)
-- `KANIKO_CACHE_DIR` - Cache directory (default: ~/.kaniko-cache)
+- `KANIKO_CACHE_DIR` - Cache directory for kaniko mode (default: ~/.kaniko-cache)
+
+## Mode Comparison
+
+| Feature | docker | kaniko | podman |
+|---------|--------|--------|--------|
+| Requires Daemon | Yes (Docker) | Yes (Docker to run Kaniko) | Yes (Podman) |
+| Rootless | No | Yes | Yes |
+| Build Speed | Fast | Moderate | Fast |
+| Layer Caching | Native | Via cache dir | Native |
 
 ## See Also
 
-- [build-go MCP Server](../build-go/MCP.md)
+- [go-build MCP Server](../go-build/MCP.md)
 - [Forge Build Documentation](../../docs/forge-usage.md#building-artifacts)

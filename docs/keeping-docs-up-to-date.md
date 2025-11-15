@@ -132,6 +132,14 @@ This matrix maps code locations to documentation that must be updated.
 | Build dependencies changed | 1. `README.md` (Prerequisites)<br>2. `ARCHITECTURE.md` (Dependencies)<br>3. Installation guides | High | Update version numbers |
 | CI/CD pipeline changed | 1. Relevant workflow docs<br>2. `docs/forge-usage.md` if affects users | Medium | Document new processes |
 
+### Build Engine Changes (container-build specific)
+
+| Code Change | Documentation to Update | Priority | Notes |
+|-------------|------------------------|----------|-------|
+| New build mode added | 1. `cmd/container-build/MCP.md`<br>2. `docs/built-in-tools.md`<br>3. `ARCHITECTURE.md` multi-mode section<br>4. `docs/migrations/build-container-rename.md` | High | Update mode comparison tables |
+| Environment variable changed | 1. All docs with env var examples<br>2. `cmd/container-build/MCP.md`<br>3. `ARCHITECTURE.md`<br>4. Usage examples in all guides | Critical | Breaking change - create migration guide |
+| Mode validation changed | 1. `cmd/container-build/MCP.md` (error messages)<br>2. Migration guide troubleshooting section | Medium | Update valid values list |
+
 ---
 
 ## Change Detection Procedure
@@ -578,11 +586,11 @@ ls -d pkg/*/
 
 ### Example 1: Adding a New MCP Tool
 
-**Code Change**: Added `buildBatch` tool to `build-go` MCP server
+**Code Change**: Added `buildBatch` tool to `go-build` MCP server
 
 **Documentation Updates**:
-1. ✅ Updated `cmd/build-go/MCP.md` - added buildBatch section with schema
-2. ✅ Updated `mcp-tools-inventory.md` - added tool to build-go section
+1. ✅ Updated `cmd/go-build/MCP.md` - added buildBatch section with schema
+2. ✅ Updated `mcp-tools-inventory.md` - added tool to go-build section
 3. ✅ Updated `docs/prompts/create-build-engine.md` - mentioned batch capabilities
 4. ✅ Added example to `README.md` showing batch usage
 
@@ -591,18 +599,24 @@ ls -d pkg/*/
 - Verified JSON schema matches code
 - Ran example from README.md
 
-### Example 2: Renaming a Binary
+### Example 2: Renaming a Binary with Migration Path
 
-**Code Change**: Renamed `generic-engine` to `generic-builder`
+**Code Change**: Renamed `build-container` to `container-build` with multi-mode support
 
 **Documentation Updates**:
-1. ✅ Renamed `docs/prompts/use-generic-engine.md` → `use-generic-builder.md`
-2. ✅ Updated all references in prompts (replace_all)
-3. ✅ Updated all examples in guides
-4. ✅ Updated README.md tool list
-5. ✅ Updated ARCHITECTURE.md references
-6. ✅ Updated forge.yaml examples
-7. ✅ Verified no "generic-engine" remains (except historical notes)
+1. ✅ Renamed `cmd/build-container/` → `cmd/container-build/`
+2. ✅ Updated all references in prompts (replace_all: `build-container` → `container-build`)
+3. ✅ Updated all examples in guides (engine URI: `go://build-container` → `go://container-build`)
+4. ✅ Updated README.md tool list and descriptions
+5. ✅ Updated ARCHITECTURE.md references with new multi-mode architecture section
+6. ✅ Updated forge.yaml examples (new `CONTAINER_BUILD_ENGINE` env var)
+7. ✅ Updated docs/built-in-tools.md with multi-mode documentation
+8. ✅ Created docs/migrations/build-container-rename.md migration guide
+9. ✅ Updated cmd/container-build/MCP.md with new environment variables
+10. ✅ Added deprecation timeline in migration guide
+11. ✅ Implemented backward compatibility alias in forge orchestrator
+12. ✅ Updated environment variable name: `CONTAINER_ENGINE` → `CONTAINER_BUILD_ENGINE`
+13. ✅ Verified no "build-container" remains in active docs (except migration guide and alias code)
 
 **Verification**:
 ```bash
@@ -642,6 +656,6 @@ Documentation maintenance is **critical** and **continuous**. Use this guide to:
 
 ---
 
-**Last Updated**: 2025-01-06
-**Version**: 1.0
+**Last Updated**: 2025-11-15
+**Version**: 1.1 (Added container-build cross-references and multi-mode documentation patterns)
 **Maintainer**: AI Coding Agents + Human Developers

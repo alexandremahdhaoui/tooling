@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -15,7 +16,7 @@ import (
 	"github.com/caarlos0/env/v11"
 )
 
-const Name = "build-container"
+const Name = "container-build"
 
 // Version information (set via ldflags during build)
 var (
@@ -41,15 +42,36 @@ func main() {
 
 // ----------------------------------------------------- RUN -------------------------------------------------------- //
 
-var errBuildingContainers = errors.New("building containers")
+var (
+	errBuildingContainers     = errors.New("building containers")
+	errInvalidContainerEngine = errors.New("invalid CONTAINER_BUILD_ENGINE")
+)
 
-// run executes the main logic of the build-container tool.
+// validateContainerEngine validates that the container engine is one of the supported values.
+func validateContainerEngine(engine string) error {
+	validEngines := []string{"docker", "kaniko", "podman"}
+	for _, valid := range validEngines {
+		if engine == valid {
+			return nil
+		}
+	}
+	return fmt.Errorf("%w: must be one of %v, got %q",
+		errInvalidContainerEngine, validEngines, engine)
+}
+
+// run executes the main logic of the container-build tool.
 // It reads the project configuration, builds all defined containers, and writes artifacts to the artifact store.
 func run() error {
 	// I. Read environment variables
 	envs := Envs{} //nolint:exhaustruct // unmarshal
 
 	if err := env.Parse(&envs); err != nil {
+		printUsage()
+		return flaterrors.Join(err, errBuildingContainers)
+	}
+
+	// Validate container engine
+	if err := validateContainerEngine(envs.BuildEngine); err != nil {
 		printUsage()
 		return flaterrors.Join(err, errBuildingContainers)
 	}
@@ -77,7 +99,7 @@ func run() error {
 	// V. Build each container spec
 	for _, spec := range config.Build {
 		// Skip if spec name is empty or engine doesn't match
-		if spec.Name == "" || spec.Engine != "go://build-container" {
+		if spec.Name == "" || spec.Engine != "go://container-build" {
 			continue
 		}
 
@@ -114,9 +136,135 @@ func getGitVersion() (string, error) {
 
 var errBuildingContainer = errors.New("building container")
 
-// buildContainer builds a single container and adds it to the artifact store.
-// The isMCPMode parameter controls output streams (stdout must be reserved for JSON-RPC).
-func buildContainer(
+// tagImage tags an image with a specific tag.
+func tagImage(containerEngine, imageID, tag string, isMCPMode bool) error {
+	cmd := exec.Command(containerEngine, "tag", imageID, tag)
+	return runCmd(cmd, isMCPMode)
+}
+
+// addArtifactToStore adds a container artifact to the store.
+func addArtifactToStore(
+	store *forge.ArtifactStore,
+	name, version, timestamp string,
+) {
+	artifact := forge.Artifact{
+		Name:      name,
+		Type:      "container",
+		Location:  fmt.Sprintf("%s:%s", name, version),
+		Timestamp: timestamp,
+		Version:   version,
+	}
+	forge.AddOrUpdateArtifact(store, artifact)
+}
+
+// printBuildStart prints build start message.
+func printBuildStart(out io.Writer, name string) {
+	_, _ = fmt.Fprintf(out, "⏳ Building container: %s\n", name)
+}
+
+// printBuildSuccess prints build success message.
+func printBuildSuccess(out io.Writer, name, version string) {
+	_, _ = fmt.Fprintf(out, "✅ Built container: %s (version: %s)\n", name, version)
+}
+
+// buildContainerDocker builds a container using native docker build.
+func buildContainerDocker(
+	envs Envs,
+	spec forge.BuildSpec,
+	version, timestamp string,
+	store *forge.ArtifactStore,
+	isMCPMode bool,
+) error {
+	out := os.Stdout
+	if isMCPMode {
+		out = os.Stderr
+	}
+
+	printBuildStart(out, spec.Name)
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
+	// Build image tags
+	imageWithVersion := fmt.Sprintf("%s:%s", spec.Name, version)
+	imageLatest := fmt.Sprintf("%s:latest", spec.Name)
+
+	// Build using docker build
+	cmd := exec.Command("docker", "build",
+		"-f", spec.Src,
+		"-t", imageWithVersion,
+		"-t", imageLatest,
+		wd,
+	)
+
+	// Add build args if provided
+	for _, buildArg := range envs.BuildArgs {
+		cmd.Args = append(cmd.Args, "--build-arg", buildArg)
+	}
+
+	if err := runCmd(cmd, isMCPMode); err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
+	// Add to artifact store
+	addArtifactToStore(store, spec.Name, version, timestamp)
+
+	printBuildSuccess(out, spec.Name, version)
+	return nil
+}
+
+// buildContainerPodman builds a container using native podman build.
+func buildContainerPodman(
+	envs Envs,
+	spec forge.BuildSpec,
+	version, timestamp string,
+	store *forge.ArtifactStore,
+	isMCPMode bool,
+) error {
+	out := os.Stdout
+	if isMCPMode {
+		out = os.Stderr
+	}
+
+	printBuildStart(out, spec.Name)
+
+	wd, err := os.Getwd()
+	if err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
+	// Build image tags
+	imageWithVersion := fmt.Sprintf("%s:%s", spec.Name, version)
+	imageLatest := fmt.Sprintf("%s:latest", spec.Name)
+
+	// Build using podman build
+	cmd := exec.Command("podman", "build",
+		"-f", spec.Src,
+		"-t", imageWithVersion,
+		"-t", imageLatest,
+		wd,
+	)
+
+	// Add build args if provided
+	for _, buildArg := range envs.BuildArgs {
+		cmd.Args = append(cmd.Args, "--build-arg", buildArg)
+	}
+
+	if err := runCmd(cmd, isMCPMode); err != nil {
+		return flaterrors.Join(err, errBuildingContainer)
+	}
+
+	// Add to artifact store
+	addArtifactToStore(store, spec.Name, version, timestamp)
+
+	printBuildSuccess(out, spec.Name, version)
+	return nil
+}
+
+// buildContainerKaniko builds a container using Kaniko (rootless container builds).
+func buildContainerKaniko(
 	envs Envs,
 	spec forge.BuildSpec,
 	version, timestamp string,
@@ -128,7 +276,8 @@ func buildContainer(
 	if isMCPMode {
 		out = os.Stderr
 	}
-	_, _ = fmt.Fprintf(out, "⏳ Building container: %s\n", spec.Name)
+
+	printBuildStart(out, spec.Name)
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -149,7 +298,9 @@ func buildContainer(
 	imageLatest := fmt.Sprintf("%s:latest", imageBase)
 
 	// Prepare kaniko command
-	cmd := envs.ContainerEngine
+	// Note: We use "docker" here to run the Kaniko executor container itself.
+	// This is separate from BuildEngine which specifies we want to use Kaniko for building.
+	containerRuntime := "docker"
 	args := []string{
 		"run", "-i",
 		"-v", fmt.Sprintf("%s:/workspace", wd),
@@ -170,34 +321,32 @@ func buildContainer(
 	}
 
 	// Execute build
-	buildCmd := exec.Command(cmd, args...)
+	buildCmd := exec.Command(containerRuntime, args...)
 	if err := runCmd(buildCmd, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
 	// Load the tar into the container engine
 	tarPath := fmt.Sprintf(".ignore.%s.tar", spec.Name)
-	loadCmd := exec.Command(envs.ContainerEngine, "load", "-i", tarPath)
+	loadCmd := exec.Command(containerRuntime, "load", "-i", tarPath)
 	if err := runCmd(loadCmd, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
 	// Tag with version and latest
 	// First, get the image ID from the tar
-	imageID, err := getImageIDFromTar(envs.ContainerEngine, tarPath)
+	imageID, err := getImageIDFromTar(containerRuntime, tarPath)
 	if err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
 	// Tag with version
-	tagCmd := exec.Command(envs.ContainerEngine, "tag", imageID, imageWithVersion)
-	if err := runCmd(tagCmd, isMCPMode); err != nil {
+	if err := tagImage(containerRuntime, imageID, imageWithVersion, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
 	// Tag with latest
-	tagLatestCmd := exec.Command(envs.ContainerEngine, "tag", imageID, imageLatest)
-	if err := runCmd(tagLatestCmd, isMCPMode); err != nil {
+	if err := tagImage(containerRuntime, imageID, imageLatest, isMCPMode); err != nil {
 		return flaterrors.Join(err, errBuildingContainer)
 	}
 
@@ -207,24 +356,36 @@ func buildContainer(
 	}
 
 	// Add to artifact store
-	artifact := forge.Artifact{
-		Name:      spec.Name,
-		Type:      "container",
-		Location:  imageWithVersion, // Local image reference
-		Timestamp: timestamp,
-		Version:   version,
-	}
+	addArtifactToStore(store, spec.Name, version, timestamp)
 
-	forge.AddOrUpdateArtifact(store, artifact)
-
-	_, _ = fmt.Fprintf(
-		out,
-		"✅ Built container: %s (version: %s)\n",
-		spec.Name,
-		version,
-	)
+	printBuildSuccess(out, spec.Name, version)
 
 	return nil
+}
+
+// buildContainer dispatches to the appropriate build function based on container engine.
+func buildContainer(
+	envs Envs,
+	spec forge.BuildSpec,
+	version, timestamp string,
+	store *forge.ArtifactStore,
+	isMCPMode bool,
+) error {
+	// Dispatch based on container engine
+	switch envs.BuildEngine {
+	case "docker":
+		return buildContainerDocker(envs, spec, version, timestamp, store, isMCPMode)
+	case "kaniko":
+		return buildContainerKaniko(envs, spec, version, timestamp, store, isMCPMode)
+	case "podman":
+		return buildContainerPodman(envs, spec, version, timestamp, store, isMCPMode)
+	default:
+		// Should be unreachable due to validation, but defensive programming
+		return flaterrors.Join(
+			fmt.Errorf("unsupported container engine: %s", envs.BuildEngine),
+			errBuildingContainer,
+		)
+	}
 }
 
 // expandPath expands a path with ~ to the user's home directory.
@@ -271,10 +432,11 @@ func getImageIDFromTar(containerEngine, tarPath string) (string, error) {
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
 
-// Envs holds the environment variables required by the build-container tool.
+// Envs holds the environment variables required by the container-build tool.
 type Envs struct {
-	// ContainerEngine is the container engine to use for building the container (e.g., docker, podman).
-	ContainerEngine string `env:"CONTAINER_ENGINE,required"`
+	// BuildEngine specifies which container build engine to use: docker, kaniko, or podman.
+	// Note: This is different from CONTAINER_ENGINE which may be used internally to run containers.
+	BuildEngine string `env:"CONTAINER_BUILD_ENGINE,required"`
 	// BuildArgs is a list of build arguments to pass to the container build command.
 	BuildArgs []string `env:"BUILD_ARGS"`
 	// KanikoCacheDir is the local directory to use for kaniko layer caching.
@@ -286,18 +448,27 @@ type Envs struct {
 
 const usage = `USAGE
 
-CONTAINER_ENGINE=%q %s
+CONTAINER_BUILD_ENGINE=%q %s
 
 Required environment variables:
-    CONTAINER_ENGINE    string    Container engine such as podman or docker.
+    CONTAINER_BUILD_ENGINE    string    Container build engine: docker, kaniko, or podman.
 
 Optional environment variables:
-    BUILD_ARGS          []string  List of build args (e.g. "GO_BUILD_LDFLAGS=\"-X main.BuildTimestamp=$(TIMESTAMP)\"").
-    KANIKO_CACHE_DIR    string    Local directory for kaniko layer caching (default: ~/.kaniko-cache).
+    BUILD_ARGS                []string  List of build args (e.g. "GO_BUILD_LDFLAGS=\"-X main.BuildTimestamp=$(TIMESTAMP)\"").
+    KANIKO_CACHE_DIR          string    Local directory for kaniko layer caching (default: ~/.kaniko-cache).
+
+Modes:
+    docker  - Native docker build (fast, requires Docker daemon)
+    kaniko  - Rootless Kaniko builds (runs in container via docker, secure)
+    podman  - Native podman build (rootless, requires Podman)
 
 Configuration:
     The tool reads container build specifications from forge.yaml
     Artifacts are written to the path specified in build.artifactStorePath
+
+Note:
+    CONTAINER_BUILD_ENGINE specifies which build mode to use.
+    Internally, docker is used to run the Kaniko executor container in kaniko mode.
 `
 
 // runCmd runs a command, redirecting output to stderr in MCP mode to avoid corrupting JSON-RPC.
@@ -315,7 +486,7 @@ func runCmd(cmd *exec.Cmd, isMCPMode bool) error {
 func printUsage() {
 	fmt.Printf(
 		usage,
-		os.Getenv("CONTAINER_ENGINE"),
+		os.Getenv("CONTAINER_BUILD_ENGINE"),
 		os.Args[0],
 	)
 }

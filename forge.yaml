@@ -19,7 +19,7 @@ engines:
   #     - engine: go://generic-test-runner
   #       spec:
   #         command: "go"
-  #         args: ["run", "./cmd/test-runner-go-verify-tags", "."]
+  #         args: ["run", "./cmd/go-lint-tags", "."]
 
   - alias: setup-integration
     type: testenv
@@ -46,8 +46,8 @@ engines:
           imagePullSecretNamespaces:
             - default
             - test-podinfo
-          # -- imagePullSecretName is the name of the image pull secret to create (defaults to "local-container-registry-credentials").
-          # imagePullSecretName: local-container-registry-credentials
+            # -- imagePullSecretName is the name of the image pull secret to create (defaults to "local-container-registry-credentials").
+            # imagePullSecretName: local-container-registry-credentials
 
       - # -- testenv-helm-install installs Helm charts into the Kind cluster
         engine: "go://testenv-helm-install"
@@ -63,20 +63,20 @@ engines:
 test:
   # -- verify-tags - verify all test files have build tags
   - name: verify-tags
-    runner: "go://test-runner-go-verify-tags"
+    runner: "go://go-lint-tags"
     # -- default value for setup is "go://test-report"
 
   # -- lint - linting as a test stage (no environment needed)
   - name: lint
-    runner: "go://lint-go"
+    runner: "go://go-lint"
 
   # -- unit tests - no environment management needed
   - name: unit
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # -- integration tests - creates isolated test environments
   - name: integration
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
     testenv: "alias://setup-integration"
 
   # -- e2e tests - comprehensive forge integration tests (no environment needed)
@@ -88,93 +88,93 @@ build:
   # Format code before building
   - name: format-code
     src: .
-    engine: go://format-go
+    engine: go://go-format
 
   # Binaries
   - name: forge
     src: ./cmd/forge
     dest: ./build/bin
-    engine: go://build-go
-  - name: build-go
-    src: ./cmd/build-go
+    engine: go://go-build
+  - name: go-build
+    src: ./cmd/go-build
     dest: ./build/bin
-    engine: go://build-go
-  - name: build-container
-    src: ./cmd/build-container
+    engine: go://go-build
+  - name: container-build
+    src: ./cmd/container-build
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: testenv-kind
     src: ./cmd/testenv-kind
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: testenv-lcr
     src: ./cmd/testenv-lcr
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: testenv-helm-install
     src: ./cmd/testenv-helm-install
     dest: ./build/bin
-    engine: go://build-go
-  - name: test-runner-go
-    src: ./cmd/test-runner-go
+    engine: go://go-build
+  - name: go-test
+    src: ./cmd/go-test
     dest: ./build/bin
-    engine: go://build-go
-  - name: test-runner-go-verify-tags
-    src: ./cmd/test-runner-go-verify-tags
+    engine: go://go-build
+  - name: go-lint-tags
+    src: ./cmd/go-lint-tags
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: testenv
     src: ./cmd/testenv
     dest: ./build/bin
-    engine: go://build-go
-  - name: format-go
-    src: ./cmd/format-go
+    engine: go://go-build
+  - name: go-format
+    src: ./cmd/go-format
     dest: ./build/bin
-    engine: go://build-go
-  - name: lint-go
-    src: ./cmd/lint-go
+    engine: go://go-build
+  - name: go-lint
+    src: ./cmd/go-lint
     dest: ./build/bin
-    engine: go://build-go
-  - name: generate-mocks
-    src: ./cmd/generate-mocks
+    engine: go://go-build
+  - name: go-gen-mocks
+    src: ./cmd/go-gen-mocks
     dest: ./build/bin
-    engine: go://build-go
-  - name: generate-openapi-go
-    src: ./cmd/generate-openapi-go
+    engine: go://go-build
+  - name: go-gen-openapi
+    src: ./cmd/go-gen-openapi
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: forge-e2e
     src: ./cmd/forge-e2e
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: generic-builder
     src: ./cmd/generic-builder
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: generic-test-runner
     src: ./cmd/generic-test-runner
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: test-report
     src: ./cmd/test-report
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
   - name: ci-orchestrator
     src: ./cmd/ci-orchestrator
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
   # Containers
   - name: for-testing-purposes
     src: ./containers/for-testing-purposes/Containerfile
-    engine: go://build-container
+    engine: go://container-build
 
 # -- generateOpenAPI defines the configuration for generating OpenAPI client and server code
 # generateOpenAPI:
 #   defaults:
 #     sourceDir: ./api
 #     destinationDir: ./pkg/generated
-#     engine: go://generate-openapi-go
+#     engine: go://go-gen-openapi
 #   specs:
 #     - name: example-api
 #       versions:
