@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/alexandremahdhaoui/forge/internal/testutil"
 )
 
 // TestForgeTestCommand tests the complete forge test workflow end-to-end.
@@ -44,11 +46,11 @@ func TestForgeTestCommand(t *testing.T) {
 		t.Fatalf("Failed to build test-integration binary: %v", err)
 	}
 
-	// Build test-runner-go binary
-	testRunnerBinary := filepath.Join(buildBinDir, "test-runner-go")
-	buildCmd = exec.Command("go", "build", "-o", testRunnerBinary, "../../cmd/test-runner-go")
+	// Build go-test binary
+	testRunnerBinary := filepath.Join(buildBinDir, "go-test")
+	buildCmd = exec.Command("go", "build", "-o", testRunnerBinary, "../../cmd/go-test")
 	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build test-runner-go binary: %v", err)
+		t.Fatalf("Failed to build go-test binary: %v", err)
 	}
 
 	// Setup test forge.yaml
@@ -59,11 +61,11 @@ artifactStorePath: ` + artifactStorePath + `
 test:
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   - name: integration
     engine: "go://test-integration"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
 	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
@@ -82,9 +84,8 @@ test:
 		t.Fatalf("Failed to create test environment: %v\nOutput: %s", err, string(output))
 	}
 
-	// Extract test ID from output (last line, as logs may be present)
-	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
-	testID := strings.TrimSpace(lines[len(lines)-1])
+	// Extract test ID from output
+	testID := testutil.ExtractTestID(string(output))
 	t.Logf("Created test environment: %s", testID)
 
 	if testID == "" {
@@ -98,8 +99,7 @@ test:
 	// Ensure cleanup at the end
 	defer func() {
 		t.Log("Cleaning up test environment...")
-		cleanupCmd := exec.Command(forgeBinary, "test", "integration", "delete", testID)
-		cleanupCmd.Run() // Ignore errors in cleanup
+		_ = testutil.ForceCleanupTestEnv(testID)
 	}()
 
 	// Step 2: List test environments
@@ -222,10 +222,10 @@ func TestForgeTestCommand_AutoCreateEnvironment(t *testing.T) {
 		t.Fatalf("Failed to build test-integration binary: %v", err)
 	}
 
-	testRunnerBinary := filepath.Join(buildBinDir, "test-runner-go")
-	buildCmd = exec.Command("go", "build", "-o", testRunnerBinary, "../../cmd/test-runner-go")
+	testRunnerBinary := filepath.Join(buildBinDir, "go-test")
+	buildCmd = exec.Command("go", "build", "-o", testRunnerBinary, "../../cmd/go-test")
 	if err := buildCmd.Run(); err != nil {
-		t.Fatalf("Failed to build test-runner-go binary: %v", err)
+		t.Fatalf("Failed to build go-test binary: %v", err)
 	}
 
 	// Setup test forge.yaml
@@ -236,7 +236,7 @@ artifactStorePath: ` + artifactStorePath + `
 test:
   - name: integration
     engine: "go://test-integration"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
 	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
@@ -285,7 +285,7 @@ artifactStorePath: ` + artifactStorePath + `
 test:
   - name: integration
     engine: "go://test-integration"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 `
 	forgeYAMLPath := filepath.Join(tmpDir, "forge.yaml")
 	err := os.WriteFile(forgeYAMLPath, []byte(forgeYAML), 0o644)
