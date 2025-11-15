@@ -1,4 +1,4 @@
-# lint-go MCP Server
+# go-lint MCP Server
 
 MCP server for running Go linter (golangci-lint) and generating test reports.
 
@@ -9,12 +9,12 @@ Runs golangci-lint on Go code, generates test reports with pass/fail status, and
 ## Invocation
 
 ```bash
-lint-go --mcp
+go-lint --mcp
 ```
 
 Forge invokes this via:
 ```yaml
-runner: go://lint-go
+runner: go://go-lint
 ```
 
 ## Available Tools
@@ -68,7 +68,7 @@ In `forge.yaml`:
 ```yaml
 test:
   - name: lint
-    runner: go://lint-go
+    runner: go://go-lint
 ```
 
 Run with:
@@ -105,6 +105,6 @@ Uses `.golangci.yml` in project root if present. Falls back to golangci-lint def
 
 ## See Also
 
-- [test-runner-go MCP Server](../test-runner-go/MCP.md)
-- [format-go MCP Server](../format-go/MCP.md)
+- [go-test MCP Server](../go-test/MCP.md)
+- [go-format MCP Server](../go-format/MCP.md)
 - [Forge Test Documentation](../../docs/forge-test-usage.md)

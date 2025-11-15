@@ -14,7 +14,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// runMCPServer starts the build-go MCP server with stdio transport.
+// runMCPServer starts the go-build MCP server with stdio transport.
 // It creates an MCP server, registers tools, and runs the server until stdin closes.
 func runMCPServer() error {
 	server := mcpserver.New(Name, Version)
@@ -65,6 +65,9 @@ func handleBuildTool(
 		Engine: input.Engine,
 	}
 
+	// Extract build options from input
+	opts := extractBuildOptionsFromInput(input)
+
 	// Build the binary
 	timestamp := time.Now().UTC().Format(time.RFC3339)
 	envs := Envs{} // Use default (empty) environment
@@ -73,7 +76,7 @@ func handleBuildTool(
 	var dummyStore forge.ArtifactStore
 
 	// Note: Pass isMCPMode=true to suppress stdout output that would corrupt JSON-RPC
-	if err := buildBinary(envs, spec, version, timestamp, &dummyStore, true); err != nil {
+	if err := buildBinary(envs, spec, version, timestamp, &dummyStore, true, opts); err != nil {
 		return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v", err)), nil, nil
 	}
 
@@ -115,4 +118,54 @@ func handleBuildBatchTool(
 	// Format the result
 	result, returnedArtifacts := mcputil.FormatBatchResult("binaries", artifacts, errorMsgs)
 	return result, returnedArtifacts, nil
+}
+
+// extractBuildOptionsFromInput extracts BuildOptions from BuildInput fields.
+// It first checks the Spec field (from forge.yaml BuildSpec.Spec), then falls back to direct Args/Env fields.
+// Direct Args/Env fields take precedence over Spec if both are present.
+func extractBuildOptionsFromInput(input mcptypes.BuildInput) *BuildOptions {
+	opts := &BuildOptions{}
+
+	// First, try to extract from Spec field (from BuildSpec.Spec in forge.yaml)
+	if len(input.Spec) > 0 {
+		// Extract args from spec
+		if argsVal, ok := input.Spec["args"]; ok {
+			if args, ok := argsVal.([]interface{}); ok {
+				opts.CustomArgs = make([]string, 0, len(args))
+				for _, arg := range args {
+					if argStr, ok := arg.(string); ok {
+						opts.CustomArgs = append(opts.CustomArgs, argStr)
+					}
+				}
+			}
+		}
+
+		// Extract env from spec
+		if envVal, ok := input.Spec["env"]; ok {
+			if env, ok := envVal.(map[string]interface{}); ok {
+				opts.CustomEnv = make(map[string]string, len(env))
+				for key, val := range env {
+					if valStr, ok := val.(string); ok {
+						opts.CustomEnv[key] = valStr
+					}
+				}
+			}
+		}
+	}
+
+	// Direct Args/Env fields take precedence over Spec
+	if len(input.Args) > 0 {
+		opts.CustomArgs = input.Args
+	}
+
+	if len(input.Env) > 0 {
+		opts.CustomEnv = input.Env
+	}
+
+	// Return nil if no options were extracted
+	if len(opts.CustomArgs) == 0 && len(opts.CustomEnv) == 0 {
+		return nil
+	}
+
+	return opts
 }

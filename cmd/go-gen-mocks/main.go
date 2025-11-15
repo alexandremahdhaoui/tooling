@@ -26,7 +26,7 @@ var (
 var versionInfo *version.Info
 
 func init() {
-	versionInfo = version.New("generate-mocks")
+	versionInfo = version.New("go-gen-mocks")
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
@@ -58,13 +58,13 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`generate-mocks - Generate Go mocks using mockery
+	fmt.Println(`go-gen-mocks - Generate Go mocks using mockery
 
 Usage:
-  generate-mocks                Generate mocks
-  generate-mocks --mcp          Run as MCP server
-  generate-mocks version        Show version information
-  generate-mocks help           Show this help message
+  go-gen-mocks                Generate mocks
+  go-gen-mocks --mcp          Run as MCP server
+  go-gen-mocks version        Show version information
+  go-gen-mocks help           Show this help message
 
 Environment Variables:
   MOCKERY_VERSION              Version of mockery to use (default: v2.42.0)
@@ -73,7 +73,7 @@ Environment Variables:
 
 func runMCPServer() error {
 	v, _, _ := versionInfo.Get()
-	server := mcpserver.New("generate-mocks", v)
+	server := mcpserver.New("go-gen-mocks", v)
 
 	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "build",

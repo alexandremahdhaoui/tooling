@@ -26,7 +26,7 @@ var (
 var versionInfo *version.Info
 
 func init() {
-	versionInfo = version.New("format-go")
+	versionInfo = version.New("go-format")
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
@@ -58,13 +58,13 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`format-go - Format Go code using gofumpt
+	fmt.Println(`go-format - Format Go code using gofumpt
 
 Usage:
-  format-go [path]          Format Go code at path (default: .)
-  format-go --mcp           Run as MCP server
-  format-go version         Show version information
-  format-go help            Show this help message
+  go-format [path]          Format Go code at path (default: .)
+  go-format --mcp           Run as MCP server
+  go-format version         Show version information
+  go-format help            Show this help message
 
 Environment Variables:
   GOFUMPT_VERSION          Version of gofumpt to use (default: v0.6.0)`)
@@ -72,7 +72,7 @@ Environment Variables:
 
 func runMCPServer() error {
 	v, _, _ := versionInfo.Get()
-	server := mcpserver.New("format-go", v)
+	server := mcpserver.New("go-format", v)
 
 	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "build",

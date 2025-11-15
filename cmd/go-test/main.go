@@ -15,11 +15,11 @@ var (
 	BuildTimestamp = "unknown"
 )
 
-// versionInfo holds test-runner-go's version information
+// versionInfo holds go-test's version information
 var versionInfo *version.Info
 
 func init() {
-	versionInfo = version.New("test-runner-go")
+	versionInfo = version.New("go-test")
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
@@ -63,21 +63,21 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`test-runner-go - Run Go tests and generate structured reports
+	fmt.Println(`go-test - Run Go tests and generate structured reports
 
 Usage:
-  test-runner-go <STAGE> <NAME>     Run tests for the given stage
-  test-runner-go --mcp               Run as MCP server
-  test-runner-go version             Show version information
+  go-test <STAGE> <NAME>     Run tests for the given stage
+  go-test --mcp               Run as MCP server
+  go-test version             Show version information
 
 Arguments:
   STAGE    Test stage name (e.g., "unit", "integration", "e2e")
   NAME     Test run identifier (used for output files)
 
 Examples:
-  test-runner-go unit mytest
-  test-runner-go integration smoke-20241103
-  test-runner-go --mcp
+  go-test unit mytest
+  go-test integration smoke-20241103
+  go-test --mcp
 
 Output:
   - Test output is written to stderr

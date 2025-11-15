@@ -1,4 +1,4 @@
-# test-runner-go-verify-tags MCP Server
+# go-lint-tags MCP Server
 
 MCP server for verifying that all Go test files have valid build tags.
 
@@ -9,12 +9,12 @@ Scans repository for test files and verifies each has one of the required build 
 ## Invocation
 
 ```bash
-test-runner-go-verify-tags --mcp
+go-lint-tags --mcp
 ```
 
 Forge invokes this via:
 ```yaml
-runner: go://test-runner-go-verify-tags
+runner: go://go-lint-tags
 ```
 
 ## Available Tools
@@ -70,7 +70,7 @@ In `forge.yaml`:
 test:
   - name: verify-tags
     stage: verify-tags
-    runner: go://test-runner-go-verify-tags
+    runner: go://go-lint-tags
 ```
 
 Run with:
@@ -129,5 +129,5 @@ Run as pre-commit check or in CI to ensure:
 
 ## See Also
 
-- [test-runner-go MCP Server](../test-runner-go/MCP.md)
+- [go-test MCP Server](../go-test/MCP.md)
 - [Test Documentation](../../docs/test-runner-guide.md)

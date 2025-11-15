@@ -25,7 +25,7 @@ var (
 var versionInfo *version.Info
 
 func init() {
-	versionInfo = version.New("lint-go")
+	versionInfo = version.New("go-lint")
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
@@ -79,20 +79,20 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`lint-go - Lint Go code using golangci-lint
+	fmt.Println(`go-lint - Lint Go code using golangci-lint
 
 Usage:
-  lint-go <STAGE> <NAME>        Run linter for the given stage
-  lint-go --mcp                 Run as MCP server
-  lint-go version               Show version information
+  go-lint <STAGE> <NAME>        Run linter for the given stage
+  go-lint --mcp                 Run as MCP server
+  go-lint version               Show version information
 
 Arguments:
   STAGE    Test stage name (e.g., "lint")
   NAME     Test run identifier
 
 Examples:
-  lint-go lint my-lint-20241103
-  lint-go --mcp
+  go-lint lint my-lint-20241103
+  go-lint --mcp
 
 Environment Variables:
   GOLANGCI_LINT_VERSION    Version of golangci-lint to use (default: v1.59.1)
@@ -104,7 +104,7 @@ Output:
 
 func runMCPServer() error {
 	v, _, _ := versionInfo.Get()
-	server := mcpserver.New("lint-go", v)
+	server := mcpserver.New("go-lint", v)
 
 	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "run",

@@ -15,7 +15,7 @@ func TestFormatInputAcceptsBuildSpecFields(t *testing.T) {
 		Src:    "./test",
 		Name:   "test-artifact",
 		Dest:   "./build",
-		Engine: "go://format-go",
+		Engine: "go://go-format",
 	}
 
 	// Verify all fields are accessible
@@ -31,8 +31,8 @@ func TestFormatInputAcceptsBuildSpecFields(t *testing.T) {
 	if input.Dest != "./build" {
 		t.Errorf("Expected Dest to be './build', got %s", input.Dest)
 	}
-	if input.Engine != "go://format-go" {
-		t.Errorf("Expected Engine to be 'go://format-go', got %s", input.Engine)
+	if input.Engine != "go://go-format" {
+		t.Errorf("Expected Engine to be 'go://go-format', got %s", input.Engine)
 	}
 }
 
@@ -102,10 +102,10 @@ func TestFormatInputJSONMarshaling(t *testing.T) {
 
 	input := mcptypes.BuildInput{
 		Path:   ".",
-		Src:    "./cmd/format-go",
+		Src:    "./cmd/go-format",
 		Name:   "format-code",
 		Dest:   "./build",
-		Engine: "go://format-go",
+		Engine: "go://go-format",
 	}
 
 	// Verify struct has json tags by checking they're not empty
@@ -115,14 +115,14 @@ func TestFormatInputJSONMarshaling(t *testing.T) {
 	}
 }
 
-// TestBuildSpecCompatibility simulates BuildSpec parameters being passed to format-go
+// TestBuildSpecCompatibility simulates BuildSpec parameters being passed to go-format
 func TestBuildSpecCompatibility(t *testing.T) {
 	// Create a mock input that would come from forge build command
 	input := mcptypes.BuildInput{
 		Name:   "format-code",
 		Src:    ".",
 		Dest:   "", // Not used by formatter but accepted for compatibility
-		Engine: "go://format-go",
+		Engine: "go://go-format",
 	}
 
 	// Verify all BuildSpec fields are accessible and don't cause compilation errors
@@ -135,8 +135,8 @@ func TestBuildSpecCompatibility(t *testing.T) {
 	if input.Dest != "" {
 		t.Errorf("Expected Dest to be empty, got %s", input.Dest)
 	}
-	if input.Engine != "go://format-go" {
-		t.Errorf("Expected Engine to be 'go://format-go', got %s", input.Engine)
+	if input.Engine != "go://go-format" {
+		t.Errorf("Expected Engine to be 'go://go-format', got %s", input.Engine)
 	}
 
 	// Verify that we can create a map compatible with MCP tool arguments

@@ -20,7 +20,7 @@ var (
 var versionInfo *version.Info
 
 func init() {
-	versionInfo = version.New("test-runner-go-verify-tags")
+	versionInfo = version.New("go-lint-tags")
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
@@ -211,13 +211,13 @@ func verifyTags(rootDir string) ([]string, int, error) {
 }
 
 func printUsage() {
-	fmt.Print(`test-runner-go-verify-tags - Verify all test files have build tags
+	fmt.Print(`go-lint-tags - Verify all test files have build tags
 
 Usage:
-  test-runner-go-verify-tags [directory]    Verify test files in directory (default: .)
-  test-runner-go-verify-tags --mcp          Run as MCP server
-  test-runner-go-verify-tags version        Show version information
-  test-runner-go-verify-tags help           Show this help message
+  go-lint-tags [directory]    Verify test files in directory (default: .)
+  go-lint-tags --mcp          Run as MCP server
+  go-lint-tags version        Show version information
+  go-lint-tags help           Show this help message
 
 Description:
   This tool recursively searches for *_test.go files and verifies that each
@@ -229,8 +229,8 @@ Description:
   The tool exits with code 1 if any test files are missing build tags.
 
 Examples:
-  test-runner-go-verify-tags .
-  test-runner-go-verify-tags ./cmd/forge
-  test-runner-go-verify-tags /path/to/project
+  go-lint-tags .
+  go-lint-tags ./cmd/forge
+  go-lint-tags /path/to/project
 `)
 }

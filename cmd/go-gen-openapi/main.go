@@ -30,7 +30,7 @@ var (
 var versionInfo *version.Info
 
 func init() {
-	versionInfo = version.New("generate-openapi-go")
+	versionInfo = version.New("go-gen-openapi")
 	versionInfo.Version = Version
 	versionInfo.CommitSHA = CommitSHA
 	versionInfo.BuildTimestamp = BuildTimestamp
@@ -91,12 +91,12 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`generate-openapi-go - Generate OpenAPI client and server code
+	fmt.Println(`go-gen-openapi - Generate OpenAPI client and server code
 
 Usage:
-  generate-openapi-go              Generate code from forge.yaml
-  generate-openapi-go --mcp        Run as MCP server
-  generate-openapi-go version      Show version information
+  go-gen-openapi              Generate code from forge.yaml
+  go-gen-openapi --mcp        Run as MCP server
+  go-gen-openapi version      Show version information
 
 Environment Variables:
   OAPI_CODEGEN_VERSION            Version of oapi-codegen to use (default: v2.3.0)
@@ -107,7 +107,7 @@ Configuration:
 
 func runMCPServer() error {
 	v, _, _ := versionInfo.Get()
-	server := mcpserver.New("generate-openapi-go", v)
+	server := mcpserver.New("go-gen-openapi", v)
 
 	mcpserver.RegisterTool(server, &mcp.Tool{
 		Name:        "build",

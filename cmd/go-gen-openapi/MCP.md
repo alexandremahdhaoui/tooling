@@ -1,4 +1,4 @@
-# generate-openapi-go MCP Server
+# go-gen-openapi MCP Server
 
 MCP server for generating OpenAPI client and server code from specifications.
 
@@ -9,12 +9,12 @@ Provides MCP tools for generating Go client and server code from OpenAPI specifi
 ## Invocation
 
 ```bash
-generate-openapi-go --mcp
+go-gen-openapi --mcp
 ```
 
 Forge invokes this automatically via:
 ```yaml
-engine: go://generate-openapi-go
+engine: go://go-gen-openapi
 ```
 
 ## Available Tools
@@ -63,7 +63,7 @@ In `forge.yaml`:
 ```yaml
 build:
   - name: generate-openapi
-    engine: go://generate-openapi-go
+    engine: go://go-gen-openapi
 
 generateOpenAPI:
   defaults:
@@ -139,6 +139,6 @@ Example: `myapi.v1.yaml`, `myapi.v2.yaml`
 
 ## See Also
 
-- [build-go MCP Server](../build-go/MCP.md)
-- [generate-mocks MCP Server](../generate-mocks/MCP.md)
+- [go-build MCP Server](../go-build/MCP.md)
+- [go-gen-mocks MCP Server](../go-gen-mocks/MCP.md)
 - [oapi-codegen Documentation](https://github.com/oapi-codegen/oapi-codegen)

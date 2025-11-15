@@ -11,11 +11,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// runMCPServerImpl starts the test-runner-go MCP server with stdio transport.
+// runMCPServerImpl starts the go-test MCP server with stdio transport.
 // It creates an MCP server, registers tools, and runs the server until stdin closes.
 func runMCPServerImpl() error {
 	v, _, _ := versionInfo.Get()
-	server := mcpserver.New("test-runner-go", v)
+	server := mcpserver.New("go-test", v)
 
 	// Register run tool
 	mcpserver.RegisterTool(server, &mcp.Tool{

@@ -1,4 +1,4 @@
-# generate-mocks MCP Server
+# go-gen-mocks MCP Server
 
 MCP server for generating Go mocks using mockery.
 
@@ -9,12 +9,12 @@ Provides MCP tools for generating mock implementations of Go interfaces using mo
 ## Invocation
 
 ```bash
-generate-mocks --mcp
+go-gen-mocks --mcp
 ```
 
 Forge invokes this automatically via:
 ```yaml
-engine: go://generate-mocks
+engine: go://go-gen-mocks
 ```
 
 ## Available Tools
@@ -26,7 +26,7 @@ Generate Go mocks using mockery.
 **Input Schema:**
 ```json
 {
-  "name": "string (required)",        // Generation task name (e.g., "generate-mocks")
+  "name": "string (required)",        // Generation task name (e.g., "go-gen-mocks")
   "engine": "string (optional)",      // Engine reference
   "tmpDir": "string (optional)",      // Temporary directory (injected by forge)
   "buildDir": "string (optional)",    // Build directory (injected by forge)
@@ -51,7 +51,7 @@ Generate Go mocks using mockery.
   "params": {
     "name": "build",
     "arguments": {
-      "name": "generate-mocks"
+      "name": "go-gen-mocks"
     }
   }
 }
@@ -62,8 +62,8 @@ Generate Go mocks using mockery.
 In `forge.yaml`:
 ```yaml
 build:
-  - name: generate-mocks
-    engine: go://generate-mocks
+  - name: go-gen-mocks
+    engine: go://go-gen-mocks
 ```
 
 Run with:
@@ -105,6 +105,6 @@ packages:
 
 ## See Also
 
-- [build-go MCP Server](../build-go/MCP.md)
-- [generate-openapi-go MCP Server](../generate-openapi-go/MCP.md)
+- [go-build MCP Server](../go-build/MCP.md)
+- [go-gen-openapi MCP Server](../go-gen-openapi/MCP.md)
 - [Mockery Documentation](https://vektra.github.io/mockery/)

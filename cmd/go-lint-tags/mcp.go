@@ -15,11 +15,11 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// runMCPServerImpl starts the test-runner-go-verify-tags MCP server with stdio transport.
+// runMCPServerImpl starts the go-lint-tags MCP server with stdio transport.
 // It creates an MCP server, registers tools, and runs the server until stdin closes.
 func runMCPServerImpl() error {
 	v, _, _ := versionInfo.Get()
-	server := mcpserver.New("test-runner-go-verify-tags", v)
+	server := mcpserver.New("go-lint-tags", v)
 
 	// Register run tool
 	mcpserver.RegisterTool(server, &mcp.Tool{

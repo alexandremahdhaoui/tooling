@@ -1,4 +1,4 @@
-# format-go MCP Server
+# go-format MCP Server
 
 MCP server for formatting Go code using gofmt.
 
@@ -9,12 +9,12 @@ Provides MCP tools for automatically formatting Go source code to maintain consi
 ## Invocation
 
 ```bash
-format-go --mcp
+go-format --mcp
 ```
 
 Forge invokes this automatically via:
 ```yaml
-engine: go://format-go
+engine: go://go-format
 ```
 
 ## Available Tools
@@ -66,7 +66,7 @@ In `forge.yaml`:
 build:
   - name: format-code
     src: .
-    engine: go://format-go
+    engine: go://go-format
 ```
 
 Run with:
@@ -92,6 +92,6 @@ forge build
 
 ## See Also
 
-- [lint-go MCP Server](../lint-go/MCP.md)
-- [build-go MCP Server](../build-go/MCP.md)
+- [go-lint MCP Server](../go-lint/MCP.md)
+- [go-build MCP Server](../go-build/MCP.md)
 - [Forge Build Documentation](../../docs/forge-usage.md#building-artifacts)

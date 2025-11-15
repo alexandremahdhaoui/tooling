@@ -1,4 +1,4 @@
-# test-runner-go MCP Server
+# go-test MCP Server
 
 MCP server for running Go tests with JUnit XML and coverage reporting.
 
@@ -9,12 +9,12 @@ Runs Go tests for specific build tags (unit, integration, e2e), generates JUnit 
 ## Invocation
 
 ```bash
-test-runner-go --mcp
+go-test --mcp
 ```
 
 Forge invokes this via:
 ```yaml
-runner: go://test-runner-go
+runner: go://go-test
 ```
 
 ## Available Tools
@@ -82,12 +82,12 @@ test:
   - name: unit
     stage: unit
     engine: go://testenv
-    runner: go://test-runner-go
+    runner: go://go-test
 
   - name: integration
     stage: integration
     engine: go://testenv
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 Run with:
@@ -147,6 +147,6 @@ TestReport is automatically stored in artifact store at:
 
 ## See Also
 
-- [test-runner-go-verify-tags MCP Server](../test-runner-go-verify-tags/MCP.md)
+- [go-lint-tags MCP Server](../go-lint-tags/MCP.md)
 - [generic-test-runner MCP Server](../generic-test-runner/MCP.md)
 - [Test Documentation](../../docs/forge-test-usage.md)
