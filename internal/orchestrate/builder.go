@@ -118,14 +118,27 @@ func (o *BuilderOrchestrator) Orchestrate(
 // parseArtifacts converts MCP result to forge.Artifact slice.
 // Copied and adapted from cmd/forge/build.go:159-181.
 func parseArtifacts(result interface{}) ([]forge.Artifact, error) {
-	// Result could be a single artifact or array of artifacts
+	// Result could be:
+	// 1. A single artifact object
+	// 2. An array of artifacts
+	// 3. A BatchResult object (from buildBatch) containing an artifacts array
+
 	// Try to convert to JSON and back to parse it
 	data, err := json.Marshal(result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal result: %w", err)
 	}
 
-	// Try parsing as single artifact first
+	// Try parsing as BatchResult first (from buildBatch operations)
+	type BatchResult struct {
+		Artifacts []forge.Artifact `json:"artifacts"`
+	}
+	var batchResult BatchResult
+	if err := json.Unmarshal(data, &batchResult); err == nil && len(batchResult.Artifacts) > 0 {
+		return batchResult.Artifacts, nil
+	}
+
+	// Try parsing as single artifact
 	var singleArtifact forge.Artifact
 	if err := json.Unmarshal(data, &singleArtifact); err == nil && singleArtifact.Name != "" {
 		return []forge.Artifact{singleArtifact}, nil

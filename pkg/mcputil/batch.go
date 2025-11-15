@@ -63,26 +63,45 @@ func extractErrorMessage(result *mcp.CallToolResult, err error) string {
 	return "unknown error"
 }
 
+// BatchResult wraps an array of artifacts in an object for MCP structured content.
+// Claude Code's MCP client requires structured content to always be an object, never a bare array.
+type BatchResult struct {
+	Artifacts []any  `json:"artifacts"`
+	Summary   string `json:"summary"`
+	Count     int    `json:"count"`
+}
+
 // FormatBatchResult creates an MCP result for batch operations.
 // It returns an error result if there were any failures, otherwise a success result.
+// The artifacts are wrapped in a BatchResult object to comply with MCP client expectations.
 //
 // Parameters:
 //   - operationType: description of what was built (e.g., "binaries", "containers")
 //   - artifacts: successful artifacts
 //   - errorMsgs: error messages from failed operations
 func FormatBatchResult(operationType string, artifacts []any, errorMsgs []string) (*mcp.CallToolResult, any) {
+	summary := fmt.Sprintf("Successfully built %d %s", len(artifacts), operationType)
+
+	// Wrap artifacts in BatchResult object
+	batchResult := BatchResult{
+		Artifacts: artifacts,
+		Summary:   summary,
+		Count:     len(artifacts),
+	}
+
 	if len(errorMsgs) > 0 {
+		batchResult.Summary = fmt.Sprintf("Batch build completed with errors: %v", errorMsgs)
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{
-				&mcp.TextContent{Text: fmt.Sprintf("Batch build completed with errors: %v", errorMsgs)},
+				&mcp.TextContent{Text: batchResult.Summary},
 			},
 			IsError: true,
-		}, artifacts
+		}, batchResult
 	}
 
 	return &mcp.CallToolResult{
 		Content: []mcp.Content{
-			&mcp.TextContent{Text: fmt.Sprintf("Successfully built %d %s", len(artifacts), operationType)},
+			&mcp.TextContent{Text: batchResult.Summary},
 		},
-	}, artifacts
+	}, batchResult
 }

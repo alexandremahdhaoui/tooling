@@ -130,8 +130,17 @@ func TestFormatBatchResult_WithErrors(t *testing.T) {
 	if !result.IsError {
 		t.Error("Expected IsError to be true")
 	}
-	if len(returnedArtifacts.([]any)) != 1 {
-		t.Errorf("Expected 1 artifact returned, got %d", len(returnedArtifacts.([]any)))
+
+	// returnedArtifacts is now a BatchResult object, not a bare array
+	batchResult, ok := returnedArtifacts.(BatchResult)
+	if !ok {
+		t.Fatalf("Expected returnedArtifacts to be BatchResult, got %T", returnedArtifacts)
+	}
+	if len(batchResult.Artifacts) != 1 {
+		t.Errorf("Expected 1 artifact in BatchResult, got %d", len(batchResult.Artifacts))
+	}
+	if batchResult.Count != 1 {
+		t.Errorf("Expected Count to be 1, got %d", batchResult.Count)
 	}
 }
 
@@ -144,7 +153,16 @@ func TestFormatBatchResult_Success(t *testing.T) {
 	if result.IsError {
 		t.Error("Expected IsError to be false")
 	}
-	if len(returnedArtifacts.([]any)) != 2 {
-		t.Errorf("Expected 2 artifacts returned, got %d", len(returnedArtifacts.([]any)))
+
+	// returnedArtifacts is now a BatchResult object, not a bare array
+	batchResult, ok := returnedArtifacts.(BatchResult)
+	if !ok {
+		t.Fatalf("Expected returnedArtifacts to be BatchResult, got %T", returnedArtifacts)
+	}
+	if len(batchResult.Artifacts) != 2 {
+		t.Errorf("Expected 2 artifacts in BatchResult, got %d", len(batchResult.Artifacts))
+	}
+	if batchResult.Count != 2 {
+		t.Errorf("Expected Count to be 2, got %d", batchResult.Count)
 	}
 }

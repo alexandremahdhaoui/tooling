@@ -59,6 +59,19 @@ type TestAllResult struct {
 	Summary        string             `json:"summary"`
 }
 
+// BuildResult represents the result of a build operation.
+type BuildResult struct {
+	Artifacts []forge.Artifact `json:"artifacts"`
+	Summary   string           `json:"summary"`
+}
+
+// TestListResult represents the result of listing test reports.
+type TestListResult struct {
+	Reports []forge.TestReport `json:"reports"`
+	Stage   string             `json:"stage"`
+	Count   int                `json:"count"`
+}
+
 // PromptListInput represents the input parameters for the prompt-list tool.
 type PromptListInput struct {
 	// No parameters - lists all prompts
@@ -282,20 +295,21 @@ func handleBuildTool(
 		}, nil, nil
 	}
 
+	// Create BuildResult wrapper
+	buildResult := BuildResult{
+		Artifacts: allArtifacts,
+		Summary:   fmt.Sprintf("Successfully built %d artifact(s)", totalBuilt),
+	}
+
 	if len(buildErrors) > 0 {
 		// Return with error but include artifacts that were successfully built
-		result, artifact := mcputil.ErrorResultWithArtifact(
-			fmt.Sprintf("Build completed with errors: %v. Successfully built %d artifact(s)", buildErrors, totalBuilt),
-			allArtifacts,
-		)
+		buildResult.Summary = fmt.Sprintf("Build completed with errors: %v. Successfully built %d artifact(s)", buildErrors, totalBuilt)
+		result, artifact := mcputil.ErrorResultWithArtifact(buildResult.Summary, buildResult)
 		return result, artifact, nil
 	}
 
-	// Return all built artifacts
-	result, artifact := mcputil.SuccessResultWithArtifact(
-		fmt.Sprintf("Successfully built %d artifact(s)", totalBuilt),
-		allArtifacts,
-	)
+	// Return all built artifacts wrapped in BuildResult
+	result, artifact := mcputil.SuccessResultWithArtifact(buildResult.Summary, buildResult)
 	return result, artifact, nil
 }
 
@@ -592,10 +606,25 @@ func handleTestListTool(
 	// List test reports (NOT environments) - aligned with new CLI behavior
 	reports := forge.ListTestReports(&store, testSpec.Name)
 
-	// Return structured array of TestReport objects
+	// Convert []*forge.TestReport to []forge.TestReport for consistency
+	reportsList := make([]forge.TestReport, 0, len(reports))
+	for _, r := range reports {
+		if r != nil {
+			reportsList = append(reportsList, *r)
+		}
+	}
+
+	// Wrap in TestListResult object
+	testListResult := TestListResult{
+		Reports: reportsList,
+		Stage:   input.Stage,
+		Count:   len(reportsList),
+	}
+
+	// Return structured TestListResult object
 	result, artifact := mcputil.SuccessResultWithArtifact(
-		fmt.Sprintf("Successfully listed %d test report(s) for stage: %s", len(reports), input.Stage),
-		reports,
+		fmt.Sprintf("Successfully listed %d test report(s) for stage: %s", len(reportsList), input.Stage),
+		testListResult,
 	)
 	return result, artifact, nil
 }
