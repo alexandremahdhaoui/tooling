@@ -44,12 +44,12 @@ test:
   # Unit tests - test-report only (no environment)
   - name: unit
     testenv: "go://test-report"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # Integration tests - full test environment
   - name: integration
     testenv: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # E2E tests - test-report only
   - name: e2e
@@ -59,7 +59,7 @@ test:
   # Linting - test-report only
   - name: lint
     testenv: "go://test-report"
-    runner: "go://lint-go"
+    runner: "go://go-lint"
 ```
 
 ### 2. Run Tests
@@ -167,7 +167,7 @@ Stages configured with `testenv: "go://test-report"` only store test reports, th
 test:
   - name: unit
     testenv: "go://test-report"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 ```
 
 **Behavior:**
@@ -205,7 +205,7 @@ Stages configured with `testenv: "go://testenv"` or other testenv orchestrators 
 test:
   - name: integration
     testenv: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 ```
 
 **Behavior:**
@@ -588,7 +588,7 @@ forge test delete unit $TEST_ID
 test:
   - name: unit
     testenv: "go://test-report"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 ```
 
 ---
@@ -616,7 +616,7 @@ forge test list-env integration
 test:
   - name: integration
     testenv: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 ```
 
 ---
@@ -683,8 +683,8 @@ test:
   - `"go://testenv"` - Full testenv orchestrator
   - `"go://<package>"` - Custom testenv orchestrator
 - `runner`: Test executor
-  - `"go://test-runner-go"` - Go test runner
-  - `"go://lint-go"` - Linter as test runner
+  - `"go://go-test"` - Go test runner
+  - `"go://go-lint"` - Linter as test runner
   - `"go://<package>"` - Custom test runner
 
 ### Testenv URIs
@@ -819,7 +819,7 @@ forge test run integration $ENV_ID
 test:
   - name: integration
     testenv: "go://testenv@v1.0.0"  # ✅ Explicit version
-    runner: "go://test-runner-go@v1.0.0"
+    runner: "go://go-test@v1.0.0"
 ```
 
 ### 5. Use Descriptive Stage Names
@@ -834,12 +834,100 @@ test:
 
 ---
 
+## Writing Tests with testutil
+
+The `internal/testutil` package provides shared utilities for writing consistent, maintainable tests across the forge codebase.
+
+### Quick Example
+
+```go
+import (
+    "testing"
+    "github.com/alexandremahdhaoui/forge/internal/testutil"
+)
+
+func TestMyIntegrationTest(t *testing.T) {
+    // Create test environment with automatic cleanup
+    env := testutil.NewTestEnvironment(t)
+
+    // Run a command
+    result := testutil.RunCommand(t, "forge", "build")
+    testutil.ExpectSuccess(t, result)
+    testutil.AssertContains(t, result.Stdout, "Successfully built")
+
+    // Create a test environment if needed
+    testID, err := env.CreateTestEnv("integration")
+    if err != nil {
+        t.Fatalf("Failed to create test env: %v", err)
+    }
+    // Cleanup is automatic via t.Cleanup()
+}
+```
+
+### Key Features
+
+**Subprocess Execution:**
+- `RunCommand(t, cmd, args...)` - Run command with automatic timeout
+- `RunCommandInDir(t, dir, cmd, args...)` - Run in specific directory
+- `ExpectSuccess(t, result)` - Assert command succeeded
+- `ExpectFailure(t, result, msg)` - Assert command failed
+
+**Test Lifecycle:**
+- `NewTestEnvironment(t)` - Create environment with auto-cleanup
+- `env.CreateTestEnv(stage)` - Create KIND cluster + registry
+- `env.RegisterCleanup(fn)` - Add custom cleanup function
+- Respects `SKIP_CLEANUP=1` for debugging
+
+**Assertions:**
+- `AssertContains(t, actual, expected)` - String contains
+- `AssertNoError(t, err)` - No error occurred
+- `AssertFileExists(t, path)` - File exists
+- All assertions use `t.Fatalf()` for immediate failure
+
+**Helpers:**
+- `ExtractTestID(output)` - Parse test ID from output
+- `VerifyClusterExists(testID)` - Check KIND cluster
+- `FindForgeBinary()` - Locate forge binary
+- `ForceCleanupTestEnv(testID)` - Clean up test environment
+
+### Migration Patterns
+
+**Old Pattern:**
+```go
+cmd := exec.Command("forge", "build")
+output, err := cmd.CombinedOutput()
+if err != nil {
+    t.Fatalf("Command failed: %v", err)
+}
+if !strings.Contains(string(output), "SUCCESS") {
+    t.Errorf("Expected SUCCESS in output")
+}
+```
+
+**New Pattern:**
+```go
+result := testutil.RunCommand(t, "forge", "build")
+testutil.ExpectSuccess(t, result)
+testutil.AssertContains(t, result.Stdout, "SUCCESS")
+```
+
+### Complete Documentation
+
+See [internal/testutil/README.md](../internal/testutil/README.md) for:
+- Complete API reference
+- Migration guide from old patterns
+- Best practices
+- Environment variables
+
+---
+
 ## Reference
 
+- **Test Utilities Package**: [internal/testutil/README.md](../internal/testutil/README.md)
 - **Forge Usage Guide**: [docs/forge-usage.md](./forge-usage.md)
 - **Forge Schema**: [docs/forge-schema.md](./forge-schema.md)
 - **Architecture**: [ARCHITECTURE.md](../ARCHITECTURE.md#test-infrastructure)
 - **Testenv Orchestrator Guide**: [docs/prompts/create-testenv.md](./prompts/create-testenv.md)
 - **Testenv Subengine Guide**: [docs/prompts/create-testenv-subengine.md](./prompts/create-testenv-subengine.md)
 - **Generic Test Runner Guide**: [docs/prompts/use-generic-test-runner.md](./prompts/use-generic-test-runner.md)
-- **Reference Implementation**: `cmd/testenv`, `cmd/test-runner-go`, `cmd/test-report`
+- **Reference Implementation**: `cmd/testenv`, `cmd/go-test`, `cmd/test-report`

@@ -122,8 +122,8 @@ forge build
 ```
 🔨 Building artifacts from forge.yaml...
 ✅ Built: forge (go-binary)
-✅ Built: build-go (go-binary)
-✅ Built: build-container (go-binary)
+✅ Built: go-build (go-binary)
+✅ Built: container-build (go-binary)
 ✅ Built: my-api (container)
 📦 Artifact store updated: .ignore.artifact-store.yaml
 ```
@@ -179,7 +179,7 @@ Currently, forge builds all artifacts. To build selectively, modify `forge.yaml`
 
 ```bash
 # Build just one binary
-go run ./cmd/build-go --mcp <<EOF
+go run ./cmd/go-build --mcp <<EOF
 {
   "jsonrpc": "2.0",
   "id": 1,
@@ -190,7 +190,7 @@ go run ./cmd/build-go --mcp <<EOF
       "name": "my-cli",
       "src": "./cmd/my-cli",
       "dest": "./build/bin",
-      "builder": "go://build-go"
+      "builder": "go://go-build"
     }
   }
 }
@@ -241,13 +241,13 @@ build:
     # Format code first
     - name: format-code
       src: .
-      builder: go://format-go
+      builder: go://go-format
 
     # Then build binaries
     - name: my-app
       src: ./cmd/my-app
       dest: ./build/bin
-      builder: go://build-go
+      builder: go://go-build
 ```
 
 #### How It Works
@@ -261,9 +261,9 @@ When you run `forge build`:
 **Example output:**
 ```bash
 $ forge build
-Building 1 artifact(s) with go://format-go...
+Building 1 artifact(s) with go://go-format...
 ✅ Formatted Go code at .
-Building 13 artifact(s) with go://build-go...
+Building 13 artifact(s) with go://go-build...
 ✅ Built binary: my-app (version: abc123)
 ```
 
@@ -284,10 +284,10 @@ You can also format code manually without building:
 
 ```bash
 # Direct invocation
-go run ./cmd/format-go
+go run ./cmd/go-format
 
 # Or if built locally
-./build/bin/format-go
+./build/bin/go-format
 ```
 
 ### Linting
@@ -303,7 +303,7 @@ Add a lint test stage:
 test:
   - name: lint
     engine: "noop"  # No environment needed
-    runner: "go://lint-go"
+    runner: "go://go-lint"
 ```
 
 #### Run Linter
@@ -428,12 +428,12 @@ test:
   # Unit tests - test-report only (no environment)
   - name: unit
     testenv: "go://test-report"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # Integration tests - creates Kind cluster automatically
   - name: integration
     testenv: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # E2E tests
   - name: e2e
@@ -443,7 +443,7 @@ test:
   # Linting as a test stage
   - name: lint
     testenv: "go://test-report"
-    runner: "go://lint-go"
+    runner: "go://go-lint"
 ```
 
 **Test Environment Types:**
@@ -913,7 +913,7 @@ build:
     - name: my-app
       src: ./cmd/my-app
       dest: ./build/bin
-      builder: go://build-go
+      builder: go://go-build
 ```
 
 ### Custom Test Environment Configuration
@@ -925,7 +925,7 @@ Configure test stages in forge.yaml:
 test:
   - name: integration
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
     config:
       registry:
         enabled: true

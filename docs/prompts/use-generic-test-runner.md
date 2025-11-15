@@ -13,9 +13,9 @@ Generic-test-runner is a flexible test execution wrapper that:
 ## When to Use generic-test-runner vs Built-in Test Runners
 
 **Use Built-in Test Runners When Available:**
-- **Go tests**: Use `go://test-runner-go` for go test (supports coverage, tags, race detector)
-- **Build tag verification**: Use `go://test-runner-go-verify-tags` to verify test files have build tags
-- **Go linting**: Use `go://lint-go` for golangci-lint
+- **Go tests**: Use `go://go-test` for go test (supports coverage, tags, race detector)
+- **Build tag verification**: Use `go://go-lint-tags` to verify test files have build tags
+- **Go linting**: Use `go://go-lint` for golangci-lint
 - **E2E tests**: Use `go://forge-e2e` for forge's own e2e testing framework
 
 **Use generic-test-runner When:**
@@ -30,7 +30,7 @@ Generic-test-runner is a flexible test execution wrapper that:
 # ✅ Good: Use built-in for Go tests
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 **Example - Use generic-test-runner:**
@@ -71,7 +71,7 @@ build:
   - name: generic-test-runner
     src: ./cmd/generic-test-runner
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 Build it: `forge build generic-test-runner`
@@ -268,7 +268,7 @@ engines:
       args: ["./..."]
 
 test:
-  - name: lint-golangci
+  - name: go-lintlangci
     runner: alias://golangci
 
   - name: lint-staticcheck
@@ -281,7 +281,7 @@ test:
 **Usage**:
 ```bash
 # Run all
-forge test lint-golangci run
+forge test go-lintlangci run
 forge test lint-staticcheck run
 forge test security-scan run
 ```
@@ -400,7 +400,7 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
 test:
   # Unit tests with generic runner

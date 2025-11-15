@@ -46,7 +46,7 @@ This document defines the 4 documentation types used in this repository and thei
 - Integration examples (forge.yaml)
 - See Also references
 
-**Examples**: cmd/build-go/MCP.md, cmd/testenv/MCP.md
+**Examples**: cmd/go-build/MCP.md, cmd/testenv/MCP.md
 
 ### 4. ARCHITECTURE.md (Single Architecture Document)
 

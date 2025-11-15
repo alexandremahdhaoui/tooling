@@ -93,11 +93,11 @@ build:
   - name: my-app
     src: ./cmd/my-app
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
 EOF
 
 # Build all artifacts
@@ -123,8 +123,8 @@ forge --help
 All 18 tools categorized by function. Tools marked ⚡ provide MCP servers.
 
 ### Build Tools (3)
-- ⚡ `build-go` - Go binary builder with git versioning
-- ⚡ `build-container` - Container image builder using Kaniko
+- ⚡ `go-build` - Go binary builder with git versioning
+- ⚡ `container-build` - Container image builder using Kaniko
 - ⚡ `generic-builder` - Execute any command as build step
 
 ### Test Tools (8)
@@ -132,18 +132,18 @@ All 18 tools categorized by function. Tools marked ⚡ provide MCP servers.
 - ⚡ `testenv-kind` - Kind cluster manager
 - ⚡ `testenv-lcr` - Local container registry with TLS
 - ⚡ `testenv-helm-install` - Helm chart installer for test environments
-- ⚡ `test-runner-go` - Go test runner with JUnit/coverage
-- ⚡ `test-runner-go-verify-tags` - Build tag verifier
+- ⚡ `go-test` - Go test runner with JUnit/coverage
+- ⚡ `go-lint-tags` - Build tag verifier
 - ⚡ `generic-test-runner` - Execute any command as test
 - ⚡ `test-report` - Test report management
 
 ### Code Quality (2)
-- ⚡ `format-go` - Go code formatter (gofumpt)
-- ⚡ `lint-go` - Go linter (golangci-lint)
+- ⚡ `go-format` - Go code formatter (gofumpt)
+- ⚡ `go-lint` - Go linter (golangci-lint)
 
 ### Code Generation (2)
-- ⚡ `generate-mocks` - Mock generator (mockery)
-- ⚡ `generate-openapi-go` - OpenAPI code generator
+- ⚡ `go-gen-mocks` - Mock generator (mockery)
+- ⚡ `go-gen-openapi` - OpenAPI code generator
 
 ### Orchestration (3)
 - ⚡ `forge` - Main CLI orchestrator (also an MCP server)
@@ -163,19 +163,19 @@ build:
   - name: my-app
     src: ./cmd/my-app
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
   - name: my-app-image
     src: ./containers/my-app/Containerfile
-    engine: go://build-container
+    engine: go://container-build
 
 # Test specifications
 test:
   - name: unit
-    runner: go://test-runner-go
+    runner: go://go-test
 
   - name: integration
-    runner: go://test-runner-go
+    runner: go://go-test
     testenv: alias://setup-integration
 
 # Custom engine configurations
@@ -232,7 +232,7 @@ All MCP engines can be used standalone:
 
 ```bash
 # Build Go binary directly
-build-go --mcp <<EOF
+go-build --mcp <<EOF
 {
   "method": "tools/call",
   "params": {
@@ -258,7 +258,7 @@ Forge uses the Model Context Protocol (MCP) to orchestrate specialized engines. 
        ├────────────────┬────────────────┐
        │                │                │
 ┌──────▼──────┐  ┌──────▼──────┐  ┌──────▼──────┐
-│  build-go   │  │   testenv   │  │ test-runner │
+│  go-build   │  │   testenv   │  │ test-runner │
 │  (server)   │  │  (server)   │  │   (server)  │
 └─────────────┘  └──────┬──────┘  └─────────────┘
                         │

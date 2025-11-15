@@ -13,11 +13,11 @@ Generic-builder is a flexible, configuration-driven build engine that executes a
 ## When to Use generic-builder vs Built-in Tools
 
 **Use Built-in Tools When Available:**
-- **Go binaries**: Use `go://build-go` for all Go builds (handles versioning, ldflags, etc.)
-- **Containers**: Use `go://build-container` for Dockerfiles/Containerfiles
-- **Go formatting**: Use `go://format-go` for gofmt/goimports
-- **Go linting**: Use `go://lint-go` for golangci-lint
-- **Go tests**: Use `go://test-runner-go` for go test
+- **Go binaries**: Use `go://go-build` for all Go builds (handles versioning, ldflags, etc.)
+- **Containers**: Use `go://container-build` for Dockerfiles/Containerfiles
+- **Go formatting**: Use `go://go-format` for gofmt/goimports
+- **Go linting**: Use `go://go-lint` for golangci-lint
+- **Go tests**: Use `go://go-test` for go test
 - **Test environments**: Use `go://testenv` for Kind clusters + registry
 
 **Use generic-builder When:**
@@ -34,7 +34,7 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 **Example - Use generic-builder:**
@@ -66,7 +66,7 @@ build:
   - name: generic-builder
     src: ./cmd/generic-builder
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 Build it: `forge build generic-builder`
@@ -491,7 +491,7 @@ build:
     engine: alias://go-fmt
 
   # Generate mocks
-  - name: generate-mocks
+  - name: go-gen-mocks
     src: ./pkg
     engine: alias://mockgen
 
@@ -499,7 +499,7 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go  # Use built-in Go builder
+    engine: go://go-build  # Use built-in Go builder
 
   # Build container
   - name: myapp-container

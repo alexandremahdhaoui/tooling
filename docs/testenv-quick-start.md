@@ -28,7 +28,7 @@ go build -o ./build/bin/forge ./cmd/forge
 go build -o ./build/bin/testenv ./cmd/testenv
 go build -o ./build/bin/testenv-kind ./cmd/testenv-kind
 go build -o ./build/bin/testenv-lcr ./cmd/testenv-lcr
-go build -o ./build/bin/test-runner-go ./cmd/test-runner-go
+go build -o ./build/bin/go-test ./cmd/go-test
 
 # Verify
 ./build/bin/forge --version
@@ -51,24 +51,24 @@ build:
     - name: my-app
       src: ./cmd/my-app
       dest: ./build/bin
-      builder: go://build-go
+      builder: go://go-build
 
 # Define test stages
 test:
   # Unit tests - no environment needed
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # Integration tests - full test environment with Kind cluster and registry
   - name: integration
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # E2E tests - same environment as integration
   - name: e2e
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 ```
 
 **Note**: The `testenv` engine automatically orchestrates `testenv-kind` (Kind cluster) and `testenv-lcr` (local container registry with TLS) when creating the test environment.
@@ -159,7 +159,7 @@ export PREPEND_CMD=""  # or "sudo" if needed
 **What happens**:
 1. forge reads TestEnvironment from artifact store
 2. Extracts artifactFiles (kubeconfig, credentials, etc.)
-3. Passes files to test-runner-go via MCP
+3. Passes files to go-test via MCP
 4. Tests execute with full environment access
 
 ### Delete Test Environment
@@ -260,22 +260,22 @@ test:
   # Unit tests: no environment
   - name: unit
     engine: "noop"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # Integration tests: full environment (Kind + registry)
   - name: integration
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # E2E tests: same full environment
   - name: e2e
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # Linting: no environment
   - name: lint
     engine: "noop"
-    runner: "go://lint-go"
+    runner: "go://go-lint"
 ```
 
 **Note**: The `testenv` engine automatically composes `testenv-kind` and `testenv-lcr` subengines.
@@ -356,10 +356,10 @@ grep -i error debug.log
 test:
   - name: integration
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
   - name: e2e
     engine: "go://testenv"
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 ```
 
 ### 2. Clean Up Old Environments

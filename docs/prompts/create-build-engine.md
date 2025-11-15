@@ -81,13 +81,13 @@ Start from an existing engine:
 
 ```bash
 # For building binaries
-cp -r cmd/build-go cmd/<your-engine-name>
+cp -r cmd/go-build cmd/<your-engine-name>
 
 # For building containers
-cp -r cmd/build-container cmd/<your-engine-name>
+cp -r cmd/container-build cmd/<your-engine-name>
 
 # For formatters/generators
-cp -r cmd/format-go cmd/<your-engine-name>
+cp -r cmd/go-format cmd/<your-engine-name>
 ```
 
 Update the Name constant:
@@ -389,10 +389,10 @@ forge build my-artifact
 
 ## Examples
 
-- **build-go**: Builds Go binaries using `go build`
-- **build-container**: Builds containers using Kaniko or Docker
-- **format-go**: Formats Go code using `gofmt`
-- **generate-mocks**: Generates mocks using mockgen
+- **go-build**: Builds Go binaries using `go build`
+- **container-build**: Builds containers using Kaniko or Docker
+- **go-format**: Formats Go code using `gofmt`
+- **go-gen-mocks**: Generates mocks using mockgen
 
 ## Integration with Forge
 
@@ -408,7 +408,7 @@ forge build
 
 ## Need Help?
 
-- Review `cmd/build-go` for a complete working example
+- Review `cmd/go-build` for a complete working example
 - Check the Artifact structure in `pkg/forge/artifact_store.go`
 - Use `pkg/mcputil` helpers for common MCP patterns
 - The forge CLI handles MCP communication - focus on your build logic
@@ -596,7 +596,7 @@ type BuildSpec struct {
     // Dest is the output path (e.g., "./build/bin")
     Dest string `json:"dest,omitempty"`
 
-    // Engine is the engine URI (e.g., "go://build-go")
+    // Engine is the engine URI (e.g., "go://go-build")
     Engine string `json:"engine"`
 }
 ```
@@ -901,7 +901,7 @@ build:
   - name: my-engine
     src: ./cmd/my-engine
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
   # Use your engine
   - name: my-artifact
@@ -1450,13 +1450,13 @@ return &mcp.CallToolResult{
 
 Study these engines for examples:
 
-1. **cmd/build-go** - Compiles Go binaries
+1. **cmd/go-build** - Compiles Go binaries
    - Shows: Basic compilation, batch building, versioning
 
-2. **cmd/build-container** - Builds container images
+2. **cmd/container-build** - Builds container images
    - Shows: External tool integration (kaniko), complex metadata
 
-3. **cmd/format-go** - Formats Go code
+3. **cmd/go-format** - Formats Go code
    - Shows: In-place modifications, code formatting
 
 4. **cmd/generic-engine** - Generic command executor
@@ -1486,7 +1486,7 @@ Before shipping your engine, verify:
 - Read [Generic Engine Guide](./generic-engine-guide.md) for simpler alternatives
 - Read [Test Engine Guide](./test-engine-guide.md) for environment management
 - Read [Test Runner Guide](./test-runner-guide.md) for test execution
-- Study reference implementations in `cmd/build-go` and `cmd/generic-engine`
+- Study reference implementations in `cmd/go-build` and `cmd/generic-engine`
 
 ## Conclusion
 
@@ -1691,7 +1691,7 @@ type BuildSpec struct {
     // Dest is the output path (e.g., "./build/bin")
     Dest string `json:"dest,omitempty"`
 
-    // Engine is the engine URI (e.g., "go://build-go")
+    // Engine is the engine URI (e.g., "go://go-build")
     Engine string `json:"engine"`
 }
 ```
@@ -1996,7 +1996,7 @@ build:
   - name: my-engine
     src: ./cmd/my-engine
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
   # Use your engine
   - name: my-artifact
@@ -2545,13 +2545,13 @@ return &mcp.CallToolResult{
 
 Study these engines for examples:
 
-1. **cmd/build-go** - Compiles Go binaries
+1. **cmd/go-build** - Compiles Go binaries
    - Shows: Basic compilation, batch building, versioning
 
-2. **cmd/build-container** - Builds container images
+2. **cmd/container-build** - Builds container images
    - Shows: External tool integration (kaniko), complex metadata
 
-3. **cmd/format-go** - Formats Go code
+3. **cmd/go-format** - Formats Go code
    - Shows: In-place modifications, code formatting
 
 4. **cmd/generic-engine** - Generic command executor
@@ -2581,7 +2581,7 @@ Before shipping your engine, verify:
 - Read [Generic Engine Guide](./generic-engine-guide.md) for simpler alternatives
 - Read [Test Engine Guide](./test-engine-guide.md) for environment management
 - Read [Test Runner Guide](./test-runner-guide.md) for test execution
-- Study reference implementations in `cmd/build-go` and `cmd/generic-engine`
+- Study reference implementations in `cmd/go-build` and `cmd/generic-engine`
 
 ## Conclusion
 
@@ -2788,7 +2788,7 @@ type BuildSpec struct {
     // Dest is the output path (e.g., "./build/bin")
     Dest string `json:"dest,omitempty"`
 
-    // Engine is the engine URI (e.g., "go://build-go")
+    // Engine is the engine URI (e.g., "go://go-build")
     Engine string `json:"engine"`
 }
 ```
@@ -3093,7 +3093,7 @@ build:
   - name: my-engine
     src: ./cmd/my-engine
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
   # Use your engine
   - name: my-artifact
@@ -3642,13 +3642,13 @@ return &mcp.CallToolResult{
 
 Study these engines for examples:
 
-1. **cmd/build-go** - Compiles Go binaries
+1. **cmd/go-build** - Compiles Go binaries
    - Shows: Basic compilation, batch building, versioning
 
-2. **cmd/build-container** - Builds container images
+2. **cmd/container-build** - Builds container images
    - Shows: External tool integration (kaniko), complex metadata
 
-3. **cmd/format-go** - Formats Go code
+3. **cmd/go-format** - Formats Go code
    - Shows: In-place modifications, code formatting
 
 4. **cmd/generic-engine** - Generic command executor
@@ -3678,7 +3678,7 @@ Before shipping your engine, verify:
 - Read [Generic Engine Guide](./generic-engine-guide.md) for simpler alternatives
 - Read [Test Engine Guide](./test-engine-guide.md) for environment management
 - Read [Test Runner Guide](./test-runner-guide.md) for test execution
-- Study reference implementations in `cmd/build-go` and `cmd/generic-engine`
+- Study reference implementations in `cmd/go-build` and `cmd/generic-engine`
 
 ## Conclusion
 

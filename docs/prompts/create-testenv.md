@@ -517,7 +517,7 @@ test:
         - go://testenv-kind
         - go://testenv-postgres
         - go://testenv-redis
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 ## Best Practices

@@ -54,12 +54,12 @@ build:
   - name: generic-builder
     src: ./cmd/generic-builder
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
   - name: generic-test-runner
     src: ./cmd/generic-test-runner
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 Build them:
@@ -75,12 +75,14 @@ In `forge.yaml`, add an `engines:` section:
 ```yaml
 engines:
   - alias: my-formatter
-    engine: go://generic-builder
-    config:
-      command: "gofmt"
-      args: ["-l", "-w", "."]
-      env:
-        GOFMT_STYLE: "compact"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gofmt"
+          args: ["-l", "-w", "."]
+          env:
+            GOFMT_STYLE: "compact"
 ```
 
 ### 3. Use the Alias
@@ -110,15 +112,17 @@ test:
 ```yaml
 engines:
   - alias: <alias-name>              # Required: Unique identifier
-    engine: <engine-uri>             # Required: go://generic-builder or go://generic-test-runner
-    config:
-      command: <executable>          # Required: Command to execute
-      args: [<arg1>, <arg2>, ...]   # Optional: Command arguments
-      env:                           # Optional: Environment variables
-        KEY1: value1
-        KEY2: value2
-      envFile: <path-to-file>        # Optional: Load env vars from file
-      workDir: <directory>           # Optional: Working directory
+    type: builder                    # Required: "builder" for build engines
+    builder:                         # Required: Array of builder specs
+      - engine: <engine-uri>         # Required: go://generic-builder
+        spec:                        # Required: Configuration spec
+          command: <executable>      # Required: Command to execute
+          args: [<arg1>, <arg2>, ...]   # Optional: Command arguments
+          env:                       # Optional: Environment variables
+            KEY1: value1
+            KEY2: value2
+          envFile: <path-to-file>    # Optional: Load env vars from file
+          workDir: <directory>       # Optional: Working directory
 ```
 
 ### Configuration Fields
@@ -213,10 +217,12 @@ workDir: "./frontend"  # Run npm commands in frontend directory
 ```yaml
 engines:
   - alias: go-formatter
-    engine: go://generic-builder
-    config:
-      command: "gofmt"
-      args: ["-l", "-w", "."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gofmt"
+          args: ["-l", "-w", "."]
 
 build:
   - name: format-code
@@ -237,14 +243,15 @@ build:
 ```yaml
 engines:
   - alias: go-linter
-    engine: go://generic-test-runner
-    config:
-      command: "golangci-lint"
-      args: ["run", "./..."]
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+        spec:
+          command: "golangci-lint"
+          args: ["run", "./..."]
 
 test:
   - name: lint
-    engine: "noop"
     runner: alias://go-linter
 ```
 
@@ -262,16 +269,18 @@ test:
 ```yaml
 engines:
   - alias: mock-generator
-    engine: go://generic-builder
-    config:
-      command: "mockgen"
-      args:
-        - "-source=pkg/interfaces.go"
-        - "-destination=pkg/mocks/mock_interfaces.go"
-      workDir: "."
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "mockgen"
+          args:
+            - "-source=pkg/interfaces.go"
+            - "-destination=pkg/mocks/mock_interfaces.go"
+          workDir: "."
 
 build:
-  - name: generate-mocks
+  - name: go-gen-mocks
     src: ./pkg/interfaces.go
     dest: ./pkg/mocks
     engine: alias://mock-generator
@@ -284,19 +293,23 @@ build:
 ```yaml
 engines:
   - alias: go-formatter
-    engine: go://generic-builder
-    config:
-      command: "gofmt"
-      args: ["-l", "-w", "."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gofmt"
+          args: ["-l", "-w", "."]
 
   - alias: import-formatter
-    engine: go://generic-builder
-    config:
-      command: "goimports"
-      args: ["-l", "-w", "."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "goimports"
+          args: ["-l", "-w", "."]
 
 build:
-  - name: format-go-code
+  - name: go-format-code
     src: .
     engine: alias://go-formatter
 
@@ -312,21 +325,25 @@ build:
 ```yaml
 engines:
   - alias: build-prod
-    engine: go://generic-builder
-    config:
-      command: "go"
-      args: ["build", "-o", "app", "-tags", "prod"]
-      env:
-        CGO_ENABLED: "0"
-        GOOS: "linux"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "go"
+          args: ["build", "-o", "app", "-tags", "prod"]
+          env:
+            CGO_ENABLED: "0"
+            GOOS: "linux"
 
   - alias: build-dev
-    engine: go://generic-builder
-    config:
-      command: "go"
-      args: ["build", "-o", "app-dev", "-tags", "dev"]
-      env:
-        CGO_ENABLED: "1"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "go"
+          args: ["build", "-o", "app-dev", "-tags", "dev"]
+          env:
+            CGO_ENABLED: "1"
 
 build:
   - name: app-production
@@ -354,10 +371,12 @@ export DATABASE_URL=postgres://prod-db:5432/myapp
 ```yaml
 engines:
   - alias: deploy-prod
-    engine: go://generic-builder
-    config:
-      command: "./scripts/deploy.sh"
-      envFile: ".envrc.prod"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "./scripts/deploy.sh"
+          envFile: ".envrc.prod"
 ```
 
 ### Pattern 7: Docker Operations
@@ -367,16 +386,18 @@ engines:
 ```yaml
 engines:
   - alias: docker-builder
-    engine: go://generic-builder
-    config:
-      command: "docker"
-      args:
-        - "build"
-        - "-t"
-        - "myapp:latest"
-        - "."
-      env:
-        DOCKER_BUILDKIT: "1"
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "docker"
+          args:
+            - "build"
+            - "-t"
+            - "myapp:latest"
+            - "."
+          env:
+            DOCKER_BUILDKIT: "1"
 
 build:
   - name: container-image
@@ -391,19 +412,20 @@ build:
 ```yaml
 engines:
   - alias: pytest-runner
-    engine: go://generic-test-runner
-    config:
-      command: "pytest"
-      args:
-        - "--verbose"
-        - "--cov=src"
-        - "--cov-report=xml"
-        - "tests/"
-      workDir: "./python-service"
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+        spec:
+          command: "pytest"
+          args:
+            - "--verbose"
+            - "--cov=src"
+            - "--cov-report=xml"
+            - "tests/"
+          workDir: "./python-service"
 
 test:
   - name: python-tests
-    engine: "noop"
     runner: alias://pytest-runner
 ```
 
@@ -438,10 +460,15 @@ When generic-builder/generic-test-runner executes your command:
 
 Given this config:
 ```yaml
-config:
-  envFile: ".envrc"
-  env:
-    MY_VAR: "from-config"
+engines:
+  - alias: my-engine
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          envFile: ".envrc"
+          env:
+            MY_VAR: "from-config"
 ```
 
 And system environment: `MY_VAR=from-system`
@@ -464,10 +491,12 @@ When calling engines via MCP (internally), build/test specs can override config:
 ```yaml
 engines:
   - alias: flexible-builder
-    engine: go://generic-builder
-    config:
-      command: "go"
-      args: ["build"]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "go"
+          args: ["build"]
 
 # This works, but args come from engine config
 build:
@@ -495,29 +524,34 @@ exec "$@"
 ```
 
 ```yaml
-config:
-  command: "./debug-wrapper.sh"
-  args: ["go", "build", "./..."]
+engines:
+  - alias: debug-builder
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "./debug-wrapper.sh"
+          args: ["go", "build", "./..."]
 ```
 
 ### Working with Paths
 
 **Relative paths** are relative to forge's working directory:
 ```yaml
-config:
+spec:
   command: "./scripts/build.sh"  # Looks in ./scripts/ from forge root
   workDir: "./subproject"        # Changes to ./subproject
 ```
 
 **Absolute paths** work as expected:
 ```yaml
-config:
+spec:
   command: "/usr/local/bin/custom-tool"
 ```
 
 **PATH lookup**: Commands without slashes are looked up in PATH:
 ```yaml
-config:
+spec:
   command: "go"  # Finds go in PATH
 ```
 
@@ -554,9 +588,14 @@ config:
 **Do this instead**:
 ```yaml
 # ✅ GOOD: Explicit, controlled command
-config:
-  command: "./scripts/safe-operation.sh"
-  args: ["--input", "validated-file.txt"]
+engines:
+  - alias: safe-builder
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "./scripts/safe-operation.sh"
+          args: ["--input", "validated-file.txt"]
 ```
 
 ## Testing Your Generic Engine
@@ -599,33 +638,41 @@ artifactStorePath: .ignore.artifact-store.yaml
 engines:
   # Formatter using gofmt
   - alias: go-formatter
-    engine: go://generic-builder
-    config:
-      command: "gofmt"
-      args: ["-l", "-w", "."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "gofmt"
+          args: ["-l", "-w", "."]
 
   # Linter using golangci-lint
   - alias: go-linter
-    engine: go://generic-test-runner
-    config:
-      command: "golangci-lint"
-      args: ["run", "--timeout=5m", "./..."]
-      env:
-        GOLANGCI_LINT_CACHE: "/tmp/golangci-cache"
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+        spec:
+          command: "golangci-lint"
+          args: ["run", "--timeout=5m", "./..."]
+          env:
+            GOLANGCI_LINT_CACHE: "/tmp/golangci-cache"
 
   # Mock generator
   - alias: mock-gen
-    engine: go://generic-builder
-    config:
-      command: "go"
-      args: ["generate", "./..."]
+    type: builder
+    builder:
+      - engine: go://generic-builder
+        spec:
+          command: "go"
+          args: ["generate", "./..."]
 
   # Security scanner
   - alias: security-scan
-    engine: go://generic-test-runner
-    config:
-      command: "gosec"
-      args: ["-fmt=json", "-out=security-report.json", "./..."]
+    type: test-runner
+    testRunner:
+      - engine: go://generic-test-runner
+        spec:
+          command: "gosec"
+          args: ["-fmt=json", "-out=security-report.json", "./..."]
 
 # Build artifacts
 build:
@@ -635,7 +682,7 @@ build:
     engine: alias://go-formatter
 
   # Generate mocks
-  - name: generate-mocks
+  - name: go-gen-mocks
     src: ./pkg
     engine: alias://mock-gen
 
@@ -643,23 +690,20 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
 # Test stages
 test:
   # Unit tests (uses generic runner)
   - name: unit
-    engine: "noop"
-    runner: go://generic-test-runner
+    runner: go://go-test
 
   # Linting as test
   - name: lint
-    engine: "noop"
     runner: alias://go-linter
 
   # Security scan as test
   - name: security
-    engine: "noop"
     runner: alias://security-scan
 ```
 
@@ -756,13 +800,15 @@ Error: no such file or directory
 ```yaml
 engines:
   - alias: string                    # Required, unique
-    engine: string                   # Required, go://generic-builder or go://generic-test-runner
-    config:
-      command: string                # Required, executable path
-      args: array<string>            # Optional, arguments
-      env: map<string,string>        # Optional, environment variables
-      envFile: string                # Optional, path to env file
-      workDir: string                # Optional, working directory
+    type: builder | test-runner      # Required, engine type
+    builder | testRunner:            # Required, array of engine specs
+      - engine: string               # Required, go://generic-builder or go://generic-test-runner
+        spec:                        # Required, configuration spec
+          command: string            # Required, executable path
+          args: array<string>        # Optional, arguments
+          env: map<string,string>    # Optional, environment variables
+          envFile: string            # Optional, path to env file
+          workDir: string            # Optional, working directory
 ```
 
 ### Using Aliases

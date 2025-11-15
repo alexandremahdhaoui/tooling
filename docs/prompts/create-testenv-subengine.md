@@ -396,7 +396,7 @@ test:
         - go://testenv-kind
         - go://testenv-mysubengine  # Your new subengine
         - go://testenv-lcr
-    runner: go://test-runner-go
+    runner: go://go-test
 ```
 
 ### Step 7: Add Build Configuration
@@ -408,7 +408,7 @@ build:
   - name: testenv-mysubengine
     src: ./cmd/testenv-mysubengine
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 ## Best Practices

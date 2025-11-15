@@ -99,13 +99,13 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./build/bin
-    engine: go://build-go
+    engine: go://go-build
 
 # Test stages (from make test, make lint, etc.)
 test:
   # Unit tests (equivalent to: make test)
   - name: unit
-    runner: "go://test-runner-go"
+    runner: "go://go-test"
 
   # Linting (equivalent to: make lint)
   - name: lint
@@ -128,7 +128,7 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./bin
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 #### Pattern 2: Build with Environment Variables
@@ -185,7 +185,7 @@ engines:
       args: ["-l", "-w", "."]
 
 build:
-  - name: format-gofmt
+  - name: go-formatfmt
     src: .
     engine: alias://go-fmt
 
@@ -253,7 +253,7 @@ docker-build:
 build:
   - name: myapp-container
     src: ./Dockerfile
-    engine: go://build-container
+    engine: go://container-build
 ```
 
 Or with generic-builder:
@@ -301,7 +301,7 @@ build:
     src: .
     engine: alias://go-generate
 
-  - name: generate-mocks
+  - name: go-gen-mocks
     src: ./interfaces.go
     dest: ./mocks
     engine: alias://mockgen
@@ -404,15 +404,15 @@ build:
   # These will build in parallel
   - name: service-a
     src: ./cmd/service-a
-    engine: go://build-go
+    engine: go://go-build
 
   - name: service-b
     src: ./cmd/service-b
-    engine: go://build-go
+    engine: go://go-build
 
   - name: service-c
     src: ./cmd/service-c
-    engine: go://build-go
+    engine: go://go-build
 ```
 
 ### Phase 6: Testing the Migration
@@ -536,7 +536,7 @@ build:
   - name: myapp
     src: ./cmd/myapp
     dest: ./bin
-    engine: go://build-go
+    engine: go://go-build
 
 test:
   - name: unit
