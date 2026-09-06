@@ -4,6 +4,10 @@
 
 package main
 
+import (
+	"fmt"
+)
+
 // Spec represents the Spec configuration.
 // Configuration for testenv-helm-install.
 // The charts array contains ChartSpec objects that are parsed separately.
@@ -18,6 +22,17 @@ func SpecFromMap(m map[string]interface{}) (*Spec, error) {
 	}
 
 	s := &Spec{}
+
+	// A key the schema does not name is refused, by name, with the keys
+	// it could have been. A spec that silently dropped it read as
+	// configuration that took effect: forge's own ldflags on go-build was
+	// exactly that for weeks.
+	for key := range m {
+		switch key {
+		default:
+			return nil, fmt.Errorf("field %s: not a key of Spec; the keys are", key)
+		}
+	}
 	return s, nil
 }
 

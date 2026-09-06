@@ -103,28 +103,6 @@ func hasArrayOrMapType(properties []PropertySchema) bool {
 	return false
 }
 
-// needsFmtImport checks if any property needs the fmt import.
-// Returns true only if at least one property has a supported type that
-// generates code using fmt.Errorf. Unsupported types like []interface{}
-// don't generate code that uses fmt.
-func needsFmtImport(properties []PropertySchema) bool {
-	supportedTypes := map[string]bool{
-		"string":            true,
-		"bool":              true,
-		"int":               true,
-		"float64":           true,
-		"[]string":          true,
-		"[]int":             true,
-		"map[string]string": true,
-	}
-	for _, p := range properties {
-		if supportedTypes[p.GoType()] {
-			return true
-		}
-	}
-	return false
-}
-
 // GenerateSpecFileFromTypes generates the zz_generated.spec.go file content using ForgeTypeDefinition.
 // This is the new generation path that uses kin-openapi-based types.
 func GenerateSpecFileFromTypes(types []ForgeTypeDefinition, config *Config, checksum string, specTypesCtx *SpecTypesContext) ([]byte, error) {
@@ -201,41 +179,6 @@ func GenerateValidateFileFromTypes(types []ForgeTypeDefinition, config *Config, 
 	}
 
 	return formatted, nil
-}
-
-// needsFmtImportForTypes checks if any ForgeProperty needs the fmt import.
-// Returns true if there are any properties that generate code using fmt.Errorf.
-func needsFmtImportForTypes(types []ForgeTypeDefinition) bool {
-	supportedTypes := map[string]bool{
-		"string":            true,
-		"bool":              true,
-		"int":               true,
-		"float64":           true,
-		"[]string":          true,
-		"[]int":             true,
-		"map[string]string": true,
-	}
-	for _, t := range types {
-		// Skip enum and union types - they don't generate FromMap/ToMap
-		if t.IsEnum || t.IsUnion {
-			continue
-		}
-		for _, p := range t.Properties {
-			// Properties with supported types need fmt
-			if supportedTypes[p.GoType] {
-				return true
-			}
-			// Reference types need fmt for error wrapping
-			if p.IsRef || p.IsArrayOfRef {
-				return true
-			}
-			// Arrays and maps need fmt
-			if p.IsArray || p.IsMap {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 // needsFmtImportForValidation checks if validation code needs the fmt import.

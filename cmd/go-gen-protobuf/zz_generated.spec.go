@@ -36,6 +36,25 @@ func SpecFromMap(m map[string]interface{}) (*Spec, error) {
 	}
 
 	s := &Spec{}
+
+	// A key the schema does not name is refused, by name, with the keys
+	// it could have been. A spec that silently dropped it read as
+	// configuration that took effect: forge's own ldflags on go-build was
+	// exactly that for weeks.
+	for key := range m {
+		switch key {
+		case "extraArgs":
+		case "goGrpcOpt":
+		case "goOpt":
+		case "includes":
+		case "outputDir":
+		case "plugin":
+		case "protoDir":
+		case "protoPath":
+		default:
+			return nil, fmt.Errorf("field %s: not a key of Spec; the keys are extraArgs, goGrpcOpt, goOpt, includes, outputDir, plugin, protoDir, protoPath", key)
+		}
+	}
 	// Parse extraArgs
 	if v, ok := m["extraArgs"]; ok && v != nil {
 		if arr, ok := v.([]interface{}); ok {
