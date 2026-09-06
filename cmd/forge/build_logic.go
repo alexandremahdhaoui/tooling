@@ -68,8 +68,10 @@ func appendSpecToGroups(groups []engineGroup, engine string, params map[string]a
 // transport in MCP mode. Progress messages go to stderr.
 
 // buildPlatforms is the os/arch list `forge build --platforms` asked for. It
-// is a filter and nothing more: an entry builds the platforms it declares,
-// narrowed to these when they are set. Empty means every declared platform.
+// is a filter over what entries DECLARE and nothing more: an entry builds
+// the platforms it declares, narrowed to these when they are set, and an
+// entry that declares none is a host build outside any platform selection.
+// Empty means everything, each entry for what it declares or the host.
 var buildPlatforms []string
 
 // hostPlatform is the machine this forge runs on, which is what an entry
@@ -82,9 +84,20 @@ func hostPlatform() string {
 // declares - the host when it declares none - narrowed to the requested
 // subset when one was asked for. Nothing is inferred: the entry declares,
 // the flag selects, the host is the one fact the machine states.
+//
+// The flag selects among declarations only. An entry that declares no
+// platform is a host build - a repo's own tool, a test fixture, an image
+// that wants a daemon - and a platform selection is not about it, even
+// when the host happens to be one of the platforms named: a distribution
+// build names its platforms and gets exactly what declared them, never a
+// tool that travels because the runner is the same machine.
 func platformsFor(spec forge.BuildSpec, wanted []string) []string {
 	declared := spec.Platforms
 	if len(declared) == 0 {
+		if len(wanted) > 0 {
+			return nil
+		}
+
 		declared = []string{hostPlatform()}
 	}
 

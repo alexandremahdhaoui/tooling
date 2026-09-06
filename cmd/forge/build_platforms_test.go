@@ -60,6 +60,14 @@ func TestTheFlagIsASubsetOfTheDeclaration(t *testing.T) {
 	if got := platformsFor(own, []string{"linux/arm64"}); len(got) != 0 {
 		t.Fatalf("a host-only entry is left home by a filter naming another platform, got %v", got)
 	}
+
+	// And by a filter naming the host itself: the selection is over what an
+	// entry declared, and this one declared nothing. A distribution build on
+	// a linux/amd64 runner must not sweep every host-only tool - or the
+	// fixture image that wants a daemon - into the release.
+	if got := platformsFor(own, []string{hostPlatform()}); len(got) != 0 {
+		t.Fatalf("a host-only entry is outside any platform selection, got %v", got)
+	}
 }
 
 func TestThePlatformsFlagIsParsedEitherWay(t *testing.T) {

@@ -70,9 +70,10 @@ func printBuildResult(result *BuildAllResult, artifactName string) {
 //	forge build --platforms linux/amd64,linux/arm64
 //
 // An entry builds every platform its build entry declares, the host when it
-// declares none; the flag selects a subset of that and never widens it, so
-// an entry that declares none of the named platforms is skipped and a repo's
-// own tools never travel by accident.
+// declares none; the flag selects a subset of the DECLARED platforms and
+// never widens it, so an entry that declares none of the named platforms is
+// skipped - and an entry that declares no platform at all is skipped by any
+// selection, host or not, so a repo's own tools never travel by accident.
 func parsePlatformsFlag(args []string) ([]string, []string, error) {
 	rest := make([]string, 0, len(args))
 
