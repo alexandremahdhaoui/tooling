@@ -67,6 +67,20 @@ func {{.Name}}FromMap(m map[string]interface{}) (*{{.Name}}, error) {
 	}
 
 	s := &{{.Name}}{}
+
+	// A key the schema does not name is refused, by name, with the keys
+	// it could have been. A spec that silently dropped it read as
+	// configuration that took effect: forge's own ldflags on go-build was
+	// exactly that for weeks.
+	for key := range m {
+		switch key {
+{{- range .Properties}}
+		case "{{.JsonName}}":
+{{- end}}
+		default:
+			return nil, fmt.Errorf("field %s: not a key of {{.Name}}; the keys are{{range $i, $p := .Properties}}{{if $i}},{{end}} {{$p.JsonName}}{{end}}", key)
+		}
+	}
 {{- range .Properties}}
 	// Parse {{.JsonName}}
 	if v, ok := m["{{.JsonName}}"]; ok && v != nil {
@@ -324,6 +338,18 @@ func FromMap(m map[string]interface{}) (*Spec, error) {
 	}
 
 	s := &Spec{}
+
+	// A key the schema does not name is refused, by name, with the keys
+	// it could have been.
+	for key := range m {
+		switch key {
+{{- range .Properties}}
+		case "{{.Name}}":
+{{- end}}
+		default:
+			return nil, fmt.Errorf("field %s: not a key of Spec; the keys are{{range $i, $p := .Properties}}{{if $i}},{{end}} {{$p.Name}}{{end}}", key)
+		}
+	}
 {{range .Properties}}
 	// Parse {{.Name}}
 	if v, ok := m["{{.Name}}"]; ok && v != nil {
@@ -477,6 +503,18 @@ func FromMap(m map[string]interface{}) (*Spec, error) {
 	}
 
 	s := &Spec{}
+
+	// A key the schema does not name is refused, by name, with the keys
+	// it could have been.
+	for key := range m {
+		switch key {
+{{- range .Properties}}
+		case "{{.Name}}":
+{{- end}}
+		default:
+			return nil, fmt.Errorf("field %s: not a key of Spec; the keys are{{range $i, $p := .Properties}}{{if $i}},{{end}} {{$p.Name}}{{end}}", key)
+		}
+	}
 {{range .Properties}}
 	// Parse {{.Name}}
 	if v, ok := m["{{.Name}}"]; ok && v != nil {

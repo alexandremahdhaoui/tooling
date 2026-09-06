@@ -63,7 +63,7 @@ func GenerateSpecFile(schema *SpecSchema, config *Config, checksum string, regis
 		EngineName:     config.Name,
 		Properties:     schema.Properties,
 		HasArrayOrMap:  hasArrayOrMapType(schema.Properties),
-		NeedsFmtImport: needsFmtImport(schema.Properties),
+		NeedsFmtImport: true, // every FromMap refuses an unknown key with fmt.Errorf
 		Registry:       registry,
 	}
 
@@ -141,7 +141,7 @@ func GenerateSpecFileFromTypes(types []ForgeTypeDefinition, config *Config, chec
 		EngineName:       config.Name,
 		Types:            types,
 		MainType:         "Spec",
-		NeedsFmtImport:   needsFmtImportForTypes(types),
+		NeedsFmtImport:   true, // every FromMap refuses an unknown key with fmt.Errorf
 		SpecTypesContext: specTypesCtx,
 	}
 

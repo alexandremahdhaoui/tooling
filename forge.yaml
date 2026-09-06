@@ -407,8 +407,6 @@ build:
     dest: ./build/bin
     engine: forge://go-build
     platforms: [linux/amd64, linux/arm64]
-    spec:
-      ldflags: "-X main.Version={{.GitVersion}}"
 
   # Mock generation
   - name: generated-mocks
