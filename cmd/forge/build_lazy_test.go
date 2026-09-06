@@ -19,6 +19,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestShouldRebuild_ForceFlag(t *testing.T) {
 		Artifacts:   []forge.Artifact{},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, true)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -51,14 +52,14 @@ func TestShouldRebuild_NoPreviousBuild(t *testing.T) {
 		Artifacts:   []forge.Artifact{},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !needsRebuild {
 		t.Error("expected rebuild when no previous build exists")
 	}
-	if reason != "no previous build" {
+	if !strings.HasPrefix(reason, "no previous build") {
 		t.Errorf("expected reason 'no previous build', got %q", reason)
 	}
 }
@@ -83,14 +84,14 @@ func TestShouldRebuild_ArtifactFileMissing(t *testing.T) {
 		},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !needsRebuild {
 		t.Error("expected rebuild when artifact file is missing")
 	}
-	if reason != "artifact file missing" {
+	if !strings.HasPrefix(reason, "artifact file missing") {
 		t.Errorf("expected reason 'artifact file missing', got %q", reason)
 	}
 }
@@ -120,7 +121,7 @@ func TestShouldRebuild_DependenciesNotTracked(t *testing.T) {
 		},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,7 +171,7 @@ func TestShouldRebuild_DependencyDetectorNotConfigured(t *testing.T) {
 		},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -214,7 +215,7 @@ func TestShouldRebuild_DependencyFileMissing(t *testing.T) {
 		},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -266,7 +267,7 @@ func TestShouldRebuild_DependencyModified(t *testing.T) {
 		},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -334,7 +335,7 @@ func TestShouldRebuild_AllDependenciesUnchanged(t *testing.T) {
 		},
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -395,7 +396,7 @@ func TestShouldRebuild_ExternalPackagesWithoutGoMod(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stderr = w
 
-	needsRebuild, _, err := shouldRebuild("test-artifact", store, false)
+	needsRebuild, _, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
 
 	// Restore stderr
 	w.Close()

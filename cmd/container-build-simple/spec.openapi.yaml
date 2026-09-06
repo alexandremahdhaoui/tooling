@@ -40,20 +40,23 @@ components:
           items:
             type: string
           description: >
-            Globs of the files that go into the layer, relative to the
-            repository. A glob that matches nothing fails the build, because
-            an image that silently ships empty fails on the runner that
-            tries to use it, days later and far from the cause.
-        platforms:
-          type: array
-          items:
-            type: string
-          description: >
-            The os/arch pairs to assemble, like linux/amd64. Each becomes one
-            manifest in the index. Defaults to linux/amd64.
+            What goes into the layer, relative to the repository. Two shapes,
+            told apart by what is on disk:
 
-            A file is matched to a platform by its name_os_arch suffix, and
-            lands in the image under its real name.
+            A directory holding a forge.yaml contributes that repository's
+            built binaries by RECORD: every artifact of type binary its
+            artifact store carries for one of the platforms this entry
+            declares, each landing on its own platform under the artifact's
+            name. Nothing is parsed out of a file name.
+
+            Anything else is a glob of files that land on every platform,
+            because a script or a certificate is the same on all of them. A
+            glob that matches nothing fails the build, because an image that
+            silently ships empty fails on the runner that tries to use it,
+            days later and far from the cause.
+
+            The platforms assembled are the build entry's own platforms:
+            declaration, and each becomes one manifest in the index.
         binDir:
           type: string
           default: /usr/local/bin

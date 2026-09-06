@@ -79,29 +79,36 @@ func TestEnginesList(t *testing.T) {
 	repoRoot := getRepoRoot(t)
 	engines := enginetest.AllEngines(repoRoot)
 
-	if len(engines) != 18 {
-		t.Errorf("Expected 18 engines, got %d", len(engines))
+	if len(engines) != 25 {
+		t.Errorf("Expected 25 engines, got %d", len(engines))
 	}
 
 	expectedEngines := map[string]bool{
-		"forge":                true,
-		"go-build":             true,
-		"container-build":      true,
-		"generic-builder":      true,
-		"testenv":              true,
-		"testenv-kind":         true,
-		"testenv-lcr":          true,
-		"testenv-helm-install": true,
-		"go-test":              true,
-		"go-lint-licenses":     true,
-		"go-lint-tags":         true,
-		"generic-test-runner":  true,
-		"test-report":          true,
-		"go-format":            true,
-		"go-lint":              true,
-		"go-gen-mocks":         true,
-		"go-gen-openapi":       true,
-		"forge-e2e":            true,
+		"forge":                  true,
+		"go-build":               true,
+		"container-build":        true,
+		"generic-builder":        true,
+		"testenv":                true,
+		"testenv-kind":           true,
+		"testenv-lcr":            true,
+		"testenv-helm-install":   true,
+		"go-test":                true,
+		"go-lint-licenses":       true,
+		"go-lint-tags":           true,
+		"generic-test-runner":    true,
+		"test-report":            true,
+		"go-format":              true,
+		"go-lint":                true,
+		"go-gen-mocks":           true,
+		"go-gen-openapi":         true,
+		"forge-e2e":              true,
+		"forge-dev":              true,
+		"container-build-simple": true,
+		"parallel-builder":       true,
+		"go-gen-bpf":             true,
+		"go-gen-protobuf":        true,
+		"go-license-header":      true,
+		"rust-license-header":    true,
 	}
 
 	for _, engine := range engines {
@@ -124,24 +131,31 @@ func TestMCPEnginesConfiguration(t *testing.T) {
 
 	// Verify which engines should support MCP
 	expectedMCPEngines := map[string]bool{
-		"forge":                true,
-		"go-build":             true,
-		"container-build":      true,
-		"generic-builder":      true,
-		"testenv":              true,
-		"testenv-kind":         true,
-		"testenv-lcr":          true,
-		"testenv-helm-install": true,
-		"go-test":              true,
-		"go-lint-licenses":     true,
-		"go-lint-tags":         true,
-		"generic-test-runner":  true,
-		"test-report":          true,
-		"go-format":            true,
-		"go-lint":              true,
-		"go-gen-mocks":         true,
-		"go-gen-openapi":       true,
-		"forge-e2e":            true,
+		"forge":                  true,
+		"go-build":               true,
+		"container-build":        true,
+		"generic-builder":        true,
+		"testenv":                true,
+		"testenv-kind":           true,
+		"testenv-lcr":            true,
+		"testenv-helm-install":   true,
+		"go-test":                true,
+		"go-lint-licenses":       true,
+		"go-lint-tags":           true,
+		"generic-test-runner":    true,
+		"test-report":            true,
+		"go-format":              true,
+		"go-lint":                true,
+		"go-gen-mocks":           true,
+		"go-gen-openapi":         true,
+		"forge-e2e":              true,
+		"forge-dev":              true,
+		"container-build-simple": true,
+		"parallel-builder":       true,
+		"go-gen-bpf":             true,
+		"go-gen-protobuf":        true,
+		"go-license-header":      true,
+		"rust-license-header":    true,
 	}
 
 	for _, engine := range engines {
@@ -176,6 +190,41 @@ func TestAllBuildEnginesImplementBuildBatch(t *testing.T) {
 
 		t.Run(engine.Name, func(t *testing.T) {
 			enginetest.TestBuildEngineTools(t, engine)
+		})
+	}
+}
+
+// TestEveryBuildEngineHoldsThePlatformContract holds every builder to the
+// platform contract over real MCP. A malformed platform is refused by every
+// engine, naming it. A platform no toolchain targets is refused by name by
+// an engine that declares the host, and admitted by declaration by an
+// engine that declares any - its own tooling then decides, which is what
+// "any" means. A builder that ignored the platform it was handed would
+// answer a host binary under a foreign name, which is the defect this
+// exists to keep out.
+func TestEveryBuildEngineHoldsThePlatformContract(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+
+	// What each builder declares in its forge-dev.yaml.
+	declaresAny := map[string]bool{
+		"go-build": true, "generic-builder": true, "container-build-simple": true, "parallel-builder": true,
+	}
+	buildEngines := map[string]bool{
+		"container-build": true, "forge-dev": true, "go-format": true, "go-gen-bpf": true,
+		"go-gen-mocks": true, "go-gen-openapi": true, "go-gen-protobuf": true,
+		"go-license-header": true, "rust-license-header": true,
+	}
+	for name := range declaresAny {
+		buildEngines[name] = true
+	}
+
+	for _, engine := range enginetest.AllEngines(repoRoot) {
+		if !buildEngines[engine.Name] {
+			continue
+		}
+
+		t.Run(engine.Name, func(t *testing.T) {
+			enginetest.TestPlatformRefusal(t, engine, declaresAny[engine.Name])
 		})
 	}
 }

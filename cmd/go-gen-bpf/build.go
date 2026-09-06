@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/pkg/engineframework"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
@@ -94,7 +95,7 @@ func buildBpf2goArgs(src, dest string, spec *Spec) []string {
 }
 
 // Build implements the BuildFunc for generating Go code from BPF C source files
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	// 1. Log start
 	log.Printf("Generating BPF code for: %s", input.Name)
 
@@ -158,7 +159,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 	// 8. Create and return artifact
 	artifact := &forge.Artifact{
 		Name:                     input.Name,
-		Type:                     "bpf",
+		Type:                     forge.TypeBPF,
 		Location:                 input.Dest,
 		Timestamp:                time.Now().UTC().Format(time.RFC3339),
 		Dependencies:             deps,
@@ -167,7 +168,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 
 	log.Printf("Successfully generated BPF code for %s", input.Name)
 
-	return artifact, nil
+	return engineframework.One(artifact), nil
 }
 
 // buildDependencies creates ArtifactDependency entries for the source file.

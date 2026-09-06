@@ -22,73 +22,43 @@ import (
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
-// Declaring platforms is what makes an artifact public. A distribution
-// build expands those entries once per platform and leaves everything else
-// where it is - a repo's own tool never travels by accident. Live case:
-// two repos each shipped their own cmd/docgen into one release because the
-// dist step globbed cmd/* instead of reading a declaration.
-func TestOnlyDeclaredPlatformsTravel(t *testing.T) {
-	declared := forge.Build{
-		{
-			Name: "forge", Src: "./cmd/forge", Dest: "./build/dist",
-			Engine: "forge://go-build", Platforms: []string{"linux/amd64", "linux/arm64"},
-		},
-		{
-			Name: "docgen", Src: "./cmd/docgen", Dest: "./build/bin",
-			Engine: "forge://go-build",
-		},
+// An entry builds what it declares. Declaring platforms is the whole of
+// what makes an artifact public: a repo's own tool that declares none builds
+// for this machine and never travels by accident. Live case: two repos each
+// shipped their own cmd/docgen into one release because the dist step
+// globbed cmd/* instead of reading a declaration.
+func TestAnEntryBuildsThePlatformsItDeclares(t *testing.T) {
+	public := forge.BuildSpec{Name: "forge", Platforms: []string{"linux/amd64", "linux/arm64"}}
+	own := forge.BuildSpec{Name: "docgen"}
+
+	got := platformsFor(public, nil)
+	if len(got) != 2 || got[0] != "linux/amd64" || got[1] != "linux/arm64" {
+		t.Fatalf("a public entry builds every platform it declares, got %v", got)
 	}
 
-	specs := distSpecs(declared, []string{"linux/amd64", "linux/arm64"})
-
-	if len(specs) != 2 {
-		t.Fatalf("expected the two platforms of the one public command, got %d: %+v", len(specs), specs)
-	}
-
-	for _, spec := range specs {
-		if spec.Name == "docgen" || spec.Name == "docgen_linux_amd64" {
-			t.Fatalf("a command that declares no platform must never travel: %s", spec.Name)
-		}
-	}
-
-	if specs[0].Name != "forge_linux_amd64" || specs[1].Name != "forge_linux_arm64" {
-		t.Fatalf("a dist artifact travels as name_os_arch, got %s and %s", specs[0].Name, specs[1].Name)
-	}
-
-	env, ok := specs[0].Spec["env"].(map[string]any)
-	if !ok {
-		t.Fatalf("the platform must reach the engine as env, got %+v", specs[0].Spec)
-	}
-
-	if env["GOOS"] != "linux" || env["GOARCH"] != "amd64" {
-		t.Fatalf("wrong target: %+v", env)
+	got = platformsFor(own, nil)
+	if len(got) != 1 || got[0] != hostPlatform() {
+		t.Fatalf("an entry that declares nothing builds for the host, got %v", got)
 	}
 }
 
-// A host build is untouched by the declaration: every entry builds once,
-// under its own name, for this machine.
-func TestAHostBuildIgnoresPlatforms(t *testing.T) {
-	declared := forge.Build{
-		{Name: "forge", Engine: "forge://go-build", Platforms: []string{"linux/arm64"}},
-		{Name: "docgen", Engine: "forge://go-build"},
+// The flag narrows; it never widens. Asking for a platform an entry never
+// declared builds nothing for that entry rather than guessing.
+func TestTheFlagIsASubsetOfTheDeclaration(t *testing.T) {
+	spec := forge.BuildSpec{Name: "forge", Platforms: []string{"linux/amd64", "linux/arm64"}}
+
+	got := platformsFor(spec, []string{"linux/arm64"})
+	if len(got) != 1 || got[0] != "linux/arm64" {
+		t.Fatalf("got %v, want the one declared platform asked for", got)
 	}
 
-	specs := distSpecs(declared, nil)
-
-	if len(specs) != 2 || specs[0].Name != "forge" || specs[1].Name != "docgen" {
-		t.Fatalf("a host build builds what is declared, as declared: %+v", specs)
-	}
-}
-
-// An entry only travels where IT says it can: asking for a platform it
-// never declared builds nothing rather than guessing.
-func TestAnUndeclaredPlatformIsNotBuilt(t *testing.T) {
-	declared := forge.Build{
-		{Name: "forge", Engine: "forge://go-build", Platforms: []string{"linux/amd64"}},
+	if got := platformsFor(spec, []string{"darwin/arm64"}); len(got) != 0 {
+		t.Fatalf("an undeclared platform must build nothing, got %v", got)
 	}
 
-	if specs := distSpecs(declared, []string{"darwin/arm64"}); len(specs) != 0 {
-		t.Fatalf("expected nothing to build, got %+v", specs)
+	own := forge.BuildSpec{Name: "docgen"}
+	if got := platformsFor(own, []string{"linux/arm64"}); len(got) != 0 {
+		t.Fatalf("a host-only entry is left home by a filter naming another platform, got %v", got)
 	}
 }
 
@@ -116,37 +86,24 @@ func TestThePlatformsFlagIsParsedEitherWay(t *testing.T) {
 	}
 }
 
-// The fan-out renames each copy to <name>_<os>_<arch>, so a name filter
-// running after it matched nothing: "forge build --platforms linux/arm64
-// forge" failed with "no artifact found with name: forge", about an
-// artifact declared right there in forge.yaml. The filter runs on the name
-// the user typed, before the rename.
-func TestANamedArtifactSurvivesTheFanOut(t *testing.T) {
-	declared := forge.Build{
-		{Name: "alpha", Platforms: []string{"linux/amd64", "linux/arm64"}},
-		{Name: "beta", Platforms: []string{"linux/amd64"}},
+// Freshness is per platform: a fresh host binary says nothing about the
+// arm64 one, so an entry whose arm64 record is missing rebuilds.
+func TestFreshnessIsPerPlatform(t *testing.T) {
+	store := forge.ArtifactStore{Artifacts: []forge.Artifact{{
+		Name: "forge", Type: forge.TypeBinary, OS: "linux", Arch: "amd64",
+		Location: "/nowhere", Timestamp: "2026-01-01T00:00:00Z",
+	}}}
+
+	rebuild, reason, err := shouldRebuild("forge", []string{"linux/amd64", "linux/arm64"}, store, false)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	only := forge.Build{}
-
-	for _, spec := range declared {
-		if spec.Name == "alpha" {
-			only = append(only, spec)
-		}
+	if !rebuild {
+		t.Fatal("a platform with no record must rebuild")
 	}
 
-	specs := distSpecs(only, []string{"linux/arm64"})
-	if len(specs) != 1 {
-		t.Fatalf("got %d specs, want 1", len(specs))
-	}
-
-	if specs[0].Name != "alpha_linux_arm64" {
-		t.Fatalf("got %q; the copy is renamed, which is why the filter "+
-			"cannot run after it", specs[0].Name)
-	}
-
-	// And beta, which does not declare arm64, contributes nothing.
-	if got := distSpecs(forge.Build{declared[1]}, []string{"linux/arm64"}); len(got) != 0 {
-		t.Fatalf("beta declares no arm64 and produced %d specs", len(got))
+	if reason == "" {
+		t.Fatal("the reason names what was missing")
 	}
 }

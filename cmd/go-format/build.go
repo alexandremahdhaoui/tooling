@@ -27,7 +27,7 @@ import (
 )
 
 // Build implements the BuildFunc for formatting Go code
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	// Use spec.Path if set, otherwise fall back to input.Path or input.Src
 	path := spec.Path
 	if path == "" {
@@ -47,11 +47,11 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 	}
 
 	// Return artifact using CreateArtifact (formatted code has no version)
-	return engineframework.CreateArtifact(
+	return engineframework.One(engineframework.CreateArtifact(
 		"formatted-code",
-		"formatted",
+		forge.TypeGenerated,
 		path,
-	), nil
+	)), nil
 }
 
 func formatCode(path string) error {

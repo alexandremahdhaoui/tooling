@@ -30,7 +30,10 @@ A static binary runs on scratch, so the base exists for whatever else runs along
 
 - **Type:** `array of string`
 - **Required:** Yes
-- **Description:** Globs of the files that go into the layer, relative to the repository. A glob that matches nothing fails the build, because an image that silently ships empty fails on the runner that tries to use it, days later and far from the cause.
+- **Description:** What goes into the layer, relative to the repository. Two shapes, told apart by what is on disk:
+A directory holding a forge.yaml contributes that repository's built binaries by RECORD: every artifact of type binary its artifact store carries for one of the platforms this entry declares, each landing on its own platform under the artifact's name. Nothing is parsed out of a file name.
+Anything else is a glob of files that land on every platform, because a script or a certificate is the same on all of them. A glob that matches nothing fails the build, because an image that silently ships empty fails on the runner that tries to use it, days later and far from the cause.
+The platforms assembled are the build entry's own platforms: declaration, and each becomes one manifest in the index.
 
 
 ### `labels`
@@ -38,12 +41,4 @@ A static binary runs on scratch, so the base exists for whatever else runs along
 - **Type:** `map[string]string`
 - **Required:** No
 - **Description:** Labels to set in the image config.
-
-### `platforms`
-
-- **Type:** `array of string`
-- **Required:** No
-- **Description:** The os/arch pairs to assemble, like linux/amd64. Each becomes one manifest in the index. Defaults to linux/amd64.
-A file is matched to a platform by its name_os_arch suffix, and lands in the image under its real name.
-
 

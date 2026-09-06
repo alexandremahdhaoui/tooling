@@ -33,13 +33,14 @@ build:
     src: .
     dest: ./build/images
     engine: forge://container-build-simple
+    platforms: [linux/amd64, linux/arm64]
     spec:
       base: debian:stable-slim
       binDir: /usr/local/bin
-      platforms: [linux/amd64, linux/arm64]
       from:
-        - "../forge/build/dist/*_linux_amd64"
-        - "../forge/build/dist/*_linux_arm64"
+        - ../forge
+        - ../forge-ci
+        - extras/*
       labels:
         org.opencontainers.image.source: https://github.com/owner/repo
 ```
@@ -48,16 +49,23 @@ build:
 forge build toolchain
 ```
 
-## Where do the files go inside the image?
+The platforms assembled are the build entry's own `platforms:`, the same
+declaration every entry carries; each becomes one manifest in the index.
 
-Under `binDir`, which also goes to the front of `PATH`. A file carrying the
-`name_os_arch` travel suffix lands under its real name, so
-`forge-ci_linux_arm64` becomes `/usr/local/bin/forge-ci` and a script inside
-the image needs to know nothing about which machine assembled it.
+## Where do the files come from, and where do they go?
 
-A file carrying a suffix goes only to that platform. A file carrying none
-goes to every platform, because a script or a certificate is the same on all
-of them.
+A `from:` entry that is a directory holding a `forge.yaml` is a member
+repository: its artifact store is read, and every binary it recorded for
+one of the declared platforms lands on that platform, under the artifact's
+name. Nothing is parsed out of a file name: the record says which platform
+a file is for, and what it is called. A `from:` entry that is anything else
+is a glob of files that land on every platform, because a script or a
+certificate is the same on all of them.
+
+Under `binDir`, which also goes to the front of `PATH`. A binary recorded as
+`forge-ci` for `linux/arm64` lands as `/usr/local/bin/forge-ci`, whatever
+its file was called on disk, so a script inside the image needs to know
+nothing about which machine assembled it.
 
 ## Why does it push nothing?
 

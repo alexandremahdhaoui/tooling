@@ -18,249 +18,75 @@ package main
 
 import (
 	"testing"
-	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // -----------------------------------------------------------------------------
-// Tests for combineArtifacts
+// Tests for childInput and parseArtifacts
 // -----------------------------------------------------------------------------
 
-func TestCombineArtifacts_EmptyList(t *testing.T) {
-	result := combineArtifacts("test-artifact", []*forge.Artifact{})
-
-	assert.Equal(t, "test-artifact", result.Name)
-	assert.Equal(t, "parallel-build", result.Type)
-	assert.Equal(t, ".", result.Location)
-	assert.Equal(t, "no-artifacts", result.Version)
-	// Verify timestamp is valid RFC3339
-	_, err := time.Parse(time.RFC3339, result.Timestamp)
-	assert.NoError(t, err, "timestamp should be valid RFC3339")
-}
-
-func TestCombineArtifacts_SingleArtifact(t *testing.T) {
-	artifacts := []*forge.Artifact{
-		{
-			Name:      "artifact-1",
-			Type:      "binary",
-			Location:  "/path/to/artifact",
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			Version:   "v1.0.0",
+// The contract this engine received reaches every child: a child that names
+// nothing builds for the platforms the parent was asked for, frozen the same
+// way, in the same directories. A child that names its own platforms keeps
+// them - the child's spec is the child's word.
+func TestChildInputInheritsTheContract(t *testing.T) {
+	parent := mcptypes.BuildInput{
+		Platforms: []string{"linux/amd64", "linux/arm64"},
+		Frozen:    true,
+		Force:     true,
+		DirectoryParams: mcptypes.DirectoryParams{
+			TmpDir: "/tmp/x", BuildDir: "/build", RootDir: "/root",
 		},
 	}
 
-	result := combineArtifacts("combined", artifacts)
+	got := childInput(parent, map[string]any{"name": "child", "engine": "forge://go-build"})
 
-	assert.Equal(t, "combined", result.Name)
-	assert.Equal(t, "parallel-build", result.Type)
-	assert.Equal(t, "/path/to/artifact", result.Location)
-	assert.Equal(t, "1-artifacts", result.Version)
-	// Verify timestamp is valid RFC3339
-	_, err := time.Parse(time.RFC3339, result.Timestamp)
-	assert.NoError(t, err, "timestamp should be valid RFC3339")
+	assert.Equal(t, []string{"linux/amd64", "linux/arm64"}, got["platforms"])
+	assert.Equal(t, true, got["frozen"])
+	assert.Equal(t, true, got["force"])
+	assert.Equal(t, "/tmp/x", got["tmpDir"])
+	assert.Equal(t, "/build", got["buildDir"])
+	assert.Equal(t, "/root", got["rootDir"])
+	assert.Equal(t, "child", got["name"])
+
+	own := childInput(parent, map[string]any{"name": "child", "platforms": []any{"linux/amd64"}})
+	assert.Equal(t, []any{"linux/amd64"}, own["platforms"], "a child's own platforms win")
 }
 
-func TestCombineArtifacts_MultipleArtifacts(t *testing.T) {
-	artifacts := []*forge.Artifact{
-		{
-			Name:      "artifact-1",
-			Type:      "binary",
-			Location:  "/path/to/artifact1",
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			Version:   "v1.0.0",
-		},
-		{
-			Name:      "artifact-2",
-			Type:      "container",
-			Location:  "/path/to/artifact2",
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			Version:   "v2.0.0",
-		},
-		{
-			Name:      "artifact-3",
-			Type:      "binary",
-			Location:  "/path/to/artifact3",
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			Version:   "v3.0.0",
-		},
-	}
-
-	result := combineArtifacts("all-binaries", artifacts)
-
-	assert.Equal(t, "all-binaries", result.Name)
-	assert.Equal(t, "parallel-build", result.Type)
-	assert.Equal(t, "multiple", result.Location)
-	assert.Equal(t, "3-artifacts", result.Version)
-	// Verify timestamp is valid RFC3339
-	_, err := time.Parse(time.RFC3339, result.Timestamp)
-	assert.NoError(t, err, "timestamp should be valid RFC3339")
+func TestParseArtifacts_NilResponseIsAnError(t *testing.T) {
+	_, err := parseArtifacts(nil)
+	require.Error(t, err)
 }
 
-// -----------------------------------------------------------------------------
-// Tests for parseArtifact
-// -----------------------------------------------------------------------------
-
-func TestParseArtifact_NilResponse(t *testing.T) {
-	result, err := parseArtifact(nil)
-
-	require.NoError(t, err)
-	assert.Equal(t, "unknown", result.Name)
-	assert.Equal(t, "unknown", result.Type)
-	assert.Equal(t, ".", result.Location)
-	assert.Equal(t, "unknown", result.Version)
-	// Verify timestamp is valid RFC3339
-	_, parseErr := time.Parse(time.RFC3339, result.Timestamp)
-	assert.NoError(t, parseErr, "timestamp should be valid RFC3339")
-}
-
-func TestParseArtifact_ValidArtifactMap(t *testing.T) {
+func TestParseArtifacts_ReadsTheBuildOutputList(t *testing.T) {
 	resp := map[string]any{
-		"name":      "my-artifact",
-		"type":      "binary",
-		"location":  "/build/bin/my-app",
-		"timestamp": "2024-01-15T10:30:00Z",
-		"version":   "abc123",
+		"artifacts": []any{
+			map[string]any{"name": "a", "type": "binary", "os": "linux", "arch": "amd64", "location": "/build/bin/a", "version": "v1"},
+			map[string]any{"name": "a", "type": "binary", "os": "linux", "arch": "arm64", "location": "/build/bin/a_linux_arm64", "version": "v1"},
+		},
 	}
 
-	result, err := parseArtifact(resp)
-
+	got, err := parseArtifacts(resp)
 	require.NoError(t, err)
-	assert.Equal(t, "my-artifact", result.Name)
-	assert.Equal(t, "binary", result.Type)
-	assert.Equal(t, "/build/bin/my-app", result.Location)
-	assert.Equal(t, "2024-01-15T10:30:00Z", result.Timestamp)
-	assert.Equal(t, "abc123", result.Version)
+	require.Len(t, got, 2)
+	assert.Equal(t, forge.TypeBinary, got[0].Type)
+	assert.Equal(t, "linux/arm64", got[1].Platform())
 }
 
-func TestParseArtifact_PartialFields(t *testing.T) {
-	tests := []struct {
-		name     string
-		resp     map[string]any
-		expected *forge.Artifact
-	}{
-		{
-			name: "only name provided",
-			resp: map[string]any{
-				"name": "test-artifact",
-			},
-			expected: &forge.Artifact{
-				Name:     "test-artifact",
-				Type:     "unknown",
-				Location: ".",
-				Version:  "unknown",
-			},
-		},
-		{
-			name: "name and type provided",
-			resp: map[string]any{
-				"name": "test-artifact",
-				"type": "container",
-			},
-			expected: &forge.Artifact{
-				Name:     "test-artifact",
-				Type:     "container",
-				Location: ".",
-				Version:  "unknown",
-			},
-		},
-		{
-			name: "location and version provided",
-			resp: map[string]any{
-				"location": "/some/path",
-				"version":  "v1.2.3",
-			},
-			expected: &forge.Artifact{
-				Name:     "unknown",
-				Type:     "unknown",
-				Location: "/some/path",
-				Version:  "v1.2.3",
-			},
-		},
-		{
-			name: "empty map",
-			resp: map[string]any{},
-			expected: &forge.Artifact{
-				Name:     "unknown",
-				Type:     "unknown",
-				Location: ".",
-				Version:  "unknown",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseArtifact(tt.resp)
-
-			require.NoError(t, err)
-			assert.Equal(t, tt.expected.Name, result.Name)
-			assert.Equal(t, tt.expected.Type, result.Type)
-			assert.Equal(t, tt.expected.Location, result.Location)
-			assert.Equal(t, tt.expected.Version, result.Version)
-			// Timestamp should be set to current time if not provided
-			if tt.resp["timestamp"] == nil {
-				_, parseErr := time.Parse(time.RFC3339, result.Timestamp)
-				assert.NoError(t, parseErr, "timestamp should be valid RFC3339")
-			}
-		})
-	}
-}
-
-func TestParseArtifact_UnexpectedType(t *testing.T) {
-	tests := []struct {
-		name string
-		resp interface{}
-	}{
-		{
-			name: "string response",
-			resp: "not a map",
-		},
-		{
-			name: "integer response",
-			resp: 42,
-		},
-		{
-			name: "slice response",
-			resp: []string{"a", "b", "c"},
-		},
-		{
-			name: "bool response",
-			resp: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := parseArtifact(tt.resp)
-
-			assert.Error(t, err)
-			assert.Nil(t, result)
-			assert.Contains(t, err.Error(), "unexpected response type")
-		})
-	}
-}
-
-func TestParseArtifact_NonStringFieldValues(t *testing.T) {
-	// Test that non-string values in the map don't cause crashes
-	// (they just get skipped, resulting in default values)
-	resp := map[string]any{
-		"name":      123,           // not a string
-		"type":      true,          // not a string
-		"location":  []string{"a"}, // not a string
-		"timestamp": 12345,         // not a string
-		"version":   nil,           // nil
-	}
-
-	result, err := parseArtifact(resp)
-
+func TestParseArtifacts_ReadsOneArtifactOfTheOlderShape(t *testing.T) {
+	got, err := parseArtifacts(map[string]any{"name": "one", "type": "generated", "location": "."})
 	require.NoError(t, err)
-	assert.Equal(t, "unknown", result.Name)
-	assert.Equal(t, "unknown", result.Type)
-	assert.Equal(t, ".", result.Location)
-	assert.Equal(t, "unknown", result.Version)
+	require.Len(t, got, 1)
+	assert.Equal(t, "one", got[0].Name)
+}
+
+func TestParseArtifacts_UnreadableIsAnError(t *testing.T) {
+	_, err := parseArtifacts(map[string]any{"nothing": "here"})
+	require.Error(t, err)
 }
 
 // -----------------------------------------------------------------------------

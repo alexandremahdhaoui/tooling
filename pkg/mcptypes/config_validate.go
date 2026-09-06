@@ -49,6 +49,11 @@ type ConfigValidateInput struct {
 	// e.g., "go-app" for a build spec, "unit" for a test spec.
 	// Used for error context.
 	SpecName string `json:"specName,omitempty" jsonschema:"Name field from the forge.yaml spec entry (e.g. go-app or unit)"`
+
+	// Platforms is what a build entry declares it builds for. A build engine
+	// refuses here, before anything compiles, a platform outside what it
+	// declares in forge-dev.yaml. Empty for a test or testenv spec.
+	Platforms []string `json:"platforms,omitempty" jsonschema:"The os/arch pairs the build entry declares; a build engine refuses those it cannot build"`
 }
 
 // ConfigValidateOutput is the output from the config-validate MCP tool.

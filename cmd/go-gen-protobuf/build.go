@@ -24,13 +24,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/pkg/engineframework"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
 // Build implements the BuildFunc for compiling Protocol Buffer files to Go code.
 // It uses the typed Spec provided by the generated MCP server setup.
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	// 1. Log start
 	log.Printf("Generating protobuf code for: %s", input.Name)
 
@@ -81,7 +82,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 	// 8. Create artifact (DIRECTLY, not using engineframework.CreateArtifact)
 	artifact := &forge.Artifact{
 		Name:                     input.Name,
-		Type:                     "protobuf",
+		Type:                     forge.TypeProtobuf,
 		Location:                 input.Dest,
 		Timestamp:                time.Now().UTC().Format(time.RFC3339),
 		Dependencies:             deps,
@@ -90,7 +91,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 
 	log.Printf("Successfully generated protobuf code for %s", input.Name)
 
-	return artifact, nil
+	return engineframework.One(artifact), nil
 }
 
 // discoverProtoFiles recursively discovers all .proto files in the given directory.

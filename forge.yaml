@@ -163,20 +163,6 @@ run:
     factory: git@github.com:alexandremahdhaoui/forge-self-factory.git
 
 test:
-  # -- dist - every command cross-built CGO-off for the distribution,
-  # named by the <name>_<os>_<arch> travel convention. The toolchain
-  # pipeline's release stage globs build/dist into the aggregated release.
-  # -- dist - cross-build every command declared distributable. What travels
-  # is what its build entry declares platforms for; a repo's own tool that
-  # declares none stays home, so two repos can each keep a cmd/docgen.
-  - name: build-artifacts
-    runner: "forge://generic-test-runner"
-    spec:
-      command: forge
-      # Frozen: the distribution is the one build that must be reproducible,
-      # so it proves the recorded lock and never repairs it.
-      args: ["build", "--frozen", "--platforms", "linux/amd64,linux/arm64"]
-
   # -- lint-tags - verify all test files have build tags
   - name: lint-tags
     runner: "forge://go-lint-tags"

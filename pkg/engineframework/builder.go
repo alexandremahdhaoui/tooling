@@ -55,9 +55,14 @@ import (
 //	    }
 //
 //	    // Return artifact
-//	    return CreateArtifact(input.Name, "binary", "./build/bin/"+input.Name), nil
+//	    return []forge.Artifact{*CreateArtifact(input.Name, forge.TypeBinary, "./build/bin/"+input.Name)}, nil
 //	}
-type BuilderFunc func(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, error)
+//
+// A build answers a list: one artifact per platform in input.Platforms, or
+// one artifact tied to no platform. The framework has already refused any
+// platform outside the engine's declared Capabilities, so the function sees
+// only what it can build.
+type BuilderFunc func(ctx context.Context, input mcptypes.BuildInput) ([]forge.Artifact, error)
 
 // BuilderConfig configures builder tool registration.
 //
@@ -65,6 +70,8 @@ type BuilderFunc func(ctx context.Context, input mcptypes.BuildInput) (*forge.Ar
 //   - Name: Engine name (e.g., "go-build", "container-build")
 //   - Version: Engine version string (e.g., "1.0.0" or git commit hash)
 //   - BuildFunc: The build implementation function
+//   - Capabilities: what the engine declares it can build; empty means the
+//     host platform only
 //
 // Example:
 //
@@ -74,9 +81,10 @@ type BuilderFunc func(ctx context.Context, input mcptypes.BuildInput) (*forge.Ar
 //	    BuildFunc: myBuildFunc,
 //	}
 type BuilderConfig struct {
-	Name      string      // Engine name (e.g., "go-build")
-	Version   string      // Engine version
-	BuildFunc BuilderFunc // Build implementation
+	Name         string       // Engine name (e.g., "go-build")
+	Version      string       // Engine version
+	BuildFunc    BuilderFunc  // Build implementation
+	Capabilities Capabilities // What the engine declares; empty is host only
 }
 
 // RegisterBuilderTools registers build and buildBatch tools with the MCP server.
@@ -151,18 +159,32 @@ func makeBuildHandler(config BuilderConfig) func(context.Context, *mcp.CallToolR
 			return result, nil, nil
 		}
 
+		// The platform contract, held before the engine's own code runs:
+		// every requested platform is one this engine declared. An engine
+		// handed a platform it cannot build answers a refusal, never a host
+		// binary under a foreign name.
+		if err := RefusePlatforms(config.Name, config.Capabilities, input.Platforms); err != nil {
+			return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v", err)), nil, nil
+		}
+
 		// Call the BuilderFunc
-		artifact, err := config.BuildFunc(ctx, input)
+		artifacts, err := config.BuildFunc(ctx, input)
 		if err != nil {
 			return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v", err)), nil, nil
 		}
 
-		// Return success with artifact
-		result, returnedArtifact := mcputil.SuccessResultWithArtifact(
-			fmt.Sprintf("Build succeeded: %s", input.Name),
-			artifact,
+		for _, artifact := range artifacts {
+			if err := artifact.Validate(); err != nil {
+				return mcputil.ErrorResult(fmt.Sprintf("Build failed: %s answered an invalid artifact: %v", config.Name, err)), nil, nil
+			}
+		}
+
+		// Return success with the artifacts, the same shape a batch answers.
+		result, returned := mcputil.SuccessResultWithArtifact(
+			fmt.Sprintf("Build succeeded: %s (%d artifact(s))", input.Name, len(artifacts)),
+			mcptypes.BuildOutput{Artifacts: artifacts},
 		)
-		return result, returnedArtifact, nil
+		return result, returned, nil
 	}
 }
 
@@ -183,9 +205,20 @@ func makeBatchBuildHandler(config BuilderConfig) func(context.Context, *mcp.Call
 		singleBuildHandler := makeBuildHandler(config)
 
 		// Use generic batch handler from mcputil
-		artifacts, errorMsgs := mcputil.HandleBatchBuild(ctx, input.Specs, func(ctx context.Context, spec mcptypes.BuildInput) (*mcp.CallToolResult, any, error) {
+		outputs, errorMsgs := mcputil.HandleBatchBuild(ctx, input.Specs, func(ctx context.Context, spec mcptypes.BuildInput) (*mcp.CallToolResult, any, error) {
 			return singleBuildHandler(ctx, req, spec)
 		})
+
+		// Each spec answered a list; the batch answers one flat list.
+		artifacts := []any{}
+
+		for _, out := range outputs {
+			if output, ok := out.(mcptypes.BuildOutput); ok {
+				for _, artifact := range output.Artifacts {
+					artifacts = append(artifacts, artifact)
+				}
+			}
+		}
 
 		// Format the batch result
 		result, returnedArtifacts := mcputil.FormatBatchResult("artifacts", artifacts, errorMsgs)

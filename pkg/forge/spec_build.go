@@ -40,12 +40,14 @@ type BuildSpec struct {
 	// - forge://container-build (forge://github.com/alexandremahdhaoui/forge/cmd/container-build)
 	// - forge://go-build        (forge://github.com/alexandremahdhaoui/forge/cmd/go-build)
 	Engine string `json:"engine"`
-	// Platforms names the os/arch pairs this artifact is distributable for,
-	// e.g. ["linux/amd64", "linux/arm64"]. It is the declaration that this
-	// artifact is PUBLIC: `forge build --platforms` builds exactly the
-	// entries that carry one, once per platform, recording each as its own
-	// artifact named <name>_<os>_<arch>. An entry without platforms is a
-	// repo's own tool and never travels.
+	// Platforms names the os/arch pairs this artifact builds for, e.g.
+	// ["linux/amd64", "linux/arm64"]. Every build builds all of them, each
+	// recorded as its own artifact carrying its os and arch; absent means
+	// the machine forge runs on. `forge build --platforms` narrows a build
+	// to a subset of what is declared and never widens it. It is also the
+	// declaration that this artifact is PUBLIC: what a release ships is what
+	// carries a platform, and a repo's own tool that declares none stays
+	// home. The engine refuses a platform it cannot build.
 	Platforms []string `json:"platforms,omitempty"`
 	// Spec contains engine-specific configuration (free-form)
 	// Supports fields like: command, args, env, envFile, context

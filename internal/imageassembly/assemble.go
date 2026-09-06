@@ -92,9 +92,10 @@ type Request struct {
 	// BinDir is where the files land inside the image.
 	BinDir string
 
-	// Files maps a platform to the local paths that go into its layer. Every
-	// platform named here becomes one manifest in the index.
-	Files map[Platform][]string
+	// Files maps a platform to the files that go into its layer, each under
+	// the name the caller gives it. Every platform named here becomes one
+	// manifest in the index.
+	Files map[Platform][]File
 
 	// Env is added to the image config. PATH is handled separately, so that
 	// BinDir is always reachable.
@@ -120,30 +121,35 @@ func New(puller Puller) *Assembler {
 	return &Assembler{puller: puller}
 }
 
-// layerName is what a file is called inside the image: its basename with any
-// travel suffix removed, so a cross-built "forge-ci_linux_arm64" lands as
-// "forge-ci" and a script that calls it needs to know nothing about which
-// machine assembled the image.
-func layerName(path string) string {
-	base := filepath.Base(path)
+// File is one file of a layer: where it is on disk, and what it is called
+// inside the image. The caller names it - from the artifact record for a
+// built binary, from the basename for a glob - so nothing here reads a
+// name out of a path.
+type File struct {
+	Path string
+	Name string
+}
 
-	for _, suffix := range []string{"_linux_amd64", "_linux_arm64", "_darwin_amd64", "_darwin_arm64"} {
-		base = strings.TrimSuffix(base, suffix)
+// Named is the files of these paths, each under its basename.
+func Named(paths ...string) []File {
+	out := make([]File, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, File{Path: p, Name: filepath.Base(p)})
 	}
 
-	return base
+	return out
 }
 
 // Layer packs every path into one tar layer under binDir. One layer rather
 // than one per file: a layer costs a manifest entry and a round trip, and
 // nothing here is cached separately from the rest.
-func Layer(binDir string, paths []string) (v1.Layer, error) {
-	if len(paths) == 0 {
+func Layer(binDir string, files []File) (v1.Layer, error) {
+	if len(files) == 0 {
 		return nil, ErrNoFiles
 	}
 
-	sorted := append([]string{}, paths...)
-	sort.Strings(sorted)
+	sorted := append([]File{}, files...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Name < sorted[j].Name })
 
 	var buf bytes.Buffer
 
@@ -151,13 +157,15 @@ func Layer(binDir string, paths []string) (v1.Layer, error) {
 	seen := map[string]string{}
 	prefix := strings.Trim(binDir, "/")
 
-	for _, path := range sorted {
+	for _, file := range sorted {
+		path := file.Path
+
 		data, err := os.ReadFile(path) //nolint:gosec // the caller's own build output
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", path, err)
 		}
 
-		named := layerName(path)
+		named := file.Name
 		if first, clash := seen[named]; clash {
 			return nil, fmt.Errorf("%w: %q comes from both %s and %s", ErrCollision, named, first, path)
 		}
@@ -202,8 +210,8 @@ func (a *Assembler) Assemble(req Request) (map[Platform]v1.Image, error) {
 
 	out := map[Platform]v1.Image{}
 
-	for platform, paths := range req.Files {
-		img, err := a.one(req, platform, paths)
+	for platform, files := range req.Files {
+		img, err := a.one(req, platform, files)
 		if err != nil {
 			return nil, fmt.Errorf("assembling %s: %w", platform, err)
 		}
@@ -214,7 +222,7 @@ func (a *Assembler) Assemble(req Request) (map[Platform]v1.Image, error) {
 	return out, nil
 }
 
-func (a *Assembler) one(req Request, platform Platform, paths []string) (v1.Image, error) {
+func (a *Assembler) one(req Request, platform Platform, files []File) (v1.Image, error) {
 	base := v1.Image(empty.Image)
 
 	if req.Base != "" && req.Base != "scratch" {
@@ -226,7 +234,7 @@ func (a *Assembler) one(req Request, platform Platform, paths []string) (v1.Imag
 		base = pulled
 	}
 
-	layer, err := Layer(req.BinDir, paths)
+	layer, err := Layer(req.BinDir, files)
 	if err != nil {
 		return nil, err
 	}

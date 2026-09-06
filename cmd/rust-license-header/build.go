@@ -34,7 +34,7 @@ import (
 // The actual scan/detect/write logic lives in internal/licenseheader,
 // shared with go-license-header and go-lint-licenses. This file is just the
 // Rust-specific wiring: the .rs extension and this engine's Spec.
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	rootDir := spec.RootDir
 	if rootDir == "" {
 		rootDir = input.Path
@@ -64,9 +64,9 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		stats.Total, stats.AlreadyLicensed, stats.GeneratedSkipped, stats.Added,
 	)
 
-	return engineframework.CreateArtifact(
+	return engineframework.One(engineframework.CreateArtifact(
 		"rust-license-headers",
-		"fixed",
+		forge.TypeGenerated,
 		rootDir,
-	), nil
+	)), nil
 }

@@ -15,9 +15,13 @@
 package main
 
 import (
+	"context"
+
 	"github.com/alexandremahdhaoui/forge/pkg/enginedocs"
 	"github.com/alexandremahdhaoui/forge/pkg/engineframework"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcpserver"
+	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -27,11 +31,20 @@ import (
 func runMCPServer() error {
 	server := mcpserver.New(Name, Version)
 
-	// Register builder tools (build, buildBatch)
+	// Register builder tools (build, buildBatch). forge-dev generates code
+	// on the machine it runs on and declares no platform: the framework
+	// refuses anything but the host before generate runs.
 	config := engineframework.BuilderConfig{
-		Name:      Name,
-		Version:   Version,
-		BuildFunc: generate,
+		Name:    Name,
+		Version: Version,
+		BuildFunc: func(ctx context.Context, input mcptypes.BuildInput) ([]forge.Artifact, error) {
+			artifact, err := generate(ctx, input)
+			if err != nil {
+				return nil, err
+			}
+
+			return []forge.Artifact{*artifact}, nil
+		},
 	}
 
 	if err := engineframework.RegisterBuilderTools(server, config); err != nil {

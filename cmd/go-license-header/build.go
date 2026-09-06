@@ -38,7 +38,7 @@ import (
 // The actual scan/detect/write logic lives in internal/licenseheader,
 // shared with rust-license-header and go-lint-licenses. This file is just
 // the Go-specific wiring: the .go extension and this engine's Spec.
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	rootDir := spec.RootDir
 	if rootDir == "" {
 		rootDir = input.Path
@@ -68,9 +68,9 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		stats.Total, stats.AlreadyLicensed, stats.GeneratedSkipped, stats.Added,
 	)
 
-	return engineframework.CreateArtifact(
+	return engineframework.One(engineframework.CreateArtifact(
 		"go-license-headers",
-		"fixed",
+		forge.TypeGenerated,
 		rootDir,
-	), nil
+	)), nil
 }

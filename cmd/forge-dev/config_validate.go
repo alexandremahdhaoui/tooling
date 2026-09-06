@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/alexandremahdhaoui/forge/pkg/engineframework"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"github.com/alexandremahdhaoui/forge/pkg/mcputil"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -39,6 +40,16 @@ func handleConfigValidate(
 	input mcptypes.ConfigValidateInput,
 ) (*mcp.CallToolResult, any, error) {
 	output := validateForgeDevConfig(input)
+
+	// forge-dev declares no platform: it generates code on the machine it
+	// runs on. A build entry that declares platforms for a forge-dev cell
+	// is refused here, before anything builds.
+	if len(input.Platforms) > 0 {
+		if err := engineframework.RefusePlatforms(Name, engineframework.Capabilities{}, input.Platforms); err != nil {
+			output.Valid = false
+			output.Errors = append(output.Errors, mcptypes.ValidationError{Field: "platforms", Message: err.Error()})
+		}
+	}
 
 	// Return result with appropriate success/error status
 	if output.Valid {

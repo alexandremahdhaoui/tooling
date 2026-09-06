@@ -17,8 +17,16 @@ import (
 )
 
 // BuildFunc is the signature for the build operation with typed Spec.
-// This is the function that engine authors implement.
-type BuildFunc func(ctx context.Context, input mcptypes.BuildInput, s *Spec) (*forge.Artifact, error)
+// This is the function that engine authors implement. It answers one
+// artifact per platform in input.Platforms, or one artifact tied to no
+// platform; the framework has already refused any platform outside
+// Capabilities, so the function sees only what it declared it can build.
+type BuildFunc func(ctx context.Context, input mcptypes.BuildInput, s *Spec) ([]forge.Artifact, error)
+
+// Capabilities is what forge-dev.yaml declares this engine can do. The
+// build tool refuses a platform outside it before the engine's own code
+// runs, and config-validate refuses it before anything builds.
+var Capabilities = engineframework.Capabilities{Platforms: nil}
 
 // SetupMCPServer creates and configures the MCP server with all required tools.
 // It registers build, buildBatch, and config-validate tools.
@@ -26,9 +34,10 @@ func SetupMCPServer(name string, version string, buildFn BuildFunc) (*mcpserver.
 	server := mcpserver.New(name, version)
 
 	config := engineframework.BuilderConfig{
-		Name:      name,
-		Version:   version,
-		BuildFunc: wrapBuildFunc(buildFn),
+		Name:         name,
+		Version:      version,
+		BuildFunc:    wrapBuildFunc(buildFn),
+		Capabilities: Capabilities,
 	}
 
 	if err := engineframework.RegisterBuilderTools(server, config); err != nil {
@@ -47,7 +56,7 @@ func SetupMCPServer(name string, version string, buildFn BuildFunc) (*mcpserver.
 // wrapBuildFunc wraps a typed BuildFunc into an engineframework.BuilderFunc.
 // It handles parsing and validation of the Spec from the input.
 func wrapBuildFunc(fn BuildFunc) engineframework.BuilderFunc {
-	return func(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, error) {
+	return func(ctx context.Context, input mcptypes.BuildInput) ([]forge.Artifact, error) {
 		// Parse Spec from input
 		spec, err := FromMap(input.Spec)
 		if err != nil {
@@ -68,13 +77,26 @@ func wrapBuildFunc(fn BuildFunc) engineframework.BuilderFunc {
 	}
 }
 
-// handleConfigValidate handles the config-validate MCP tool.
+// handleConfigValidate handles the config-validate MCP tool. Beside the
+// spec, it holds the entry's declared platforms to this engine's
+// Capabilities, so a platform this engine cannot build is refused by
+// `forge config validate` and never reaches a build.
 func handleConfigValidate(
 	_ context.Context,
 	_ *mcp.CallToolRequest,
 	input mcptypes.ConfigValidateInput,
 ) (*mcp.CallToolResult, any, error) {
 	output := ValidateMap(input.Spec)
+
+	if len(input.Platforms) > 0 {
+		if err := engineframework.RefusePlatforms("rust-license-header", Capabilities, input.Platforms); err != nil {
+			output.Valid = false
+			output.Errors = append(output.Errors, mcptypes.ValidationError{
+				Field:   "platforms",
+				Message: err.Error(),
+			})
+		}
+	}
 
 	if output.Valid {
 		result, artifact := mcputil.SuccessResultWithArtifact(

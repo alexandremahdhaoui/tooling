@@ -49,7 +49,9 @@ func TestGenerateMCPFile_Builder(t *testing.T) {
 		"engineframework.BuilderFunc",
 		"engineframework.BuilderConfig",
 		"mcptypes.BuildInput",
-		"*forge.Artifact",
+		"[]forge.Artifact",
+		"var Capabilities = engineframework.Capabilities{Platforms: nil}",
+		"engineframework.RefusePlatforms(\"test-builder\"",
 		"handleConfigValidate",
 		"sha256:builder123",
 	}

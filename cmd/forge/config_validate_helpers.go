@@ -36,6 +36,10 @@ type engineReference struct {
 	// SpecName is the name of the build/test spec this reference came from
 	SpecName string
 
+	// Platforms is what a build entry declares it builds for; empty for a
+	// test or testenv reference.
+	Platforms []string
+
 	// Spec is the engine-specific configuration to pass for validation.
 	// For build engines: BuildSpec.Spec
 	// For test runners: TestSpec.Spec
@@ -68,11 +72,12 @@ func extractEngineURIs(spec forge.Spec) []engineReference {
 		if bs.Engine != "" && !seen[key] {
 			seen[key] = true
 			refs = append(refs, engineReference{
-				URI:      bs.Engine,
-				SpecType: "build",
-				SpecName: bs.Name,
-				Spec:     bs.Spec,
-				Src:      bs.Src,
+				URI:       bs.Engine,
+				SpecType:  "build",
+				SpecName:  bs.Name,
+				Spec:      bs.Spec,
+				Src:       bs.Src,
+				Platforms: bs.Platforms,
 			})
 		}
 	}
@@ -134,12 +139,15 @@ func validateEngineSpec(ctx context.Context, ref engineReference, forgeSpec *for
 	// as RootDir exactly as a build passes it, so an engine that validates
 	// files under the entry - forge-dev and its cells - sees the same
 	// directory the build would hand it.
+	// The entry's declared platforms ride along, so a build engine refuses
+	// here, before anything builds, a platform outside what it declares.
 	input := mcptypes.ConfigValidateInput{
 		Spec:       ref.Spec,
 		ForgeSpec:  forgeSpec,
 		ConfigPath: configPath,
 		SpecType:   ref.SpecType,
 		SpecName:   ref.SpecName,
+		Platforms:  ref.Platforms,
 	}
 
 	if ref.Src != "" {

@@ -126,6 +126,12 @@ type Config struct {
 	// land in zz_generated.runnable.yaml, never in hand-written yaml.
 	Runtime *RuntimeConfig `yaml:"runtime,omitempty"`
 
+	// Capabilities is what a builder declares it can do. It is generated
+	// into the engine's build and config-validate tools, so a platform the
+	// engine did not declare is refused before its own code runs. Absent
+	// means the host platform only.
+	Capabilities *CapabilitiesConfig `yaml:"capabilities,omitempty"`
+
 	// OpenAPI contains OpenAPI spec configuration.
 	OpenAPI OpenAPIConfig `yaml:"openapi"`
 
@@ -135,6 +141,49 @@ type Config struct {
 
 	// Generate contains code generation settings.
 	Generate GenerateConfig `yaml:"generate"`
+}
+
+// CapabilitiesConfig is the capabilities block of a builder.
+type CapabilitiesConfig struct {
+	// Platforms is `any`, `host`, or a list of os/arch pairs. A scalar and
+	// a list both parse, so `platforms: any` reads as the word it is.
+	Platforms PlatformsConfig `yaml:"platforms,omitempty"`
+}
+
+// PlatformsConfig is a platform declaration that parses from a scalar or a
+// list.
+type PlatformsConfig []string
+
+func (p *PlatformsConfig) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		var one string
+		if err := node.Decode(&one); err != nil {
+			return err
+		}
+
+		*p = PlatformsConfig{one}
+
+		return nil
+	}
+
+	var many []string
+	if err := node.Decode(&many); err != nil {
+		return err
+	}
+
+	*p = PlatformsConfig(many)
+
+	return nil
+}
+
+// platforms is the declaration as the generated code carries it: nil for
+// an engine that declares nothing, which the framework reads as host only.
+func (c *Config) platforms() []string {
+	if c.Capabilities == nil {
+		return nil
+	}
+
+	return []string(c.Capabilities.Platforms)
 }
 
 // RuntimeConfig declares run-time inputs of the engine's runnable.
@@ -413,6 +462,53 @@ var semverRegexp = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 
 // packageNameRegexp validates Go package names.
 var packageNameRegexp = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+
+// validateCapabilities holds the capabilities block to what the framework
+// can act on: only a builder has one, and platforms is the word any, the
+// word host, or os/arch pairs - never a word beside a pair.
+func validateCapabilities(c *Config) []ValidationError {
+	if c.Capabilities == nil {
+		return nil
+	}
+
+	if c.engineType() != EngineTypeBuilder {
+		return []ValidationError{{
+			Field:   "capabilities",
+			Message: "only a builder declares capabilities; this engine's profile is " + string(c.engineType()),
+		}}
+	}
+
+	platforms := c.Capabilities.Platforms
+	if len(platforms) == 0 {
+		return []ValidationError{{
+			Field:   "capabilities.platforms",
+			Message: "declare any, host, or a list of os/arch pairs, or drop the block for host only",
+		}}
+	}
+
+	var errs []ValidationError
+
+	for _, p := range platforms {
+		switch p {
+		case "any", "host":
+			if len(platforms) > 1 {
+				errs = append(errs, ValidationError{
+					Field:   "capabilities.platforms",
+					Message: p + " stands alone; it cannot be listed beside a platform",
+				})
+			}
+		default:
+			if parts := strings.Split(p, "/"); len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+				errs = append(errs, ValidationError{
+					Field:   "capabilities.platforms",
+					Message: fmt.Sprintf("%q is not any, host, or <os>/<arch>", p),
+				})
+			}
+		}
+	}
+
+	return errs
+}
 
 // ValidateConfig validates the configuration and returns any validation errors.
 // validateDocsBaseURL checks generate.docsBaseURL when it is set. A trailing
@@ -743,6 +839,7 @@ func ValidateConfig(c *Config) []ValidationError {
 	errors = append(errors, validateKind(c)...)
 	errors = append(errors, validateTools(c)...)
 	errors = append(errors, validateLanguage(c)...)
+	errors = append(errors, validateCapabilities(c)...)
 
 	// Validate name (required)
 	if c.Name == "" {

@@ -28,7 +28,7 @@ import (
 )
 
 // Build implements the BuilderFunc for generating Go mocks using mockery
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	log.Printf("Generating mocks")
 
 	// Get mocksDir from environment variable
@@ -44,22 +44,22 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		// Log warning but don't fail - lazy build is optional optimization
 		log.Printf("WARNING: dependency detection failed: %v", err)
 		// Return artifact without dependencies (will always rebuild)
-		return engineframework.CreateArtifact(
+		return engineframework.One(engineframework.CreateArtifact(
 			input.Name,
-			"generated",
+			forge.TypeGenerated,
 			getMocksDir(mocksDir),
-		), nil
+		)), nil
 	}
 
 	// Return artifact WITH dependencies for lazy rebuild
 	artifact := engineframework.CreateArtifact(
 		input.Name,
-		"generated",
+		forge.TypeGenerated,
 		getMocksDir(mocksDir),
 	)
 	artifact.Dependencies = deps
 	artifact.DependencyDetectorEngine = "forge://go-gen-mocks-dep-detector"
-	return artifact, nil
+	return engineframework.One(artifact), nil
 }
 
 // detectMockDependencies calls the go-gen-mocks-dep-detector MCP server

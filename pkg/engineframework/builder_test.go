@@ -32,14 +32,14 @@ import (
 // mockBuildFunc creates a mock BuilderFunc for testing.
 // Returns success artifact if name doesn't contain "fail".
 func mockBuildFunc(returnError bool) BuilderFunc {
-	return func(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, error) {
+	return func(ctx context.Context, input mcptypes.BuildInput) ([]forge.Artifact, error) {
 		// Simulate failure if name contains "fail"
 		if strings.Contains(input.Name, "fail") || returnError {
 			return nil, errors.New("build failed: simulated error")
 		}
 
 		// Return success artifact
-		return CreateArtifact(input.Name, "test-artifact", "/path/to/"+input.Name), nil
+		return One(CreateArtifact(input.Name, forge.TypeGenerated, "/path/to/"+input.Name)), nil
 	}
 }
 
@@ -55,8 +55,9 @@ func TestMakeBuildHandler_Success(t *testing.T) {
 	ctx := context.Background()
 	req := &mcp.CallToolRequest{}
 	input := mcptypes.BuildInput{
-		Name:   "my-app",
-		Engine: "forge://test-builder",
+		Name:      "my-app",
+		Engine:    "forge://test-builder",
+		Platforms: []string{HostPlatform()},
 	}
 
 	result, artifact, err := handler(ctx, req, input)
@@ -80,11 +81,17 @@ func TestMakeBuildHandler_Success(t *testing.T) {
 		t.Fatal("handler returned nil artifact")
 	}
 
-	// Artifact should be of correct type
-	artifactObj, ok := artifact.(*forge.Artifact)
+	// The build answers a list, one artifact here
+	output, ok := artifact.(mcptypes.BuildOutput)
 	if !ok {
-		t.Fatalf("artifact is not *forge.Artifact, got %T", artifact)
+		t.Fatalf("artifact is not mcptypes.BuildOutput, got %T", artifact)
 	}
+
+	if len(output.Artifacts) != 1 {
+		t.Fatalf("expected one artifact, got %d", len(output.Artifacts))
+	}
+
+	artifactObj := output.Artifacts[0]
 
 	// Artifact should have correct name
 	if artifactObj.Name != "my-app" {
@@ -92,8 +99,8 @@ func TestMakeBuildHandler_Success(t *testing.T) {
 	}
 
 	// Artifact should have correct type
-	if artifactObj.Type != "test-artifact" {
-		t.Errorf("artifact.Type = %q, want %q", artifactObj.Type, "test-artifact")
+	if artifactObj.Type != forge.TypeGenerated {
+		t.Errorf("artifact.Type = %q, want %q", artifactObj.Type, forge.TypeGenerated)
 	}
 
 	// Artifact should have correct location
@@ -114,8 +121,9 @@ func TestMakeBuildHandler_BuildFuncError(t *testing.T) {
 	ctx := context.Background()
 	req := &mcp.CallToolRequest{}
 	input := mcptypes.BuildInput{
-		Name:   "my-app",
-		Engine: "forge://test-builder",
+		Name:      "my-app",
+		Engine:    "forge://test-builder",
+		Platforms: []string{HostPlatform()},
 	}
 
 	result, artifact, err := handler(ctx, req, input)
@@ -223,9 +231,9 @@ func TestMakeBatchBuildHandler_AllSuccess(t *testing.T) {
 	req := &mcp.CallToolRequest{}
 	input := mcptypes.BatchBuildInput{
 		Specs: []mcptypes.BuildInput{
-			{Name: "app1", Engine: "forge://test-builder"},
-			{Name: "app2", Engine: "forge://test-builder"},
-			{Name: "app3", Engine: "forge://test-builder"},
+			{Name: "app1", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},
+			{Name: "app2", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},
+			{Name: "app3", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},
 		},
 	}
 
@@ -264,9 +272,9 @@ func TestMakeBatchBuildHandler_AllSuccess(t *testing.T) {
 	// Verify each artifact
 	expectedNames := []string{"app1", "app2", "app3"}
 	for i, expectedName := range expectedNames {
-		artifact, ok := batchResult.Artifacts[i].(*forge.Artifact)
+		artifact, ok := batchResult.Artifacts[i].(forge.Artifact)
 		if !ok {
-			t.Errorf("artifact[%d] is not *forge.Artifact, got %T", i, batchResult.Artifacts[i])
+			t.Errorf("artifact[%d] is not forge.Artifact, got %T", i, batchResult.Artifacts[i])
 			continue
 		}
 
@@ -289,10 +297,10 @@ func TestMakeBatchBuildHandler_MixedResults(t *testing.T) {
 	req := &mcp.CallToolRequest{}
 	input := mcptypes.BatchBuildInput{
 		Specs: []mcptypes.BuildInput{
-			{Name: "app1", Engine: "forge://test-builder"},         // Success
-			{Name: "fail-app", Engine: "forge://test-builder"},     // Failure (name contains "fail")
-			{Name: "app3", Engine: "forge://test-builder"},         // Success
-			{Name: "another-fail", Engine: "forge://test-builder"}, // Failure
+			{Name: "app1", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},         // Success
+			{Name: "fail-app", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},     // Failure (name contains "fail")
+			{Name: "app3", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},         // Success
+			{Name: "another-fail", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}}, // Failure
 		},
 	}
 
@@ -326,9 +334,9 @@ func TestMakeBatchBuildHandler_MixedResults(t *testing.T) {
 	// Verify successful artifacts
 	expectedNames := []string{"app1", "app3"}
 	for i, expectedName := range expectedNames {
-		artifact, ok := batchResult.Artifacts[i].(*forge.Artifact)
+		artifact, ok := batchResult.Artifacts[i].(forge.Artifact)
 		if !ok {
-			t.Errorf("artifact[%d] is not *forge.Artifact, got %T", i, batchResult.Artifacts[i])
+			t.Errorf("artifact[%d] is not forge.Artifact, got %T", i, batchResult.Artifacts[i])
 			continue
 		}
 
@@ -364,8 +372,8 @@ func TestMakeBatchBuildHandler_AllFailures(t *testing.T) {
 	req := &mcp.CallToolRequest{}
 	input := mcptypes.BatchBuildInput{
 		Specs: []mcptypes.BuildInput{
-			{Name: "app1", Engine: "forge://test-builder"},
-			{Name: "app2", Engine: "forge://test-builder"},
+			{Name: "app1", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},
+			{Name: "app2", Engine: "forge://test-builder", Platforms: []string{HostPlatform()}},
 		},
 	}
 
@@ -466,8 +474,9 @@ func TestRegisterBuilderTools_IntegrationTest(t *testing.T) {
 	ctx := context.Background()
 	req := &mcp.CallToolRequest{}
 	buildInput := mcptypes.BuildInput{
-		Name:   "integration-test",
-		Engine: "forge://test-builder",
+		Name:      "integration-test",
+		Engine:    "forge://test-builder",
+		Platforms: []string{HostPlatform()},
 	}
 
 	buildResult, buildArtifact, buildErr := buildHandler(ctx, req, buildInput)
@@ -502,9 +511,9 @@ func TestBuilderFunc_ContextPropagation(t *testing.T) {
 	// Test that context is properly propagated to BuilderFunc
 	var receivedCtx context.Context
 
-	testBuilder := func(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, error) {
+	testBuilder := func(ctx context.Context, input mcptypes.BuildInput) ([]forge.Artifact, error) {
 		receivedCtx = ctx
-		return CreateArtifact(input.Name, "test", "/path"), nil
+		return One(CreateArtifact(input.Name, forge.TypeGenerated, "/path")), nil
 	}
 
 	config := BuilderConfig{
@@ -520,8 +529,9 @@ func TestBuilderFunc_ContextPropagation(t *testing.T) {
 	ctx := context.WithValue(context.Background(), ctxKey("test"), "value")
 	req := &mcp.CallToolRequest{}
 	input := mcptypes.BuildInput{
-		Name:   "test-app",
-		Engine: "forge://test-builder",
+		Name:      "test-app",
+		Engine:    "forge://test-builder",
+		Platforms: []string{HostPlatform()},
 	}
 
 	_, _, err := handler(ctx, req, input)

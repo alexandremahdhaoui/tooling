@@ -116,7 +116,7 @@ func TestTheBinariesLandUnderBinDirAndAreExecutable(t *testing.T) {
 	images, err := imageassembly.New(&fakeBase{}).Assemble(imageassembly.Request{
 		Base:   "debian:stable-slim",
 		BinDir: "/usr/local/bin",
-		Files:  map[imageassembly.Platform][]string{amd64: paths},
+		Files:  map[imageassembly.Platform][]imageassembly.File{amd64: imageassembly.Named(paths...)},
 	})
 	require.NoError(t, err)
 	require.Len(t, images, 1)
@@ -126,10 +126,11 @@ func TestTheBinariesLandUnderBinDirAndAreExecutable(t *testing.T) {
 	require.Equal(t, int64(0o755), got["usr/local/bin/forge-ci"])
 }
 
-// A cross-built binary travels as name_os_arch. It must land under its real
-// name, so a script inside the image needs to know nothing about which
-// machine assembled it.
-func TestATravelSuffixIsStrippedInsideTheImage(t *testing.T) {
+// A file lands under the name it is given, whatever it was called on disk:
+// a cross-built binary is recorded as forge-ci and stored as
+// forge-ci_linux_arm64, and the record's name is the one a script inside the
+// image calls.
+func TestAFileLandsUnderTheNameItIsGiven(t *testing.T) {
 	t.Parallel()
 
 	paths := binaries(t, "forge-ci_linux_arm64")
@@ -137,7 +138,7 @@ func TestATravelSuffixIsStrippedInsideTheImage(t *testing.T) {
 	images, err := imageassembly.New(&fakeBase{}).Assemble(imageassembly.Request{
 		BinDir: "/usr/local/bin",
 		Base:   "scratch",
-		Files:  map[imageassembly.Platform][]string{arm64: paths},
+		Files:  map[imageassembly.Platform][]imageassembly.File{arm64: {{Path: paths[0], Name: "forge-ci"}}},
 	})
 	require.NoError(t, err)
 
@@ -158,7 +159,7 @@ func TestTwoFilesUnderOneNameIsRefused(t *testing.T) {
 	require.NoError(t, os.WriteFile(a, []byte("a"), 0o600))
 	require.NoError(t, os.WriteFile(b, []byte("b"), 0o600))
 
-	_, err := imageassembly.Layer("/usr/local/bin", []string{a, b})
+	_, err := imageassembly.Layer("/usr/local/bin", []imageassembly.File{{Path: a, Name: "forge-ci"}, {Path: b, Name: "forge-ci"}})
 	require.ErrorIs(t, err, imageassembly.ErrCollision)
 	require.Contains(t, err.Error(), a)
 	require.Contains(t, err.Error(), b, "both sources are named, because this is a declaration mistake")
@@ -184,11 +185,11 @@ func TestTheSameInputsAssembleToTheSameDigest(t *testing.T) {
 
 	paths := binaries(t, "forge", "forge-ci")
 
-	first, err := imageassembly.Layer("/usr/local/bin", paths)
+	first, err := imageassembly.Layer("/usr/local/bin", imageassembly.Named(paths...))
 	require.NoError(t, err)
 
 	// Reversed, because what is in the layer is a set and not an order.
-	second, err := imageassembly.Layer("/usr/local/bin", []string{paths[1], paths[0]})
+	second, err := imageassembly.Layer("/usr/local/bin", imageassembly.Named(paths[1], paths[0]))
 	require.NoError(t, err)
 
 	fd, err := first.Digest()
@@ -206,7 +207,7 @@ func TestBinDirGoesToTheFrontOfPathExactlyOnce(t *testing.T) {
 	images, err := imageassembly.New(&fakeBase{}).Assemble(imageassembly.Request{
 		Base:   "debian:stable-slim",
 		BinDir: "/usr/bin",
-		Files:  map[imageassembly.Platform][]string{amd64: binaries(t, "forge")},
+		Files:  map[imageassembly.Platform][]imageassembly.File{amd64: imageassembly.Named(binaries(t, "forge")...)},
 		Env:    map[string]string{"FORGE_HOME": "/opt/forge"},
 	})
 	require.NoError(t, err)
@@ -236,7 +237,7 @@ func TestNoEntrypointIsDeclared(t *testing.T) {
 	images, err := imageassembly.New(&fakeBase{}).Assemble(imageassembly.Request{
 		Base:   "scratch",
 		BinDir: "/usr/local/bin",
-		Files:  map[imageassembly.Platform][]string{amd64: binaries(t, "forge")},
+		Files:  map[imageassembly.Platform][]imageassembly.File{amd64: imageassembly.Named(binaries(t, "forge")...)},
 	})
 	require.NoError(t, err)
 
@@ -256,9 +257,9 @@ func TestTheBaseIsPulledForEachArchitecture(t *testing.T) {
 	_, err := imageassembly.New(fake).Assemble(imageassembly.Request{
 		Base:   "debian:stable-slim",
 		BinDir: "/usr/local/bin",
-		Files: map[imageassembly.Platform][]string{
-			amd64: binaries(t, "forge"),
-			arm64: binaries(t, "forge"),
+		Files: map[imageassembly.Platform][]imageassembly.File{
+			amd64: imageassembly.Named(binaries(t, "forge")...),
+			arm64: imageassembly.Named(binaries(t, "forge")...),
 		},
 	})
 	require.NoError(t, err)
@@ -276,7 +277,7 @@ func TestScratchPullsNothing(t *testing.T) {
 	_, err := imageassembly.New(fake).Assemble(imageassembly.Request{
 		Base:   "scratch",
 		BinDir: "/usr/local/bin",
-		Files:  map[imageassembly.Platform][]string{amd64: binaries(t, "forge")},
+		Files:  map[imageassembly.Platform][]imageassembly.File{amd64: imageassembly.Named(binaries(t, "forge")...)},
 	})
 	require.NoError(t, err)
 	assert.Empty(t, fake.pulled, "a static binary needs no base, and an empty base is not a pull")
@@ -309,9 +310,9 @@ func TestTheIndexRoundTripsThroughARealRegistry(t *testing.T) {
 	images, err := imageassembly.New(&fakeBase{}).Assemble(imageassembly.Request{
 		Base:   "scratch",
 		BinDir: "/usr/local/bin",
-		Files: map[imageassembly.Platform][]string{
-			amd64: binaries(t, "forge", "forge-ci"),
-			arm64: binaries(t, "forge", "forge-ci"),
+		Files: map[imageassembly.Platform][]imageassembly.File{
+			amd64: imageassembly.Named(binaries(t, "forge", "forge-ci")...),
+			arm64: imageassembly.Named(binaries(t, "forge", "forge-ci")...),
 		},
 		Labels: map[string]string{"org.opencontainers.image.source": "https://example.com/forge"},
 	})

@@ -61,7 +61,7 @@ output-options:
 )
 
 // Build implements the BuilderFunc for generating OpenAPI client and server code
-func Build(ctx context.Context, input mcptypes.BuildInput, _ *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, _ *Spec) ([]forge.Artifact, error) {
 	log.Printf("Generating OpenAPI code for: %s", input.Name)
 
 	// Extract OpenAPI config from BuildInput.Spec
@@ -110,22 +110,22 @@ func Build(ctx context.Context, input mcptypes.BuildInput, _ *Spec) (*forge.Arti
 		// Log warning but don't fail - lazy build is optional optimization
 		log.Printf("WARNING: dependency detection failed: %v", err)
 		// Return artifact without dependencies (will always rebuild)
-		return engineframework.CreateArtifact(
+		return engineframework.One(engineframework.CreateArtifact(
 			input.Name,
-			"generated",
+			forge.TypeGenerated,
 			config.Specs[0].DestinationDir,
-		), nil
+		)), nil
 	}
 
 	// Return artifact WITH dependencies for lazy rebuild
 	artifact := engineframework.CreateArtifact(
 		input.Name,
-		"generated",
+		forge.TypeGenerated,
 		config.Specs[0].DestinationDir,
 	)
 	artifact.Dependencies = deps
 	artifact.DependencyDetectorEngine = "forge://go-gen-openapi-dep-detector"
-	return artifact, nil
+	return engineframework.One(artifact), nil
 }
 
 // detectOpenAPIDependencies calls the go-gen-openapi-dep-detector MCP server

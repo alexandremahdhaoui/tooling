@@ -21,16 +21,18 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/cmdutil"
+	"github.com/alexandremahdhaoui/forge/pkg/engineframework"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
 // Build is the core business logic for executing a shell command as a build step.
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	command := spec.Command
 	if command == "" {
 		command = input.Command
@@ -56,7 +58,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		ctxDir = input.Context
 	}
 
-	log.Printf("Executing command: %s %v (context: %s)", command, args, ctxDir)
+	log.Printf("Executing command: %s %v (context: %s) for %s", command, args, ctxDir, strings.Join(input.Platforms, ", "))
 
 	if command == "" {
 		return nil, fmt.Errorf("command is required")
@@ -67,65 +69,97 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		return nil, fmt.Errorf("template processing failed: %w", err)
 	}
 
-	execInput := cmdutil.ExecuteInput{
-		Command: command,
-		Args:    processedArgs,
-		Env:     env,
-		EnvFile: envFile,
-		Context: ctxDir,
-	}
+	host := engineframework.HostPlatform()
+	artifacts := make([]forge.Artifact, 0, len(input.Platforms))
 
-	output := cmdutil.ExecuteCommand(execInput)
+	// The command runs once per platform. This engine names no language, so
+	// the platform reaches the command as three neutral variables and the
+	// command decides what a target means: a compiler reads them, a script
+	// that builds nothing platform-specific ignores them.
+	for _, platform := range input.Platforms {
+		goos, goarch, err := forge.SplitPlatform(platform)
+		if err != nil {
+			return nil, err
+		}
 
-	if output.ExitCode != 0 {
-		errorMsg := fmt.Sprintf("command failed with exit code %d", output.ExitCode)
-		if output.Error != "" {
-			errorMsg += fmt.Sprintf(": %s", output.Error)
+		platformEnv := map[string]string{}
+		for k, v := range env {
+			platformEnv[k] = v
+		}
+
+		platformEnv["FORGE_PLATFORM"] = platform
+		platformEnv["FORGE_OS"] = goos
+		platformEnv["FORGE_ARCH"] = goarch
+
+		execInput := cmdutil.ExecuteInput{
+			Command: command,
+			Args:    processedArgs,
+			Env:     platformEnv,
+			EnvFile: envFile,
+			Context: ctxDir,
+		}
+
+		output := cmdutil.ExecuteCommand(execInput)
+
+		if output.ExitCode != 0 {
+			errorMsg := fmt.Sprintf("command failed for %s with exit code %d", platform, output.ExitCode)
+			if output.Error != "" {
+				errorMsg += fmt.Sprintf(": %s", output.Error)
+			}
+			if output.Stderr != "" {
+				errorMsg += fmt.Sprintf(" (stderr: %s)", output.Stderr)
+			}
+			return nil, fmt.Errorf("%s", errorMsg)
+		}
+
+		if output.Stdout != "" {
+			log.Printf("Stdout: %s", output.Stdout)
 		}
 		if output.Stderr != "" {
-			errorMsg += fmt.Sprintf(" (stderr: %s)", output.Stderr)
+			log.Printf("Stderr: %s", output.Stderr)
 		}
-		return nil, fmt.Errorf("%s", errorMsg)
-	}
 
-	if output.Stdout != "" {
-		log.Printf("Stdout: %s", output.Stdout)
-	}
-	if output.Stderr != "" {
-		log.Printf("Stderr: %s", output.Stderr)
-	}
-
-	location := ctxDir
-	if location == "" {
-		location = input.Src
-	}
-	if location == "" {
-		location = "."
-	}
-
-	artifactType := "command-output"
-
-	// A generic build that declares a dest and leaves the named file there
-	// produced a real artifact: record the file itself, as a binary, so the
-	// release side can publish it. A command that wrote nothing keeps the
-	// command-output record it always had.
-	if input.Dest != "" {
-		built := filepath.Join(input.Dest, input.Name)
-		if info, err := os.Stat(built); err == nil && !info.IsDir() {
-			location = built
-			artifactType = "binary"
+		location := ctxDir
+		if location == "" {
+			location = input.Src
 		}
+		if location == "" {
+			location = "."
+		}
+
+		artifact := forge.Artifact{
+			Name:      input.Name,
+			Type:      forge.TypeCommandOutput,
+			Location:  location,
+			Timestamp: time.Now().UTC().Format(time.RFC3339),
+			Version:   fmt.Sprintf("%s-exit%d", command, output.ExitCode),
+		}
+
+		// A generic build that declares a dest and leaves the named file
+		// there produced a real artifact: record the file itself, as a
+		// binary for that platform, so the release side can publish it. The
+		// host build is dest/<name>; a cross build is dest/<name>_<os>_<arch>,
+		// the same convention go-build writes, so one release reads both. A
+		// command that wrote nothing keeps the command-output record it
+		// always had.
+		if input.Dest != "" {
+			built := filepath.Join(input.Dest, input.Name)
+			if platform != host {
+				built = filepath.Join(input.Dest, fmt.Sprintf("%s_%s_%s", input.Name, goos, goarch))
+			}
+
+			if info, err := os.Stat(built); err == nil && !info.IsDir() {
+				artifact.Location = built
+				artifact.Type = forge.TypeBinary
+				artifact.OS = goos
+				artifact.Arch = goarch
+			}
+		}
+
+		artifacts = append(artifacts, artifact)
 	}
 
-	artifact := &forge.Artifact{
-		Name:      input.Name,
-		Type:      artifactType,
-		Location:  location,
-		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Version:   fmt.Sprintf("%s-exit%d", command, output.ExitCode),
-	}
-
-	return artifact, nil
+	return artifacts, nil
 }
 
 func processTemplatedArgs(args []string, data mcptypes.BuildInput) ([]string, error) {

@@ -34,6 +34,7 @@ package forge
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -65,10 +66,17 @@ type ArtifactDependency struct {
 }
 
 type Artifact struct {
-	// The name of the artifact
+	// The name of the artifact, as the build entry names it. A cross-built
+	// binary keeps the entry's name; the platform is the two fields below,
+	// never a suffix somebody has to parse back out of the name.
 	Name string `json:"name" yaml:"name"`
-	// Type of artifact
-	Type string `json:"type" yaml:"type"` // e.g.: "container" or "binary"
+	// Type of artifact, one of ArtifactTypes.
+	Type ArtifactType `json:"type" yaml:"type"`
+	// OS and Arch are the platform this artifact was built for, both set or
+	// both empty. Empty means the artifact is not tied to one: generated
+	// code, a command's output, a multi-architecture image layout.
+	OS   string `json:"os,omitempty" yaml:"os,omitempty"`
+	Arch string `json:"arch,omitempty" yaml:"arch,omitempty"`
 	// Location of the artifact (can be a url or the path to a file, which must start as a url like file://)
 	Location string `json:"location" yaml:"location"`
 	// Timestamp when the artifact was built
@@ -85,10 +93,12 @@ type Artifact struct {
 
 // ArtifactSummary is a lightweight view of an Artifact without dependencies or version details.
 type ArtifactSummary struct {
-	Name      string `json:"name" yaml:"name"`
-	Type      string `json:"type" yaml:"type"`
-	Location  string `json:"location" yaml:"location"`
-	Timestamp string `json:"timestamp" yaml:"timestamp"`
+	Name      string       `json:"name" yaml:"name"`
+	Type      ArtifactType `json:"type" yaml:"type"`
+	OS        string       `json:"os,omitempty" yaml:"os,omitempty"`
+	Arch      string       `json:"arch,omitempty" yaml:"arch,omitempty"`
+	Location  string       `json:"location" yaml:"location"`
+	Timestamp string       `json:"timestamp" yaml:"timestamp"`
 }
 
 // Summary returns a lightweight summary of this Artifact.
@@ -96,6 +106,8 @@ func (a Artifact) Summary() ArtifactSummary {
 	return ArtifactSummary{
 		Name:      a.Name,
 		Type:      a.Type,
+		OS:        a.OS,
+		Arch:      a.Arch,
 		Location:  a.Location,
 		Timestamp: a.Timestamp,
 	}
@@ -250,8 +262,11 @@ func (a *Artifact) Validate() error {
 	if err := ValidateRequired(a.Name, "name", "Artifact"); err != nil {
 		errs.Add(err)
 	}
-	if err := ValidateRequired(a.Type, "type", "Artifact"); err != nil {
+	if err := a.Type.Validate(); err != nil {
 		errs.Add(err)
+	}
+	if (a.OS == "") != (a.Arch == "") {
+		errs.AddErrorf("%v: os=%q arch=%q", ErrArtifactPlatform, a.OS, a.Arch)
 	}
 	if err := ValidateRequired(a.Location, "location", "Artifact"); err != nil {
 		errs.Add(err)
@@ -328,6 +343,29 @@ func ReadArtifactStore(path string) (ArtifactStore, error) {
 		out.Version = artifactStoreVersion
 	}
 
+	// A store is a cache, and a record an older forge wrote under a type
+	// the vocabulary no longer carries is a stale cache entry, not a broken
+	// store: it is dropped, said so, and the next build writes a fresh one.
+	// A record with a half-named platform is the same case.
+	kept := out.Artifacts[:0]
+	dropped := 0
+
+	for _, artifact := range out.Artifacts {
+		if err := artifact.Type.Validate(); err != nil || (artifact.OS == "") != (artifact.Arch == "") {
+			dropped++
+
+			continue
+		}
+
+		kept = append(kept, artifact)
+	}
+
+	if dropped > 0 {
+		fmt.Fprintf(os.Stderr, "forge: dropping %d artifact record(s) an older forge wrote to %s; the next build rewrites them\n", dropped, path)
+	}
+
+	out.Artifacts = kept
+
 	// Validate the artifact store
 	if err := out.Validate(); err != nil {
 		return ArtifactStore{}, flaterrors.Join(err, errInvalidArtifactStore, errReadingArtifactStore)
@@ -363,10 +401,11 @@ func PruneBuildArtifacts(store *ArtifactStore, keepCount int) {
 		return
 	}
 
-	// Group artifacts by type+name
+	// Group artifacts by identity: type, name and platform. A host binary
+	// and its cross-built siblings are three artifacts, pruned apart.
 	groups := make(map[string][]Artifact)
 	for _, artifact := range store.Artifacts {
-		key := artifact.Type + ":" + artifact.Name
+		key := artifact.identity()
 		groups[key] = append(groups[key], artifact)
 	}
 
@@ -509,9 +548,15 @@ func WriteArtifactStore(path string, store ArtifactStore) error {
 	return nil
 }
 
+// identity is what tells two artifacts apart in the store: type, name and
+// platform. Two builds of one identity are versions of the same thing.
+func (a Artifact) identity() string {
+	return string(a.Type) + ":" + a.Name + ":" + a.Platform()
+}
+
 // AddOrUpdateArtifact adds a new artifact to the store or updates an existing one.
-// If an artifact with the same name, type, and version exists, it updates it.
-// Otherwise, it appends a new artifact.
+// If an artifact with the same identity (type, name, platform) and version
+// exists, it updates it. Otherwise, it appends a new artifact.
 func AddOrUpdateArtifact(store *ArtifactStore, artifact Artifact) {
 	if store == nil {
 		return
@@ -522,10 +567,8 @@ func AddOrUpdateArtifact(store *ArtifactStore, artifact Artifact) {
 		store.Artifacts = []Artifact{}
 	}
 
-	// Check if artifact with same name, type, and version exists
 	for i, existing := range store.Artifacts {
-		if existing.Name == artifact.Name &&
-			existing.Type == artifact.Type &&
+		if existing.identity() == artifact.identity() &&
 			existing.Version == artifact.Version {
 			// Update existing artifact
 			store.Artifacts[i] = artifact
@@ -537,15 +580,16 @@ func AddOrUpdateArtifact(store *ArtifactStore, artifact Artifact) {
 	store.Artifacts = append(store.Artifacts, artifact)
 }
 
-// GetLatestArtifact finds the most recent artifact with the given name.
-// It returns the artifact with the latest timestamp.
-func GetLatestArtifact(store ArtifactStore, name string) (Artifact, error) {
+// GetLatestArtifact finds the most recent artifact with the given name and
+// platform. The platform is "<os>/<arch>", or empty for an artifact not tied
+// to one. It returns the artifact with the latest timestamp.
+func GetLatestArtifact(store ArtifactStore, name, platform string) (Artifact, error) {
 	var latest Artifact
 	var latestTime time.Time
 	found := false
 
 	for _, artifact := range store.Artifacts {
-		if artifact.Name != name {
+		if artifact.Name != name || artifact.Platform() != platform {
 			continue
 		}
 
@@ -565,7 +609,7 @@ func GetLatestArtifact(store ArtifactStore, name string) (Artifact, error) {
 
 	if !found {
 		return Artifact{}, flaterrors.Join(
-			errors.New("no artifact found with name: "+name),
+			errors.New("no artifact found with name: "+name+" for platform: "+platformOrHost(platform)),
 			errArtifactNotFound,
 		)
 	}
@@ -574,7 +618,7 @@ func GetLatestArtifact(store ArtifactStore, name string) (Artifact, error) {
 }
 
 // GetArtifactsByType returns all artifacts of a specific type.
-func GetArtifactsByType(store ArtifactStore, artifactType string) []Artifact {
+func GetArtifactsByType(store ArtifactStore, artifactType ArtifactType) []Artifact {
 	var results []Artifact
 
 	for _, artifact := range store.Artifacts {
@@ -894,4 +938,14 @@ func GetArtifactStorePath(defaultPath string) (string, error) {
 	}
 
 	return defaultPath, nil
+}
+
+// platformOrHost names a platform in a message; the empty platform is the
+// artifact of no platform, which is what a generator or a command leaves.
+func platformOrHost(platform string) string {
+	if platform == "" {
+		return "none"
+	}
+
+	return platform
 }

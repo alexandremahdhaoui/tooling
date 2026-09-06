@@ -90,6 +90,12 @@ type BuildInput struct {
 	Force   bool   `json:"force,omitempty" jsonschema:"Force rebuild and skip dependency-based caching"`
 	Frozen  bool   `json:"frozen,omitempty" jsonschema:"Build strictly against the recorded dependency lock and never repair it; a stale lock fails the build"`
 
+	// Platforms is the os/arch pairs this call must build, one artifact
+	// each. Required: the core always names at least one, the host when
+	// the build entry declares none, so an engine never guesses. An engine
+	// refuses a platform outside what it declares in forge-dev.yaml.
+	Platforms []string `json:"platforms" jsonschema:"The os/arch pairs to build (e.g. linux/amd64); required, the core sends the host when the entry declares none"`
+
 	// Generic engine specific fields (optional)
 	Command string            `json:"command,omitempty" jsonschema:"Command to execute (generic-builder engine only)"`
 	Args    []string          `json:"args,omitempty" jsonschema:"Command arguments (generic-builder engine only)"`
@@ -126,6 +132,13 @@ type BuildInput struct {
 // BatchBuildInput represents the input for building multiple artifacts in batch.
 type BatchBuildInput struct {
 	Specs []BuildInput `json:"specs" jsonschema:"List of build specifications to execute in batch"`
+}
+
+// BuildOutput is what a build answers: one artifact per platform built, or
+// one for an artifact tied to no platform. build and buildBatch answer the
+// same shape, so a caller reads one list either way.
+type BuildOutput struct {
+	Artifacts []forge.Artifact `json:"artifacts" jsonschema:"The artifacts this build produced"`
 }
 
 // DetectDependenciesInput represents the standard input parameters for dependency-detector tools.

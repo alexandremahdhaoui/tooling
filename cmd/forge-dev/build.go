@@ -141,7 +141,7 @@ func generate(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, 
 			// Return artifact with existing files
 			return &forge.Artifact{
 				Name:      config.Name,
-				Type:      "generated",
+				Type:      forge.TypeGenerated,
 				Location:  srcDir,
 				Timestamp: time.Now().UTC().Format(time.RFC3339),
 				Version:   checksum,
@@ -210,7 +210,7 @@ func generate(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, 
 
 		return &forge.Artifact{
 			Name:      config.Name,
-			Type:      "generated",
+			Type:      forge.TypeGenerated,
 			Location:  srcDir,
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 			Version:   checksum,

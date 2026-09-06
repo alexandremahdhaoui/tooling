@@ -30,19 +30,31 @@ Build a single Go binary.
   "src": "string (required)",         // Source directory (e.g., "./cmd/myapp")
   "dest": "string (optional)",        // Output directory (default: "./build/bin")
   "engine": "string (optional)",      // Builder engine reference
+  "platforms": ["linux/amd64"],       // os/arch pairs to build, one artifact each (required; forge sends the host when the entry declares none)
+  "frozen": false,                    // Prove the recorded lock (go mod verify, -mod=readonly) and never repair it
   "args": ["string"],                 // Additional go build arguments (e.g., ["-tags=netgo"])
-  "env": {"key": "value"}             // Environment variables (e.g., {"GOOS": "linux", "GOARCH": "amd64"})
+  "env": {"key": "value"}             // Environment variables; GOOS and GOARCH are refused here, the platform is declared on the entry
 }
 ```
+
+The engine declares `capabilities.platforms: any` and checks each pair
+against `go tool dist list`, so a platform the toolchain cannot target is
+refused by name before anything compiles.
 
 **Output:**
 ```json
 {
-  "name": "string",
-  "type": "binary",
-  "location": "string",              // e.g., "./build/bin/myapp"
-  "timestamp": "string",             // RFC3339 format
-  "version": "string"                // Git commit SHA
+  "artifacts": [
+    {
+      "name": "string",
+      "type": "binary",
+      "os": "linux",                   // the platform this artifact was built for
+      "arch": "amd64",
+      "location": "string",            // ./build/bin/myapp for the host, ./build/bin/myapp_<os>_<arch> for a cross build
+      "timestamp": "string",           // RFC3339 format
+      "version": "string"              // Git commit SHA
+    }
+  ]
 }
 ```
 

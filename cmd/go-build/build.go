@@ -25,6 +25,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/engineframework"
@@ -35,9 +36,13 @@ import (
 
 // ----------------------------------------------------- BUILD (MCP) -------------------------------------------------- //
 
-// Build implements the BuildFunc for building Go binaries (MCP mode)
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
-	log.Printf("Building binary: %s from %s", input.Name, input.Src)
+// Build implements the BuildFunc for building Go binaries (MCP mode). It
+// answers one artifact per platform it was handed: the host build lands at
+// dest/<name>, a cross build at dest/<name>_<os>_<arch>. That suffix is this
+// engine's file-naming convention and nothing else reads it back: the
+// platform travels on the artifact record, as os and arch.
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
+	log.Printf("Building binary: %s from %s for %s", input.Name, input.Src, strings.Join(input.Platforms, ", "))
 
 	// Use spec values for custom args and env, falling back to input values
 	customArgs := spec.Args
@@ -48,6 +53,15 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 	customEnv := spec.Env
 	if len(customEnv) == 0 {
 		customEnv = input.Env
+	}
+
+	// The platform is declared on the build entry, never smuggled in as
+	// env: an entry that sets GOOS in env and declares no platform would
+	// build a foreign binary under the host's name.
+	for key := range customEnv {
+		if key == "GOOS" || key == "GOARCH" {
+			return nil, fmt.Errorf("%s in env: the platform is declared on the build entry as platforms:, not in env", key)
+		}
 	}
 
 	// Determine destination directory
@@ -61,34 +75,24 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		return nil, fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	outputPath := filepath.Join(dest, input.Name)
-
 	// The build environment is scoped to this command, never the process:
 	// batch builds run in parallel, so setting GOOS on the process would
 	// leak into a sibling build and cross-compile the wrong artifact.
 	// CGO off keeps the binary static; custom env may override it.
-	buildEnv := append(os.Environ(), "CGO_ENABLED=0")
-
-	// A cross build is one that names a target: it gets the distribution
-	// treatment - stripped, trimmed - because it is built to travel.
-	cross := false
+	baseEnv := append(os.Environ(), "CGO_ENABLED=0")
 
 	for key, value := range customEnv {
-		if key == "GOOS" || key == "GOARCH" {
-			cross = true
-		}
-
-		buildEnv = append(buildEnv, key+"="+value)
+		baseEnv = append(baseEnv, key+"="+value)
 	}
 
 	// A frozen build proves the recorded lock instead of trusting it: the
 	// module cache is checked against go.sum before anything compiles, and
 	// -mod=readonly refuses to repair go.mod. Frozen never writes - a stale
 	// lock fails the build rather than self-healing into bytes nobody can
-	// reproduce.
+	// reproduce. Once per call: the lock is the same for every platform.
 	if input.Frozen {
 		verify := exec.Command("go", "mod", "verify")
-		verify.Env = buildEnv
+		verify.Env = baseEnv
 		verify.Stdout = os.Stderr
 		verify.Stderr = os.Stderr
 
@@ -97,54 +101,130 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		}
 	}
 
-	// Build command arguments. -trimpath keeps absolute build paths out of
-	// the binary, so the same source builds the same bytes anywhere.
-	args := []string{
-		"build",
-		"-trimpath",
-		"-o", outputPath,
+	host := engineframework.HostPlatform()
+	artifacts := make([]forge.Artifact, 0, len(input.Platforms))
+
+	for _, platform := range input.Platforms {
+		goos, goarch, err := forge.SplitPlatform(platform)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := knownPlatform(platform); err != nil {
+			return nil, err
+		}
+
+		// A cross build is one that names a target other than this machine:
+		// it gets the distribution treatment - stripped, trimmed - because it
+		// is built to travel, and it lands under a name that keeps it apart
+		// from the host binary in the same directory.
+		cross := platform != host
+
+		outputPath := filepath.Join(dest, input.Name)
+		if cross {
+			outputPath = filepath.Join(dest, fmt.Sprintf("%s_%s_%s", input.Name, goos, goarch))
+		}
+
+		buildEnv := append(append([]string{}, baseEnv...), "GOOS="+goos, "GOARCH="+goarch)
+
+		// Build command arguments. -trimpath keeps absolute build paths out of
+		// the binary, so the same source builds the same bytes anywhere.
+		args := []string{
+			"build",
+			"-trimpath",
+			"-o", outputPath,
+		}
+
+		if input.Frozen {
+			args = append(args, "-mod=readonly")
+		}
+
+		args = append(args, "-ldflags", buildLDFlags(cross))
+
+		// Add custom args if provided
+		args = append(args, customArgs...)
+
+		// Add source path
+		args = append(args, input.Src)
+
+		// Execute build
+		cmd := exec.Command("go", args...)
+		cmd.Env = buildEnv
+		cmd.Stdout = os.Stderr // MCP mode: redirect to stderr
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("go build for %s failed: %w", platform, err)
+		}
+
+		// Create versioned artifact
+		artifact, err := engineframework.CreateVersionedArtifact(
+			input.Name,
+			forge.TypeBinary,
+			outputPath,
+			platform,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create artifact: %w", err)
+		}
+
+		// Detect dependencies if this is a main package
+		if err := detectDependenciesForArtifact(input.Src, artifact); err != nil {
+			return nil, fmt.Errorf("failed to detect dependencies: %w", err)
+		}
+
+		fmt.Fprintf(os.Stderr, "Built binary: %s for %s (version: %s)\n", input.Name, platform, artifact.Version)
+
+		artifacts = append(artifacts, *artifact)
 	}
 
-	if input.Frozen {
-		args = append(args, "-mod=readonly")
-	}
+	return artifacts, nil
+}
 
-	args = append(args, "-ldflags", buildLDFlags(cross))
-
-	// Add custom args if provided
-	args = append(args, customArgs...)
-
-	// Add source path
-	args = append(args, input.Src)
-
-	// Execute build
-	cmd := exec.Command("go", args...)
-	cmd.Env = buildEnv
-	cmd.Stdout = os.Stderr // MCP mode: redirect to stderr
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("go build failed: %w", err)
-	}
-
-	// Create versioned artifact
-	artifact, err := engineframework.CreateVersionedArtifact(
-		input.Name,
-		"binary",
-		outputPath,
-	)
+// knownPlatform asks the toolchain whether it can target a platform, so an
+// impossible pair fails here with the toolchain's own list rather than deep
+// inside the linker. The list is read once per process.
+func knownPlatform(platform string) error {
+	list, err := distList()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create artifact: %w", err)
+		// A toolchain that cannot list its targets still builds; the build
+		// itself is the check then.
+		log.Printf("WARNING: go tool dist list failed, skipping the platform check: %v", err)
+
+		return nil
 	}
 
-	// Detect dependencies if this is a main package
-	if err := detectDependenciesForArtifact(input.Src, artifact); err != nil {
-		return nil, fmt.Errorf("failed to detect dependencies: %w", err)
+	if !list[platform] {
+		return fmt.Errorf("%w: go-build cannot build %s; go tool dist list does not name it",
+			engineframework.ErrPlatformRefused, platform)
 	}
 
-	fmt.Fprintf(os.Stderr, "Built binary: %s (version: %s)\n", input.Name, artifact.Version)
+	return nil
+}
 
-	return artifact, nil
+var (
+	distOnce  sync.Once
+	distKnown map[string]bool
+	distErr   error
+)
+
+func distList() (map[string]bool, error) {
+	distOnce.Do(func() {
+		out, err := exec.Command("go", "tool", "dist", "list").Output()
+		if err != nil {
+			distErr = err
+
+			return
+		}
+
+		distKnown = map[string]bool{}
+
+		for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+			distKnown[strings.TrimSpace(line)] = true
+		}
+	})
+
+	return distKnown, distErr
 }
 
 // ----------------------------------------------------- DEPENDENCY DETECTION ---------------------------------------- //

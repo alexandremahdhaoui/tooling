@@ -63,19 +63,47 @@ func GetGitVersion() (string, error) {
 //	}
 //	// artifact.Version = "a1b2c3d4..." (git commit SHA)
 //	// artifact.Timestamp = "2025-01-15T10:30:00Z" (current time)
-func CreateVersionedArtifact(name, artifactType, location string) (*forge.Artifact, error) {
+func CreateVersionedArtifact(name string, artifactType forge.ArtifactType, location string, platform ...string) (*forge.Artifact, error) {
 	version, err := GetGitVersion()
 	if err != nil {
 		return nil, err
 	}
 
-	return &forge.Artifact{
+	artifact := &forge.Artifact{
 		Name:      name,
 		Type:      artifactType,
 		Location:  location,
 		Version:   version,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-	}, nil
+	}
+
+	if err := setPlatform(artifact, platform); err != nil {
+		return nil, err
+	}
+
+	return artifact, nil
+}
+
+// setPlatform records the one os/arch pair an artifact was built for, when
+// the engine names one. A generator names none and the artifact carries no
+// platform.
+func setPlatform(artifact *forge.Artifact, platform []string) error {
+	if len(platform) == 0 {
+		return nil
+	}
+
+	if len(platform) > 1 {
+		return fmt.Errorf("artifact %s: one platform per artifact, got %d", artifact.Name, len(platform))
+	}
+
+	os, arch, err := forge.SplitPlatform(platform[0])
+	if err != nil {
+		return fmt.Errorf("artifact %s: %w", artifact.Name, err)
+	}
+
+	artifact.OS, artifact.Arch = os, arch
+
+	return nil
 }
 
 // CreateArtifact creates an artifact with current timestamp but NO version field.
@@ -95,7 +123,7 @@ func CreateVersionedArtifact(name, artifactType, location string) (*forge.Artifa
 //	artifact := CreateArtifact("openapi-client", "generated", "./pkg/generated")
 //	// artifact.Version = "" (empty - generated code has no version)
 //	// artifact.Timestamp = "2025-01-15T10:30:00Z" (current time)
-func CreateArtifact(name, artifactType, location string) *forge.Artifact {
+func CreateArtifact(name string, artifactType forge.ArtifactType, location string) *forge.Artifact {
 	return &forge.Artifact{
 		Name:      name,
 		Type:      artifactType,
@@ -122,7 +150,7 @@ func CreateArtifact(name, artifactType, location string) *forge.Artifact {
 //	artifact := CreateCustomArtifact("my-app", "container", "localhost:5000/my-app:v1.2.3", "v1.2.3")
 //	// artifact.Version = "v1.2.3" (custom version)
 //	// artifact.Timestamp = "2025-01-15T10:30:00Z" (current time)
-func CreateCustomArtifact(name, artifactType, location, version string) *forge.Artifact {
+func CreateCustomArtifact(name string, artifactType forge.ArtifactType, location, version string) *forge.Artifact {
 	return &forge.Artifact{
 		Name:      name,
 		Type:      artifactType,
@@ -130,4 +158,10 @@ func CreateCustomArtifact(name, artifactType, location, version string) *forge.A
 		Version:   version,
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
+}
+
+// One wraps the single artifact a host-only engine builds into the list a
+// build answers.
+func One(artifact *forge.Artifact) []forge.Artifact {
+	return []forge.Artifact{*artifact}
 }

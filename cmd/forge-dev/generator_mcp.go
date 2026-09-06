@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"fmt"
 	"go/format"
+	"strings"
 )
 
 // MCPTemplateData contains the data passed to the mcp.go.tmpl templates.
@@ -35,6 +36,24 @@ type MCPTemplateData struct {
 	// Tools are the resolved tools of a generic engine. Empty for every other
 	// engine type, whose tools are fixed by their family.
 	Tools []GenericTool
+	// Platforms is a builder's declared platforms, as a Go literal the
+	// template pastes into the engine's Capabilities: `nil` for an engine
+	// that declares nothing, which the framework reads as host only.
+	Platforms string
+}
+
+// platformsLiteral renders a platform declaration as Go source.
+func platformsLiteral(platforms []string) string {
+	if len(platforms) == 0 {
+		return "nil"
+	}
+
+	quoted := make([]string, 0, len(platforms))
+	for _, p := range platforms {
+		quoted = append(quoted, fmt.Sprintf("%q", p))
+	}
+
+	return "[]string{" + strings.Join(quoted, ", ") + "}"
 }
 
 // GenerateMCPFile generates the zz_generated.mcp.go file content.
@@ -51,6 +70,7 @@ func GenerateMCPFile(config *Config, checksum string, specTypesCtx *SpecTypesCon
 		EngineType:       config.engineType(),
 		SpecTypesContext: specTypesCtx,
 		Tools:            BuildGenericTools(config, specTypesCtx),
+		Platforms:        platformsLiteral(config.platforms()),
 	}
 
 	// Select template based on engine type

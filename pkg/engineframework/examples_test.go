@@ -41,16 +41,16 @@ func Example_builder() {
 		config := engineframework.BuilderConfig{
 			Name:    "example-builder",
 			Version: "1.0.0",
-			BuildFunc: func(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, error) {
+			BuildFunc: func(ctx context.Context, input mcptypes.BuildInput) ([]forge.Artifact, error) {
 				// Extract spec configuration
 				outputDir := engineframework.ExtractStringWithDefault(input.Spec, "outputDir", "./build")
 
 				fmt.Printf("Building %s in %s\n", input.Name, outputDir)
 
 				// Create versioned artifact (uses git commit SHA)
-				artifact := engineframework.CreateArtifact(input.Name, "binary", outputDir+"/"+input.Name)
+				artifact := engineframework.CreateArtifact(input.Name, forge.TypeBinary, outputDir+"/"+input.Name)
 
-				return artifact, nil
+				return engineframework.One(artifact), nil
 			},
 		}
 
@@ -274,7 +274,7 @@ func Example_versionUtilities() {
 //   - Spec extraction for configuration
 //   - Creating artifacts
 func Example_builderWithSpecExtraction() {
-	buildFunc := func(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, error) {
+	buildFunc := func(ctx context.Context, input mcptypes.BuildInput) ([]forge.Artifact, error) {
 		// Extract configuration from spec
 		outputDir := engineframework.ExtractStringWithDefault(input.Spec, "outputDir", "./build")
 		stripDebug := engineframework.ExtractBoolWithDefault(input.Spec, "stripDebug", false)
@@ -289,7 +289,7 @@ func Example_builderWithSpecExtraction() {
 		artifactPath := outputDir + "/" + input.Name
 
 		// Create artifact (without version for this example)
-		return engineframework.CreateArtifact(input.Name, "binary", artifactPath), nil
+		return engineframework.One(engineframework.CreateArtifact(input.Name, forge.TypeBinary, artifactPath)), nil
 	}
 
 	runMCPServer := func() error {

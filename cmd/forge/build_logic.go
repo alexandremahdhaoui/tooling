@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -65,80 +66,42 @@ func appendSpecToGroups(groups []engineGroup, engine string, params map[string]a
 //
 // This function MUST NOT write to stdout. Stdout is the JSON-RPC
 // transport in MCP mode. Progress messages go to stderr.
-// buildPlatforms is the os/arch list `forge build --platforms` asked for.
-// Empty means an ordinary host build: every entry builds once, for this
-// machine. Non-empty selects distribution mode - only entries declaring
-// platforms build, once per requested platform.
+
+// buildPlatforms is the os/arch list `forge build --platforms` asked for. It
+// is a filter and nothing more: an entry builds the platforms it declares,
+// narrowed to these when they are set. Empty means every declared platform.
 var buildPlatforms []string
 
-// distFanOut expands one build entry into the per-platform entries a
-// distribution build wants: each carries the travel name <name>_<os>_<arch>
-// and the GOOS/GOARCH the engine builds under. An entry that declares no
-// platform is a repo's own tool - it is not public and answers nothing.
-func distFanOut(spec forge.BuildSpec, wanted []string) []forge.BuildSpec {
-	out := make([]forge.BuildSpec, 0, len(wanted))
-
-	for _, platform := range wanted {
-		declared := false
-
-		for _, own := range spec.Platforms {
-			if own == platform {
-				declared = true
-
-				break
-			}
-		}
-
-		if !declared {
-			continue
-		}
-
-		parts := strings.SplitN(platform, "/", 2)
-		if len(parts) != 2 {
-			continue
-		}
-
-		copied := spec
-		copied.Name = fmt.Sprintf("%s_%s_%s", spec.Name, parts[0], parts[1])
-
-		engineSpec := map[string]any{}
-		for k, v := range spec.Spec {
-			engineSpec[k] = v
-		}
-
-		env := map[string]any{}
-
-		if existing, ok := engineSpec["env"].(map[string]any); ok {
-			for k, v := range existing {
-				env[k] = v
-			}
-		}
-
-		env["GOOS"] = parts[0]
-		env["GOARCH"] = parts[1]
-		engineSpec["env"] = env
-		copied.Spec = engineSpec
-		copied.Platforms = nil
-
-		out = append(out, copied)
-	}
-
-	return out
+// hostPlatform is the machine this forge runs on, which is what an entry
+// that declares no platform builds for.
+func hostPlatform() string {
+	return runtime.GOOS + "/" + runtime.GOARCH
 }
 
-// distSpecs answers what a build pass actually builds: the declared entries
-// as written for a host build, or their per-platform expansion when
-// platforms were asked for. Distribution mode is an allowlist by
-// construction - what carries no platforms never travels.
-func distSpecs(declared forge.Build, wanted []string) forge.Build {
+// platformsFor answers what one entry builds this time: every platform it
+// declares - the host when it declares none - narrowed to the requested
+// subset when one was asked for. Nothing is inferred: the entry declares,
+// the flag selects, the host is the one fact the machine states.
+func platformsFor(spec forge.BuildSpec, wanted []string) []string {
+	declared := spec.Platforms
+	if len(declared) == 0 {
+		declared = []string{hostPlatform()}
+	}
+
 	if len(wanted) == 0 {
 		return declared
 	}
 
-	out := forge.Build{}
+	out := []string{}
 
-	for _, spec := range declared {
-		out = append(out, distFanOut(spec, wanted)...)
+	for _, platform := range declared {
+		for _, w := range wanted {
+			if w == platform {
+				out = append(out, platform)
+
+				break
+			}
+		}
 	}
 
 	return out
@@ -171,50 +134,30 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 		}
 	}()
 
-	// The name filter runs before the fan-out, on the name the user typed.
-	// Fan-out renames each copy to <name>_<os>_<arch>, so filtering after it
-	// made "forge build --platforms linux/arm64 forge" match nothing and
-	// fail with "no artifact found with name: forge" - about an artifact
-	// that is right there in forge.yaml.
-	declared := config.Build
+	matched := 0
 
-	if artifactName != "" && len(buildPlatforms) > 0 {
-		declared = forge.Build{}
-
-		for _, spec := range config.Build {
-			if spec.Name == artifactName {
-				declared = append(declared, spec)
-			}
-		}
-
-		if len(declared) == 0 {
-			return nil, fmt.Errorf("no artifact found with name: %s", artifactName)
-		}
-	}
-
-	specs := distSpecs(declared, buildPlatforms)
-
-	if len(buildPlatforms) > 0 && len(specs) == 0 {
-		if artifactName != "" {
-			return nil, fmt.Errorf(
-				"%s declares none of the platforms %s; an artifact travels only where its own build entry names them",
-				artifactName, strings.Join(buildPlatforms, ", "))
-		}
-
-		return nil, fmt.Errorf(
-			"no artifact declares any of the platforms %s; an artifact travels only where its own build entry names them",
-			strings.Join(buildPlatforms, ", "))
-	}
-
-	for _, spec := range specs {
-		// Filter by artifact name if provided. In platforms mode the filter
-		// already ran above, against the declared name.
-		if artifactName != "" && len(buildPlatforms) == 0 && spec.Name != artifactName {
+	for _, spec := range config.Build {
+		if artifactName != "" && spec.Name != artifactName {
 			continue
 		}
 
-		// Check if rebuild is needed (lazy rebuild logic)
-		needsRebuild, reason, err := shouldRebuild(spec.Name, store, forceRebuild)
+		matched++
+
+		// What this entry builds this time. A subset filter that leaves an
+		// entry with nothing is a skip, not an error: `--platforms linux/arm64`
+		// over a repo whose own tool declares no platform builds the tools
+		// that declared it and leaves the rest home. Only a filter that
+		// matches nothing at all is an error, below.
+		platforms := platformsFor(spec, buildPlatforms)
+		if len(platforms) == 0 {
+			fmt.Fprintf(os.Stderr, "⏭  Skipping %s (declares none of %s)\n", spec.Name, strings.Join(buildPlatforms, ", "))
+
+			continue
+		}
+
+		// Check if rebuild is needed (lazy rebuild logic), per platform: a
+		// host binary that is fresh says nothing about the arm64 one.
+		needsRebuild, reason, err := shouldRebuild(spec.Name, platforms, store, forceRebuild)
 		if err != nil {
 			// If error checking rebuild status, log warning and rebuild (safe default)
 			fmt.Fprintf(os.Stderr, "Warning: failed to check rebuild status for %s: %v (will rebuild)\n", spec.Name, err)
@@ -260,11 +203,12 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 		}
 
 		params := map[string]any{
-			"name":    spec.Name,
-			"src":     resolvedSrc,
-			"dest":    spec.Dest,
-			"context": contextDir,
-			"engine":  engine,
+			"name":      spec.Name,
+			"src":       resolvedSrc,
+			"dest":      spec.Dest,
+			"context":   contextDir,
+			"engine":    engine,
+			"platforms": platforms,
 		}
 
 		// Pass engine-specific configuration if provided
@@ -276,10 +220,17 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 		groups = appendSpecToGroups(groups, engine, params)
 	}
 
+	if artifactName != "" && matched == 0 {
+		return nil, fmt.Errorf("no artifact found with name: %s", artifactName)
+	}
+
 	if len(groups) == 0 {
-		if artifactName != "" && result.Skipped == 0 {
-			return nil, fmt.Errorf("no artifact found with name: %s", artifactName)
+		if len(buildPlatforms) > 0 && result.Skipped == 0 {
+			return nil, fmt.Errorf(
+				"no artifact declares any of the platforms %s; an artifact builds only the platforms its own build entry names",
+				strings.Join(buildPlatforms, ", "))
 		}
+
 		// Either all skipped or no artifacts to build
 		return result, nil
 	}
@@ -399,26 +350,47 @@ func normalizeEngineURI(uri string) (string, bool) {
 	return uri, false // not deprecated
 }
 
-// shouldRebuild determines if an artifact needs to be rebuilt based on its dependencies.
-// Returns (needsRebuild bool, reason string, error).
-// If forceRebuild is true, always returns (true, "force flag set", nil).
-// Otherwise, checks if dependencies have changed since last build.
-func shouldRebuild(artifactName string, store forge.ArtifactStore, forceRebuild bool) (bool, string, error) {
+// shouldRebuild determines if an artifact needs to be rebuilt, for every
+// platform the entry builds this time. Returns (needsRebuild bool, reason
+// string, error). If forceRebuild is true, always returns (true, "force flag
+// set", nil). Otherwise the first platform whose record is missing or
+// stale decides, because one engine call builds them all.
+func shouldRebuild(artifactName string, platforms []string, store forge.ArtifactStore, forceRebuild bool) (bool, string, error) {
 	// Step 1: If forceRebuild is true, always rebuild
 	if forceRebuild {
 		return true, "force flag set", nil
 	}
 
+	for _, platform := range platforms {
+		rebuild, reason, err := platformNeedsRebuild(artifactName, platform, store)
+		if err != nil || rebuild {
+			return rebuild, reason, err
+		}
+	}
+
+	// If all dependencies unchanged, no rebuild needed
+	return false, "", nil
+}
+
+// platformNeedsRebuild is the freshness of one artifact record: the one the
+// store holds for this name and platform, or, for an entry whose engine
+// builds nothing platform-tied - a generator, a formatter - the record it
+// holds under no platform.
+func platformNeedsRebuild(artifactName, platform string, store forge.ArtifactStore) (bool, string, error) {
 	// Step 2: Look up latest artifact for artifactName in store
-	artifact, err := forge.GetLatestArtifact(store, artifactName)
+	artifact, err := forge.GetLatestArtifact(store, artifactName, platform)
+	if err != nil {
+		artifact, err = forge.GetLatestArtifact(store, artifactName, "")
+	}
+
 	if err != nil {
 		// Step 3: If no artifact found, rebuild
-		return true, "no previous build", nil
+		return true, "no previous build for " + platform, nil
 	}
 
 	// Step 4: Check if artifact location still exists on filesystem
-	if _, err := os.Stat(artifact.Location); os.IsNotExist(err) {
-		return true, "artifact file missing", nil
+	if _, err := os.Stat(strings.TrimPrefix(artifact.Location, "file://")); os.IsNotExist(err) {
+		return true, "artifact file missing for " + platform, nil
 	} else if err != nil {
 		// If stat fails for other reason, assume rebuild needed
 		return true, fmt.Sprintf("cannot access artifact file: %v", err), nil
@@ -435,12 +407,12 @@ func shouldRebuild(artifactName string, store forge.ArtifactStore, forceRebuild 
 	}
 
 	// Step 6: Compare using STORED dependencies ONLY (DO NOT re-detect)
-	goModTracked := false
+	manifestTracked := false
 	for _, dep := range artifact.Dependencies {
 		if dep.Type == forge.DependencyTypeFile {
-			// Check if go.mod is tracked
+			// Check if the module manifest is tracked
 			if strings.HasSuffix(dep.FilePath, "go.mod") {
-				goModTracked = true
+				manifestTracked = true
 			}
 
 			// Check if file still exists
@@ -474,11 +446,11 @@ func shouldRebuild(artifactName string, store forge.ArtifactStore, forceRebuild 
 				return true, fmt.Sprintf("dependency %s modified", dep.FilePath), nil
 			}
 		}
-		// External package dependencies: DO NOT re-parse go.mod
-		// External packages are considered unchanged (semver only changes if go.mod changes)
+		// External package dependencies: DO NOT re-parse the manifest
+		// External packages are considered unchanged (semver only changes if the manifest changes)
 	}
 
-	// If go.mod is NOT in file dependencies and we have external package dependencies
+	// If the manifest is NOT in file dependencies and we have external package dependencies
 	hasExternalDeps := false
 	for _, dep := range artifact.Dependencies {
 		if dep.Type == forge.DependencyTypeExternalPackage {
@@ -486,12 +458,11 @@ func shouldRebuild(artifactName string, store forge.ArtifactStore, forceRebuild 
 			break
 		}
 	}
-	if hasExternalDeps && !goModTracked {
+	if hasExternalDeps && !manifestTracked {
 		// Log warning once (don't fail build)
-		fmt.Fprintf(os.Stderr, "Warning: go.mod not tracked as dependency for %s, external package changes may not trigger rebuild\n", artifactName)
+		fmt.Fprintf(os.Stderr, "Warning: the module manifest is not tracked as a dependency for %s, external package changes may not trigger rebuild\n", artifactName)
 	}
 
-	// If all dependencies unchanged, no rebuild needed
 	return false, "", nil
 }
 

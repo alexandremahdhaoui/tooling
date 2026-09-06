@@ -64,14 +64,15 @@ func printBuildResult(result *BuildAllResult, artifactName string) {
 	}
 }
 
-// parsePlatformsFlag pulls --platforms off the argv. It names the os/arch
-// pairs a distribution build wants, comma separated:
+// parsePlatformsFlag pulls --platforms off the argv. It narrows a build to
+// these os/arch pairs, comma separated:
 //
 //	forge build --platforms linux/amd64,linux/arm64
 //
-// Without it a build is an ordinary host build. With it, only the entries
-// declaring those platforms build - the declaration is what makes an
-// artifact public, so a repo's own tools never travel by accident.
+// An entry builds every platform its build entry declares, the host when it
+// declares none; the flag selects a subset of that and never widens it, so
+// an entry that declares none of the named platforms is skipped and a repo's
+// own tools never travel by accident.
 func parsePlatformsFlag(args []string) ([]string, []string, error) {
 	rest := make([]string, 0, len(args))
 

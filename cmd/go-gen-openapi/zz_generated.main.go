@@ -58,10 +58,10 @@ func runMCPServer() error {
 }
 
 // Build is the build function that must be implemented by the engine author.
-// Signature: func(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error)
+// Signature: func(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error)
 // This is a placeholder - the actual implementation should be in a separate file.
 var _ = func() BuildFunc {
-	return func(_ context.Context, _ mcptypes.BuildInput, _ *Spec) (*forge.Artifact, error) {
+	return func(_ context.Context, _ mcptypes.BuildInput, _ *Spec) ([]forge.Artifact, error) {
 		panic("Build function not implemented - create a separate file with the implementation")
 	}
 }

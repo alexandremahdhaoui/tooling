@@ -204,7 +204,8 @@ func artifactLocation(spec forge.Spec, name string) (string, error) {
 		return "", fmt.Errorf("reading the artifact store: %w", err)
 	}
 
-	artifact, err := forge.GetLatestArtifact(store, name)
+	// A run executes what was built for this machine.
+	artifact, err := forge.GetLatestArtifact(store, name, hostPlatform())
 	if err != nil {
 		return "", fmt.Errorf("locating artifact %s: %w", name, err)
 	}

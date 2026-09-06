@@ -98,7 +98,12 @@ type BuildInput struct {
 	ArtifactName string `json:"artifactName,omitempty" jsonschema:"Alternative to name for specifying the build target"`
 	Force        bool   `json:"force,omitempty" jsonschema:"Force rebuild even if artifacts are up to date. Passed to engine as force=true."`
 	Frozen       bool   `json:"frozen,omitempty" jsonschema:"Build strictly against the recorded dependency lock and never repair it; a stale lock fails the build."`
-	CWD          string `json:"cwd,omitempty" jsonschema:"Absolute or relative path to the project directory containing forge.yaml. Overrides the server working directory."`
+	// Platforms narrows what builds to these os/arch pairs, the same filter
+	// `forge build --platforms` is: an entry builds the platforms it
+	// declares, and only those of them named here. Empty builds every
+	// declared platform, the host for an entry that declares none.
+	Platforms []string `json:"platforms,omitempty" jsonschema:"os/arch pairs to build, a subset of what each entry declares; empty builds every declared platform"`
+	CWD       string   `json:"cwd,omitempty" jsonschema:"Absolute or relative path to the project directory containing forge.yaml. Overrides the server working directory."`
 }
 
 // BuildGetInput represents the input parameters for the build-get tool.
@@ -327,6 +332,12 @@ func handleBuildTool(
 	log.Printf("Building artifact: %s", name)
 
 	// Call shared build logic
+	// The flag's global, set for this call and cleared after: buildAll reads
+	// it the way the CLI sets it, and two MCP builds never overlap because
+	// the server handles one call at a time.
+	buildPlatforms = input.Platforms
+	defer func() { buildPlatforms = nil }()
+
 	buildAllResult, err := buildAll(name, input.Force, input.Frozen)
 
 	// Convert BuildAllResult to MCP response format
@@ -417,7 +428,11 @@ func handleBuildGetTool(
 		}, nil, nil
 	}
 
-	artifact, err := forge.GetLatestArtifact(store, input.Name)
+	artifact, err := forge.GetLatestArtifact(store, input.Name, hostPlatform())
+	if err != nil {
+		// A generator's or a command's record carries no platform.
+		artifact, err = forge.GetLatestArtifact(store, input.Name, "")
+	}
 	if err != nil {
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{

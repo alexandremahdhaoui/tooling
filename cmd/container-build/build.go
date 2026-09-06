@@ -53,7 +53,7 @@ type Envs struct {
 // ----------------------------------------------------- BUILD ------------------------------------------------------- //
 
 // Build implements the BuildFunc for building container images
-func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.Artifact, error) {
+func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.Artifact, error) {
 	log.Printf("Building container: %s from %s", input.Name, input.Src)
 
 	// Note: spec contains typed fields like Dockerfile, Context, BuildArgs, Tags, Target, Push, Registry
@@ -108,7 +108,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 	location := fmt.Sprintf("%s:%s", input.Name, version)
 	artifact := engineframework.CreateCustomArtifact(
 		input.Name,
-		"container",
+		forge.TypeContainer,
 		location,
 		version,
 	)
@@ -123,7 +123,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) (*forge.A
 		}
 	}
 
-	return artifact, nil
+	return engineframework.One(artifact), nil
 }
 
 // ----------------------------------------------------- CONTAINER BUILD --------------------------------------------- //
@@ -432,7 +432,7 @@ func addArtifactToStore(
 ) {
 	artifact := forge.Artifact{
 		Name:         name,
-		Type:         "container",
+		Type:         forge.TypeContainer,
 		Location:     fmt.Sprintf("%s:%s", name, version),
 		Timestamp:    timestamp,
 		Version:      version,

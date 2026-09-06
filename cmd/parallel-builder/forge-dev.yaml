@@ -7,3 +7,9 @@ openapi:
   specPath: ./spec.openapi.yaml
 generate:
   packageName: main
+
+# What this engine can build for. Generated into its build and
+# config-validate tools; a platform outside it is refused before the
+# engine runs.
+capabilities:
+  platforms: any
