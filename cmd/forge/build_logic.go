@@ -334,11 +334,15 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 			result.Artifacts = append(result.Artifacts, artifact)
 			result.TotalBuilt++
 		}
-	}
 
-	// Write updated artifact store
-	if err := forge.WriteArtifactStore(config.ArtifactStorePath, store); err != nil {
-		return nil, fmt.Errorf("failed to write artifact store: %w", err)
+		// Written after every group, not once at the end: a later entry may
+		// read this repository's own records (an image assembled from the
+		// binaries the entries before it built), and it reads them from the
+		// file. Held in memory until the end, the store did not exist on a
+		// fresh clone when that entry ran, and it failed on its own repo.
+		if err := forge.WriteArtifactStore(config.ArtifactStorePath, store); err != nil {
+			return nil, fmt.Errorf("failed to write artifact store: %w", err)
+		}
 	}
 
 	// If there were build errors, return them as an error
