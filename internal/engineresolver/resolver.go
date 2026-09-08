@@ -98,6 +98,14 @@ func ResolveForgeURI(engineURI, forgeVersion string) (Invocation, error) {
 		return resolveMember(engineURI, path, bare)
 	}
 
+	// A short name asks the registry first: the repo's own entries, then
+	// the factory's, then forge's own module.
+	if !forgepath.IsExternalModule(bare) {
+		if target, dir, ok := registry().Lookup(bare); ok {
+			return resolveRegistered(bare, target, dir, forgeVersion)
+		}
+	}
+
 	return resolveBuiltin(engineURI, bare, forgeVersion)
 }
 

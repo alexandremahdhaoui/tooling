@@ -45,6 +45,11 @@ func resolveEngineAlias(alias string, spec *forge.Spec) (string, error) {
 		return "", fmt.Errorf("engine alias not found: %s (check forge.yaml engines section)", alias)
 	}
 
+	// A registry entry names an engine; forge://<alias> resolves it.
+	if config.IsRegistryEntry() {
+		return "forge://" + alias, nil
+	}
+
 	// For testenv type, return the testenv orchestrator
 	if config.Type == forge.TestenvEngineConfigType {
 		return "forge://testenv", nil

@@ -17,6 +17,7 @@
 package forge
 
 import (
+	"strings"
 	"testing"
 
 	"sigs.k8s.io/yaml"
@@ -607,5 +608,35 @@ engines:
 			}
 			tt.validate(t, spec)
 		})
+	}
+}
+
+// A registry entry names an engine and nothing else: it validates on its
+// own, and one that also carries a type or a composition is refused.
+func TestARegistryEntryNamesAnEngineAndComposesNothing(t *testing.T) {
+	for _, target := range []string{"./cmd/mine", "../tools/cmd/mine", "/abs/cmd/mine", "forge://example.invalid/tools/cmd/mine@v1.0.0"} {
+		entry := EngineConfig{Alias: "mine", Engine: target}
+		if err := entry.Validate(); err != nil {
+			t.Fatalf("%s must validate: %v", target, err)
+		}
+
+		if !entry.IsRegistryEntry() {
+			t.Fatalf("%s is a registry entry", target)
+		}
+	}
+
+	mixed := EngineConfig{Alias: "mine", Engine: "./cmd/mine", Type: BuilderEngineConfigType}
+	if err := mixed.Validate(); err == nil || !strings.Contains(err.Error(), "names an engine") {
+		t.Fatalf("an entry with an engine and a type must be refused, got %v", err)
+	}
+
+	bare := EngineConfig{Alias: "mine", Engine: "cmd/mine"}
+	if err := bare.Validate(); err == nil || !strings.Contains(err.Error(), "forge://") {
+		t.Fatalf("a target that is neither a URI nor a path must be refused, got %v", err)
+	}
+
+	spec := Spec{Engines: []EngineConfig{{Alias: "mine", Engine: "./cmd/mine"}, {Alias: "compose", Type: TestenvEngineConfigType, Testenv: []TestenvEngineSpec{{Engine: "forge://testenv-stub"}}}}}
+	if got := spec.Registry(); len(got) != 1 || got["mine"] != "./cmd/mine" {
+		t.Fatalf("Registry answers the naming entries only, got %v", got)
 	}
 }

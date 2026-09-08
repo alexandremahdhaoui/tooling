@@ -112,7 +112,27 @@ engines:
 
 #### `engines` (array of EngineConfig, optional)
 
-Custom engine configurations with aliases. Allows you to create reusable engine configurations with custom parameters.
+Custom engine configurations with aliases. An entry either **names** an
+engine (a registry entry) or **composes** several (an orchestration alias).
+
+**Registry entries.** An entry with `engine:` says what `forge://<alias>`
+resolves to, before any fallback: a path to a main package directory
+(relative to this forge.yaml, or absolute), built from source and run as a
+binary; or a `forge://<module-path>[@version]` URI resolved like any other.
+A name in no entry falls through to forge's own module, as it always did.
+A factory writes the same shape for every member into
+`.forge/engines.yaml` at its root (the outer ring); the repo's own entry
+wins over the factory's.
+
+```yaml
+engines:
+  - alias: go-build            # forge://go-build now runs this checkout's engine
+    engine: ./cmd/go-build
+  - alias: my-linter           # a member of the factory, pinned by its register
+    engine: forge://github.com/acme/tools/cmd/my-linter
+```
+
+An entry that names an engine carries no `type` and no composition list.
 
 **Engine Types:**
 - `builder` - Multi-step build orchestration
@@ -627,9 +647,13 @@ forge://<binary-name>
 
 When forge encounters an engine URI:
 
-1. **URI Parsing:** `forge://<name>[@<version>]` for forge's own engines,
+1. **URI Parsing:** `forge://<name>[@<version>]` for a short name,
    `forge://<module-path>[@rev]` for a factory member.
-2. **Own engines** (`forge://go-build`): run at the running forge's own
+2. **The registry** (short names only): the repo's `engines:` entries that
+   carry an `engine:`, then the factory's `.forge/engines.yaml`. A path
+   target is built from source and run in place; a `forge://` target
+   resolves as below. A name in neither ring falls through.
+3. **Own engines** (`forge://go-build`): run at the running forge's own
    version - an embedded `@version` is ignored so every engine matches the
    CLI. When the enclosing `go.work` lists the forge module the engine runs
    via `go run github.com/alexandremahdhaoui/forge/cmd/<name>` with no

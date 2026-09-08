@@ -326,17 +326,55 @@ func buildLocalEngine(packageName string) (string, []string, error) {
 		return "", nil, err
 	}
 
-	bin := filepath.Join(baseDir, "build", "local-engines", packageName)
-
-	build := exec.Command("go", "build", "-o", bin, "./cmd/"+packageName)
-	build.Dir = baseDir
-	build.Env = append(os.Environ(), "GOWORK=off")
-
-	if out, err := build.CombinedOutput(); err != nil {
-		return "", nil, fmt.Errorf("building local engine %s: %w: %s", packageName, err, string(out))
+	bin, err := BuildEngineFromSource(filepath.Join(baseDir, "cmd", packageName), packageName)
+	if err != nil {
+		return "", nil, err
 	}
 
 	return bin, nil, nil
+}
+
+// BuildEngineFromSource compiles the main package at pkgDir into the
+// enclosing module's build/local-engines/<name> and answers the binary, so
+// an engine run from source keeps the caller's working directory. The
+// module root is the nearest go.mod above pkgDir.
+func BuildEngineFromSource(pkgDir, name string) (string, error) {
+	moduleRoot, ok := moduleRootOf(pkgDir)
+	if !ok {
+		return "", fmt.Errorf("building engine %s from %s: no go.mod above it", name, pkgDir)
+	}
+
+	rel, err := filepath.Rel(moduleRoot, pkgDir)
+	if err != nil {
+		return "", fmt.Errorf("building engine %s from %s: %w", name, pkgDir, err)
+	}
+
+	bin := filepath.Join(moduleRoot, "build", "local-engines", name)
+
+	build := exec.Command("go", "build", "-o", bin, "./"+filepath.ToSlash(rel))
+	build.Dir = moduleRoot
+	build.Env = append(os.Environ(), "GOWORK=off")
+
+	if out, err := build.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("building engine %s from %s: %w: %s", name, pkgDir, err, string(out))
+	}
+
+	return bin, nil
+}
+
+func moduleRootOf(dir string) (string, bool) {
+	for {
+		if info, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil && !info.IsDir() {
+			return dir, true
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", false
+		}
+
+		dir = parent
+	}
 }
 
 // IsWorkspaceModule reports whether the enclosing go.work carries the module,

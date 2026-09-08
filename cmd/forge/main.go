@@ -121,6 +121,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The registry every forge://<short-name> consults: this repo's own
+	// entries, then the enclosing factory's. Outside a repo there is none,
+	// and every name falls through to forge's own module.
+	if err := installEngineRegistry(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Source global environment file if configured
 	// TODO: This calls loadConfig() which is also called in command handlers.
 	// This is intentional to avoid refactoring all handlers, but is technical debt.

@@ -14,7 +14,10 @@
 
 package forge
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // EngineConfigType specifies the type of engine configuration
 type EngineConfigType string
@@ -39,6 +42,14 @@ type EngineConfig struct {
 	// Alias is the name used to reference this engine (e.g., "my-formatter")
 	// Can be used as: alias://my-formatter
 	Alias string `json:"alias"`
+
+	// Engine makes this entry a registry entry: forge://<alias> resolves to
+	// it before any built-in fallback. It is a forge:// module path (a
+	// factory member or forge's own module, pinned by the register or by an
+	// @version), or a path to a main package directory, relative to this
+	// forge.yaml or absolute, run from source. An entry with an engine
+	// carries no type and no composition list: it names, it does not compose.
+	Engine string `json:"engine,omitempty"`
 
 	// Type specifies the engine type: "builder", "test-runner", or "testenv"
 	// This field is required and must match one of the EngineConfigType constants
@@ -125,12 +136,36 @@ type DependencyDetectorEngineSpec struct {
 }
 
 // Validate validates the EngineConfig
+// IsRegistryEntry reports whether this entry names an engine rather than
+// composing one.
+func (ec *EngineConfig) IsRegistryEntry() bool {
+	return ec.Engine != ""
+}
+
+// IsEnginePath reports whether a registry target is a path to a main
+// package rather than a forge:// URI.
+func IsEnginePath(target string) bool {
+	return strings.HasPrefix(target, "./") || strings.HasPrefix(target, "../") || strings.HasPrefix(target, "/")
+}
+
 func (ec *EngineConfig) Validate() error {
 	errs := NewValidationErrors()
 
 	// Validate alias
 	if err := ValidateRequired(ec.Alias, "alias", "EngineConfig"); err != nil {
 		errs.Add(err)
+	}
+
+	if ec.IsRegistryEntry() {
+		if ec.Type != "" || len(ec.Builder) > 0 || len(ec.TestRunner) > 0 || len(ec.Testenv) > 0 || len(ec.DependencyDetector) > 0 {
+			errs.AddErrorf("EngineConfig %q: an entry with engine names an engine and carries no type or composition; drop one or the other", ec.Alias)
+		}
+
+		if !strings.HasPrefix(ec.Engine, "forge://") && !IsEnginePath(ec.Engine) {
+			errs.AddErrorf("EngineConfig %q: engine must be a forge:// module path or a path to a main package (./cmd/<name>, ../repo/cmd/<name>, /abs/dir), got %q", ec.Alias, ec.Engine)
+		}
+
+		return errs.ErrorOrNil()
 	}
 
 	// Validate type
@@ -264,4 +299,17 @@ func (ddes *DependencyDetectorEngineSpec) Validate(alias string, index int) erro
 	}
 
 	return errs.ErrorOrNil()
+}
+
+// Registry answers the alias to engine map of this spec's registry entries.
+func (s *Spec) Registry() map[string]string {
+	out := map[string]string{}
+
+	for _, e := range s.Engines {
+		if e.IsRegistryEntry() {
+			out[e.Alias] = e.Engine
+		}
+	}
+
+	return out
 }

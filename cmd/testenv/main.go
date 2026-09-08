@@ -16,11 +16,14 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
+	"github.com/alexandremahdhaoui/forge/internal/engineresolver"
 	"github.com/alexandremahdhaoui/forge/pkg/enginecli"
 	"github.com/alexandremahdhaoui/forge/pkg/enginedocs"
 	"github.com/alexandremahdhaoui/forge/pkg/engineversion"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 // Version information (set via ldflags during build)
@@ -55,6 +58,10 @@ func getVersion() string {
 }
 
 func main() {
+	// The orchestrator resolves its members' engines the way forge does:
+	// through the registry of the repo it runs in and the factory above.
+	installEngineRegistry()
+
 	// Check if running in direct CLI mode (testenv <command>)
 	if len(os.Args) >= 2 && os.Args[1] != "--mcp" && os.Args[1] != "version" && os.Args[1] != "--version" && os.Args[1] != "-v" && os.Args[1] != "help" && os.Args[1] != "--help" && os.Args[1] != "-h" {
 		command := os.Args[1]
@@ -120,4 +127,30 @@ Examples:
 Note:
   Use 'forge test <stage> get/list' to view test environments.
   testenv only handles create/delete operations.`)
+}
+
+// installEngineRegistry loads the registry from the working directory's
+// forge.yaml, when there is one, and the factory above it. Failures are
+// not fatal here: a name then falls through to forge's own module, and
+// the resolution that needed the entry reports it.
+func installEngineRegistry() {
+	wd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+
+	var spec *forge.Spec
+
+	if loaded, err := forge.ReadSpec(); err == nil {
+		spec = &loaded
+	}
+
+	registry, err := engineresolver.Load(spec, wd)
+	if err != nil {
+		log.Printf("testenv: engine registry: %v", err)
+
+		return
+	}
+
+	engineresolver.Use(registry)
 }

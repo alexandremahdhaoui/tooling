@@ -60,6 +60,70 @@ engines:
   #         args: ["run", "./cmd/go-lint-tags", "."]
 
   # Fast stub testenv for e2e testing (no real resources created)
+  # The registry: every engine this repo's own stages name, run from this
+  # checkout. forge://<name> consults these entries before falling through
+  # to forge's own module, so a build here always runs the engine beside
+  # it, with no environment variable saying so. A customer registers their
+  # own engines the same way, in one place.
+  - alias: container-build
+    engine: ./cmd/container-build
+  - alias: forge-dev
+    engine: ./cmd/forge-dev
+  - alias: forge-e2e
+    engine: ./cmd/forge-e2e
+  - alias: generic-test-runner
+    engine: ./cmd/generic-test-runner
+  - alias: go-build
+    engine: ./cmd/go-build
+  - alias: go-format
+    engine: ./cmd/go-format
+  - alias: go-gen-mocks
+    engine: ./cmd/go-gen-mocks
+  - alias: go-gen-openapi
+    engine: ./cmd/go-gen-openapi
+  - alias: go-lint
+    engine: ./cmd/go-lint
+  - alias: go-lint-licenses
+    engine: ./cmd/go-lint-licenses
+  - alias: go-lint-tags
+    engine: ./cmd/go-lint-tags
+  - alias: go-test
+    engine: ./cmd/go-test
+  - alias: parallel-builder
+    engine: ./cmd/parallel-builder
+  - alias: parallel-test-runner
+    engine: ./cmd/parallel-test-runner
+  - alias: test-report
+    engine: ./cmd/test-report
+  - alias: testenv-helm-install
+    engine: ./cmd/testenv-helm-install
+  - alias: testenv-kind
+    engine: ./cmd/testenv-kind
+  - alias: testenv-lcr
+    engine: ./cmd/testenv-lcr
+  - alias: testenv-stub
+    engine: ./cmd/testenv-stub
+  - alias: testenv
+    engine: ./cmd/testenv
+  - alias: go-dependency-detector
+    engine: ./cmd/go-dependency-detector
+  - alias: go-gen-mocks-dep-detector
+    engine: ./cmd/go-gen-mocks-dep-detector
+  - alias: go-gen-openapi-dep-detector
+    engine: ./cmd/go-gen-openapi-dep-detector
+  - alias: generic-builder
+    engine: ./cmd/generic-builder
+  - alias: go-gen-bpf
+    engine: ./cmd/go-gen-bpf
+  - alias: go-gen-protobuf
+    engine: ./cmd/go-gen-protobuf
+  - alias: container-build-simple
+    engine: ./cmd/container-build-simple
+  - alias: go-license-header
+    engine: ./cmd/go-license-header
+  - alias: rust-license-header
+    engine: ./cmd/rust-license-header
+
   - alias: setup-e2e-stub
     type: testenv
     testenv:
