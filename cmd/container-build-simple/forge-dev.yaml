@@ -1,6 +1,5 @@
 name: container-build-simple
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.1.0
 description: >-
   Assemble a container image from prebuilt files and a base, with no daemon,

@@ -49,19 +49,54 @@ func hasError(errs []ValidationError, field, message string) bool {
 func TestGenericRequiresAtLeastOneTool(t *testing.T) {
 	errs := ValidateConfig(genericConfigWith())
 
-	if !hasError(errs, "layout.tools", "at least one tool is required for an mcp-server without a profile") {
+	if !hasError(errs, "layout.tools", "at least one tool is required for kind: mcp-server") {
 		t.Errorf("a generic engine with no tools was accepted: %v", errs)
 	}
 }
 
-func TestToolsAreRejectedOnEveryProfile(t *testing.T) {
-	for _, profile := range ValidProfiles {
+// A contract kind's tools are its contract's, so declaring them here is a
+// second authority over the same list and is refused.
+func TestToolsAreRejectedOnEveryContractKind(t *testing.T) {
+	for _, kind := range ContractKinds {
 		c := genericConfigWith(validTool())
-		c.Profile = string(profile)
+		c.Kind = kind
 
-		if !hasError(ValidateConfig(c), "layout.tools", "only an mcp-server without a profile declares tools") {
-			t.Errorf("%s accepted a tools block", profile)
+		if !hasError(ValidateConfig(c), "layout.tools", "only kind: mcp-server declares tools; a contract kind's tools are the contract's") {
+			t.Errorf("%s accepted a tools block", kind)
 		}
+	}
+}
+
+// The fold: a contract kind stands on its own, with no profile key and no
+// tools list, and validates.
+func TestAContractKindNeedsNothingElse(t *testing.T) {
+	for _, kind := range ContractKinds {
+		c := &Config{Name: "sample-engine", Kind: kind, Version: "0.1.0"}
+		c.OpenAPI.SpecPath = "./spec.openapi.yaml"
+		c.Generate.PackageName = "main"
+
+		if errs := ValidateConfig(c); len(errs) > 0 {
+			t.Errorf("kind %s was refused: %v", kind, errs)
+		}
+	}
+}
+
+// Capabilities belong to the builder contract, named by kind now that the
+// profile key is gone.
+func TestOnlyTheBuilderKindDeclaresCapabilities(t *testing.T) {
+	c := &Config{Name: "sample-engine", Kind: string(EngineTypeTestRunner), Version: "0.1.0"}
+	c.OpenAPI.SpecPath = "./spec.openapi.yaml"
+	c.Generate.PackageName = "main"
+	c.Capabilities = &CapabilitiesConfig{Frozen: true}
+
+	if !hasError(ValidateConfig(c), "capabilities", "only a builder declares capabilities; this engine's kind is test-runner") {
+		t.Errorf("a test-runner declared capabilities: %v", ValidateConfig(c))
+	}
+
+	c.Kind = string(EngineTypeBuilder)
+
+	if errs := ValidateConfig(c); len(errs) > 0 {
+		t.Errorf("a builder was refused its capabilities: %v", errs)
 	}
 }
 
@@ -69,7 +104,7 @@ func TestTheOldTypeKeyFailsLoudNamingTheMigration(t *testing.T) {
 	c := genericConfigWith(validTool())
 	c.Type = "builder"
 
-	if !hasError(ValidateConfig(c), "type", "removed; use kind: mcp-server with profile: builder, and layout.tools for generic") {
+	if !hasError(ValidateConfig(c), "type", "removed; write kind: builder, or kind: mcp-server with layout.tools") {
 		t.Errorf("a stale type: key did not fail with the migration line: %v", ValidateConfig(c))
 	}
 }

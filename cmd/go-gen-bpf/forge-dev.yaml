@@ -1,6 +1,5 @@
 name: go-gen-bpf
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.15.0
 description: BPF code generator using bpf2go
 openapi:

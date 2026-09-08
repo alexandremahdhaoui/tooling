@@ -1,6 +1,5 @@
 name: parallel-test-runner
-kind: mcp-server
-profile: test-runner
+kind: test-runner
 version: 0.15.0
 description: Parallel test runner that runs multiple sub-runners concurrently
 openapi:

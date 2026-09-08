@@ -1,7 +1,6 @@
 # forge-dev configuration for testenv-lcr
 name: testenv-lcr
-kind: mcp-server
-profile: testenv-subengine
+kind: testenv-subengine
 version: 0.15.0
 
 openapi:

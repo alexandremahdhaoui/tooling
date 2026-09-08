@@ -1,6 +1,5 @@
 name: go-gen-protobuf
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.15.0
 description: Protocol Buffer code generator for Go
 openapi:

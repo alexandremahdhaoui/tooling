@@ -28,7 +28,7 @@ runtime:
 A `language:` key selects the template set: absent means go; `rust`,
 `python` and `typescript` emit a minimal MCP stdio server dispatching to
 a hand-written handlers file next to it. Profiles stay go. `docs/model.md`
-is the full two axis model: kinds, languages, profiles, and the
+is the full two axis model: kinds, languages, contracts, and the
 `generator:` door for custom cells.
 
 ## How do I use forge-dev?
@@ -37,8 +37,7 @@ is the full two axis model: kinds, languages, profiles, and the
 
 ```yaml
 name: my-engine
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.15.0
 description: My custom build engine
 openapi:

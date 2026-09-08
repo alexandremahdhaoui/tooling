@@ -1,6 +1,5 @@
 name: go-lint-tags
-kind: mcp-server
-profile: test-runner
+kind: test-runner
 version: 0.15.0
 description: Verify test files have proper build tags (unit, integration, e2e)
 

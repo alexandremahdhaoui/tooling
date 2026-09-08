@@ -1,6 +1,5 @@
 name: go-gen-mocks-dep-detector
-kind: mcp-server
-profile: dependency-detector
+kind: dependency-detector
 version: 0.15.0
 description: Dependency detector for mockery mock generation
 openapi:

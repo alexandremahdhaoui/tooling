@@ -28,9 +28,9 @@ import (
 // ConfigFileName is the expected name of the forge-dev configuration file.
 const ConfigFileName = "forge-dev.yaml"
 
-// EngineType is the mcp-server kind's profile: the preset tool list and
-// framework wiring a generated MCP engine carries. It survives from the old
-// type: key as data internal to the mcp-server kind.
+// EngineType is the contract a generated MCP engine implements: the tool
+// list and framework wiring that contract fixes. It is derived from kind,
+// and it survives as the templates' own vocabulary.
 type EngineType string
 
 const (
@@ -50,13 +50,44 @@ const (
 	EngineTypeGeneric EngineType = "generic"
 )
 
-// ValidProfiles are the named mcp-server profiles. Generic is not named: it
-// is the absence of a profile plus a layout.tools list.
+// ValidProfiles are the contract kinds under their old spelling. profile:
+// was folded into kind: on 2026-09-08 and is accepted only so a checkout
+// that predates the fold still generates; it is refused after the fleet has
+// moved. Generic is not among them: it is kind: mcp-server plus a
+// layout.tools list.
 var ValidProfiles = []EngineType{
 	EngineTypeBuilder,
 	EngineTypeTestRunner,
 	EngineTypeTestEnvSubengine,
 	EngineTypeDependencyDetector,
+}
+
+// ContractKinds are the kinds whose tools, inputs and outputs come from a
+// contract rather than from this file. An engine of one of these kinds
+// implements the contract's tools and forge-dev generates the wiring; what
+// the contract says is not this file's to restate.
+var ContractKinds = []string{
+	string(EngineTypeBuilder),
+	string(EngineTypeTestRunner),
+	string(EngineTypeTestEnvSubengine),
+	string(EngineTypeDependencyDetector),
+}
+
+// isContractKind answers whether the kind names a contract.
+func isContractKind(kind string) bool {
+	for _, k := range ContractKinds {
+		if kind == k {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isEngineKind answers whether the kind generates an MCP engine: a contract
+// kind, or mcp-server, whose tools come from layout.tools instead.
+func isEngineKind(kind string) bool {
+	return kind == KindMCPServer || isContractKind(kind)
 }
 
 // The kinds forge-dev knows. A kind says what the generated program is; a
@@ -75,8 +106,12 @@ const (
 	KindBinary = "binary"
 )
 
-// BuiltinKinds are the kinds with builtin behavior.
-var BuiltinKinds = []string{KindMCPServer, KindRestAPI, KindCLI, KindBinary}
+// BuiltinKinds are the kinds with builtin behavior: the four programs
+// forge-dev knows how to write, plus one per contract it can wire.
+var BuiltinKinds = append(
+	[]string{KindMCPServer, KindRestAPI, KindCLI, KindBinary},
+	ContractKinds...,
+)
 
 // Config represents the forge-dev.yaml configuration file.
 type Config struct {
@@ -84,13 +119,15 @@ type Config struct {
 	// Must be lowercase alphanumeric with hyphens, starting with a letter.
 	Name string `yaml:"name"`
 
-	// Kind is what the generated program is (required): mcp-server,
+	// Kind is what the generated program is (required): a contract kind
+	// (builder, test-runner, testenv-subengine, dependency-detector) whose
+	// tools that contract fixes, mcp-server whose tools are layout.tools,
 	// rest-api, cli, binary, or a custom name owned by a generator.
 	Kind string `yaml:"kind"`
 
-	// Profile selects an mcp-server preset layout: builder, test-runner,
-	// testenv-subengine or dependency-detector. Absent means generic, whose
-	// tools come from layout.tools.
+	// Profile is the contract kind's old spelling, folded into kind on
+	// 2026-09-08. It is read only so a checkout written before the fold
+	// still generates, and it is refused once the fleet has moved.
 	Profile string `yaml:"profile,omitempty"`
 
 	// Generator names a forge:// engine that emits this kind and language
@@ -256,13 +293,18 @@ type CommandConfig struct {
 	Description string `yaml:"description"`
 }
 
-// engineType derives the mcp-server profile the templates key on.
+// engineType derives the contract the templates key on. A contract kind
+// names it; mcp-server declares its own tools and is generic. profile: is
+// the old spelling and still answers, until it is refused.
 func (c *Config) engineType() EngineType {
-	if c.Profile != "" {
+	switch {
+	case c.Profile != "":
 		return EngineType(c.Profile)
+	case isContractKind(c.Kind):
+		return EngineType(c.Kind)
+	default:
+		return EngineTypeGeneric
 	}
-
-	return EngineTypeGeneric
 }
 
 // tools answers the declared MCP tools of a generic mcp-server.
@@ -484,7 +526,7 @@ func validateCapabilities(c *Config) []ValidationError {
 	if c.engineType() != EngineTypeBuilder {
 		return []ValidationError{{
 			Field:   "capabilities",
-			Message: "only a builder declares capabilities; this engine's profile is " + string(c.engineType()),
+			Message: "only a builder declares capabilities; this engine's kind is " + c.Kind,
 		}}
 	}
 
@@ -548,10 +590,10 @@ func validateLanguage(c *Config) []ValidationError {
 		}}
 	}
 
-	if c.Kind == KindMCPServer && c.Profile != "" {
+	if isEngineKind(c.Kind) && c.engineType() != EngineTypeGeneric {
 		return []ValidationError{{
 			Field:   "language",
-			Message: "an mcp-server profile generates go only; drop the profile and declare layout.tools",
+			Message: "a contract kind generates go only; declare kind: mcp-server with layout.tools for another language",
 		}}
 	}
 
@@ -580,7 +622,7 @@ func validateKind(c *Config) []ValidationError {
 	if c.Type != "" {
 		errors = append(errors, ValidationError{
 			Field:   "type",
-			Message: "removed; use kind: mcp-server with profile: " + c.Type + ", and layout.tools for generic",
+			Message: "removed; write kind: " + c.Type + ", or kind: mcp-server with layout.tools",
 		})
 	}
 
@@ -638,7 +680,7 @@ func validateKind(c *Config) []ValidationError {
 		if c.Kind != KindMCPServer {
 			errors = append(errors, ValidationError{
 				Field:   "profile",
-				Message: "only the mcp-server kind has profiles",
+				Message: "profile was folded into kind; write kind: " + c.Profile + " and drop this key",
 			})
 		} else if !isValidProfile(c.Profile) {
 			errors = append(errors, ValidationError{
@@ -755,13 +797,13 @@ func validateDocsBaseURL(raw string) []ValidationError {
 func validateTools(c *Config) []ValidationError {
 	var errors []ValidationError
 
-	generic := c.Kind == KindMCPServer && c.Profile == "" && c.Generator == ""
+	generic := c.Kind == KindMCPServer && c.engineType() == EngineTypeGeneric && c.Generator == ""
 
 	if !generic {
 		if len(c.tools()) > 0 && c.Generator == "" {
 			errors = append(errors, ValidationError{
 				Field:   "layout.tools",
-				Message: "only an mcp-server without a profile declares tools",
+				Message: "only kind: mcp-server declares tools; a contract kind's tools are the contract's",
 			})
 		}
 
@@ -771,7 +813,7 @@ func validateTools(c *Config) []ValidationError {
 	if len(c.tools()) == 0 {
 		errors = append(errors, ValidationError{
 			Field:   "layout.tools",
-			Message: "at least one tool is required for an mcp-server without a profile",
+			Message: "at least one tool is required for kind: mcp-server",
 		})
 
 		return errors

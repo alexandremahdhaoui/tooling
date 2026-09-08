@@ -1,6 +1,5 @@
 name: go-license-header
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.1.0
 description: >
   Adds an Apache License 2.0 header to Go source files that don't already

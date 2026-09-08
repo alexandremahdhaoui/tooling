@@ -368,9 +368,9 @@ func TestKindValidationRules(t *testing.T) {
 			"layout", "the rest-api kind's layout is the OpenAPI paths; declare operations in the spec",
 		},
 		{
-			"a profile outside mcp-server fails",
+			"the folded profile key names its replacement",
 			func() *Config { c := base(KindBinary); c.Profile = "builder"; return c }(),
-			"profile", "only the mcp-server kind has profiles",
+			"profile", "profile was folded into kind; write kind: builder and drop this key",
 		},
 		{
 			"the binary kind has no layout",

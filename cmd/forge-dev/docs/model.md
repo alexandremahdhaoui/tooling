@@ -28,24 +28,26 @@ defines. Core passes the layout through opaquely and the generator
 validates it. Every kind's runnable manifest has the same `inputs:`
 shape, so forge-factory checks inputs without knowing kinds.
 
-### mcp-server profiles
+### The contract kinds
 
-The old engine types survive as profiles: preset tool lists plus the
-framework wiring, data internal to the mcp-server kind.
+A contract kind names the contract the engine implements. Its tools,
+their inputs and their outputs belong to that contract, so the file
+declares none of them: a `layout.tools` list beside a contract kind is a
+second authority over the same list and is refused.
 
-| Profile | Handler the author writes |
+| Kind | Handler the author writes |
 |---|---|
 | builder | `Build(ctx, BuildInput, *Spec) (*Artifact, error)` |
 | test-runner | `Run(ctx, RunInput, *Spec) (*TestReport, error)` |
 | testenv-subengine | `Create` and `Delete` |
 | dependency-detector | the detect tool registration |
-| none, the default | one handler per `layout.tools` entry |
+| mcp-server | one handler per `layout.tools` entry |
 
 ## Language, axis two
 
 Builtin cells today. mcp-server in go, rust, python and typescript.
-Profiles are go only. cli and rest-api in go. binary in every language.
-Every other cell is external.
+The contract kinds are go only. cli and rest-api in go. binary in every
+language. Every other cell is external.
 
 ## Generator, the extension door
 
@@ -142,14 +144,18 @@ that writes `zz_generated_config_spec.yaml` hands the config generator
 that schema instead of the cell's `openapi.specPath`, so a cell whose
 keys are derived rather than declared still gets a loader.
 
-## Migration from type:
+## Migration from type: and profile:
 
-`type: X` fails validation with one line naming the fix:
+Both were the same axis under two names, and both are `kind:` now.
 
-- `type: builder` and the other three: `kind: mcp-server` plus
-  `profile: X`.
+- `type: builder` and the other three, and `profile: X` beside
+  `kind: mcp-server`: write `kind: X`.
 - `type: generic`: `kind: mcp-server` and move `generate.tools` to
   `layout.tools`.
+
+`type:` fails validation naming its replacement. `profile:` is read for
+now, so a checkout written before the fold on 2026-09-08 still
+generates; it is refused once every repo has moved.
 
 ## Migration from surface:
 

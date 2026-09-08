@@ -15,8 +15,7 @@ name: my-engine
 
 # Required: Engine type
 # Values: builder, test-runner, testenv-subengine
-kind: mcp-server
-profile: builder
+kind: builder
 
 # Required: Engine version (semver format: x.y.z)
 version: 0.15.0
@@ -41,7 +40,7 @@ generate:
 |-------|------|----------|-------------|
 | `name` | string | Yes | Engine name. Must be lowercase alphanumeric with hyphens, starting with a letter. Max 64 characters. |
 | `kind` | string | Yes | What the program is. One of `mcp-server`, `rest-api`, `cli`, `binary`, or a custom kind owned by a `generator:` |
-| `profile` | enum | No | mcp-server preset. One of `builder`, `test-runner`, `testenv-subengine`, `dependency-detector`. Absent means generic: declare `layout.tools` |
+| `profile` | enum | No | The contract kinds' old spelling, folded into `kind` on 2026-09-08. Read only so a file written before the fold still generates; refused once every repo has moved |
 | `generator` | string | No | A `forge://` engine that emits this kind and language cell instead of a builtin |
 | `layout` | object | No | The kind vocabulary: `tools` for mcp-server, `commands` for cli, anything for a custom kind |
 | `version` | string | Yes | Semantic version in format `x.y.z` |
@@ -243,8 +242,7 @@ Contains:
 **forge-dev.yaml:**
 ```yaml
 name: simple-engine
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.1.0
 openapi:
   specPath: ./spec.openapi.yaml
@@ -269,8 +267,7 @@ components:
 **forge-dev.yaml:**
 ```yaml
 name: advanced-engine
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.15.0
 description: An advanced build engine with many options
 openapi:

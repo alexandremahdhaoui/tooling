@@ -1,6 +1,5 @@
 name: container-build
-kind: mcp-server
-profile: builder
+kind: builder
 version: 0.15.0
 description: Build container images using Docker, Podman, or Kaniko
 openapi:
