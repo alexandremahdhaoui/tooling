@@ -190,6 +190,13 @@ type CapabilitiesConfig struct {
 	// recorded dependency lock before building and never repairs it. forge
 	// sends a repo's `frozen:` setting only to engines that declare this.
 	Frozen bool `yaml:"frozen,omitempty"`
+
+	// Incremental says this engine's output may be reused while its
+	// recorded inputs are unchanged. Declaring it turns forge's freshness
+	// rule on for the entries it builds; an engine that says nothing runs
+	// every time. A generator never declares it: what it writes depends on
+	// the generator, and the record holds only what it read.
+	Incremental bool `yaml:"incremental,omitempty"`
 }
 
 // PlatformsConfig is a platform declaration that parses from a scalar or a
@@ -231,6 +238,12 @@ func (c *Config) platforms() []string {
 // frozen is whether the engine declares it reads a frozen input.
 func (c *Config) frozen() bool {
 	return c.Capabilities != nil && c.Capabilities.Frozen
+}
+
+// incremental answers whether the engine declared that its output may be
+// reused. Absent is false: nothing is skipped unless it says so.
+func (c *Config) incremental() bool {
+	return c.Capabilities != nil && c.Capabilities.Incremental
 }
 
 // RuntimeConfig declares run-time inputs of the engine's runnable.

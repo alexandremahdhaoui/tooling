@@ -13,3 +13,7 @@ generate:
 capabilities:
   platforms: any
   frozen: true
+  # A compiler is the one thing forge may skip: its inputs are the files a
+  # detector walked, and nothing else decides its output. Every generator
+  # declares nothing here and runs every time.
+  incremental: true

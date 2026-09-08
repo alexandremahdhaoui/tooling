@@ -50,7 +50,7 @@ func TestGenerateMCPFile_Builder(t *testing.T) {
 		"engineframework.BuilderConfig",
 		"mcptypes.BuildInput",
 		"[]forge.Artifact",
-		"var Capabilities = engineframework.Capabilities{Platforms: nil, Frozen: false}",
+		"var Capabilities = engineframework.Capabilities{Platforms: nil, Frozen: false, Incremental: false}",
 		"engineframework.RefusePlatforms(\"test-builder\"",
 		"handleConfigValidate",
 		"sha256:builder123",
@@ -264,6 +264,27 @@ func TestMcpTemplateName(t *testing.T) {
 // A builder that declares frozen carries it into its generated
 // Capabilities, so the framework admits the input and config-validate
 // answers the declaration. One that declares nothing carries false.
+// An engine that declares an incremental build is the only one whose output
+// forge may reuse; a generator declares nothing here and runs every time.
+func TestABuilderCarriesItsIncrementalDeclaration(t *testing.T) {
+	config := &Config{
+		Name:         "incremental-builder",
+		Kind:         string(EngineTypeBuilder),
+		Version:      "1.0.0",
+		Capabilities: &CapabilitiesConfig{Platforms: PlatformsConfig{"any"}, Incremental: true},
+		Generate:     GenerateConfig{PackageName: "main"},
+	}
+
+	got, err := GenerateMCPFile(config, "sha256:incremental", nil)
+	if err != nil {
+		t.Fatalf("GenerateMCPFile() error = %v", err)
+	}
+
+	if !strings.Contains(string(got), `Frozen: false, Incremental: true`) {
+		t.Errorf("the incremental declaration did not reach the generated engine")
+	}
+}
+
 func TestABuilderCarriesItsFrozenDeclaration(t *testing.T) {
 	config := &Config{
 		Name: "frozen-builder",
@@ -278,7 +299,7 @@ func TestABuilderCarriesItsFrozenDeclaration(t *testing.T) {
 		t.Fatalf("GenerateMCPFile() error = %v", err)
 	}
 
-	if !strings.Contains(string(got), `engineframework.Capabilities{Platforms: []string{"any"}, Frozen: true}`) {
+	if !strings.Contains(string(got), `engineframework.Capabilities{Platforms: []string{"any"}, Frozen: true, Incremental: false}`) {
 		t.Fatalf("the frozen declaration must reach the generated Capabilities:\n%s", got)
 	}
 

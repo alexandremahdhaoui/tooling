@@ -28,7 +28,7 @@ type BuildFunc func(ctx context.Context, input mcptypes.BuildInput, s *Spec) ([]
 // declared, before the engine's own code runs; config-validate refuses a
 // platform before anything builds and answers the declaration so the
 // caller learns what it may send.
-var Capabilities = engineframework.Capabilities{Platforms: nil, Frozen: false}
+var Capabilities = engineframework.Capabilities{Platforms: nil, Frozen: false, Incremental: false}
 
 // SetupMCPServer creates and configures the MCP server with all required tools.
 // It registers build, buildBatch, and config-validate tools.

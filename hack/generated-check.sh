@@ -11,20 +11,12 @@ set -eu
 # seen from the other side: an unignored artifact dirties every revision, so
 # the pipeline mints a new one every run and the loop never settles.
 #
-# A generator records what it wrote beside what it read, each with a content
-# digest, so a hand-edited generated file is stale by the same rule as an
-# edited source and the build regenerates it on its own. The gate used to
-# pass --force because forge-dev skipped on a checksum it read OUT OF THE
-# GENERATED FILE; that skip is gone with the flag.
-#
-# What that rule cannot see is a change to the GENERATOR: the record holds
-# the inputs it read and the output it wrote, and not the tool between them.
-# Edit a template and every engine's committed code is stale while every
-# digest still matches, so a build skips and this gate passes on files the
-# generator would no longer write. The store is the memory of those digests,
-# so the gate starts without one: everything regenerates, and the comparison
-# below is against what the generator emits today rather than what it
-# emitted whenever the record was written.
+# A plain build is enough, and no flag or trick is needed, because a
+# generator always runs. Reusing output is a capability an engine declares
+# and no generator declares it: what a generator writes depends on the
+# generator, and the record holds only what it read, so a changed template
+# would otherwise leave every engine stale with every digest still matching.
+# This gate passed on exactly that once, which is how the rule was found.
 #
 # The comparison is before-and-after and never the whole tree. A gate that
 # failed on any dirty file would fail on the work in progress of whoever ran
@@ -35,19 +27,7 @@ trap 'rm -rf "$work"' EXIT
 
 git status --porcelain | sort >"$work/before"
 
-# Keep the operator's store: this gate borrows the repo, it does not own it.
-store=.forge/artifact-store.yaml
-
-if [ -f "$store" ]; then
-    cp "$store" "$work/store"
-    rm -f "$store"
-fi
-
 forge build >/dev/null
-
-if [ -f "$work/store" ]; then
-    cp "$work/store" "$store"
-fi
 
 git status --porcelain | sort >"$work/after"
 

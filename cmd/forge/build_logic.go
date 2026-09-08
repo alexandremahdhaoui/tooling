@@ -138,14 +138,23 @@ func buildAll(artifactName string) (*BuildAllResult, error) {
 		// What this entry builds: what it declares, or the host.
 		platforms := platformsFor(spec)
 
-		// Check if rebuild is needed (lazy rebuild logic), per platform: a
-		// host binary that is fresh says nothing about the arm64 one.
-		needsRebuild, reason, err := shouldRebuild(spec.Name, platforms, store)
-		if err != nil {
-			// If error checking rebuild status, log warning and rebuild (safe default)
-			fmt.Fprintf(os.Stderr, "Warning: failed to check rebuild status for %s: %v (will rebuild)\n", spec.Name, err)
-			needsRebuild = true
-			reason = "rebuild check failed"
+		// Whether anything may be reused is the engine's to declare, and
+		// nothing declares it by default: a generator's output depends on
+		// the generator, which no record holds, so it runs every time. For
+		// an engine that does declare it the record decides, per platform,
+		// because a fresh host binary says nothing about the arm64 one.
+		needsRebuild, reason := true, "the engine declares no incremental build"
+
+		if engineIsIncremental(spec.Engine, &config) {
+			var err error
+
+			needsRebuild, reason, err = shouldRebuild(spec.Name, platforms, store)
+			if err != nil {
+				// If error checking rebuild status, log warning and rebuild (safe default)
+				fmt.Fprintf(os.Stderr, "Warning: failed to check rebuild status for %s: %v (will rebuild)\n", spec.Name, err)
+				needsRebuild = true
+				reason = "rebuild check failed"
+			}
 		}
 
 		if !needsRebuild {
@@ -465,22 +474,31 @@ func buildWithSingleEngine(
 	return artifacts, nil
 }
 
-// engineReadsFrozen asks an engine, over its config-validate tool, whether
-// it declares the frozen capability. An engine that answers no declaration
-// - a hand-written one, a third party's - reads as declaring nothing, and
-// the caller sends it nothing it did not ask for. Asked once per engine
-// group: the declaration does not depend on the entry.
-func engineReadsFrozen(command string, args []string) bool {
+// engineCapabilities asks an engine, over its config-validate tool, what it
+// declares. An engine that answers nothing - a hand-written one, a third
+// party's - declares nothing, and the caller neither sends it an input it
+// did not ask for nor reuses output it never said was reusable. Cached by
+// engine: the declaration does not depend on the entry.
+var declaredCapabilities = map[string]map[string]any{}
+
+func engineCapabilities(command string, args []string) map[string]any {
+	key := command + " " + strings.Join(args, " ")
+	if declared, ok := declaredCapabilities[key]; ok {
+		return declared
+	}
+
+	declaredCapabilities[key] = map[string]any{}
+
 	result, err := callMCPEngine(command, args, "config-validate", map[string]any{"spec": map[string]any{}})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: %s answered no capabilities (%v); frozen is not sent to it\n", command, err)
+		fmt.Fprintf(os.Stderr, "Warning: %s answered no capabilities (%v); it is told nothing and reuses nothing\n", command, err)
 
-		return false
+		return declaredCapabilities[key]
 	}
 
 	data, err := json.Marshal(result)
 	if err != nil {
-		return false
+		return declaredCapabilities[key]
 	}
 
 	var output struct {
@@ -488,12 +506,37 @@ func engineReadsFrozen(command string, args []string) bool {
 	}
 
 	if err := json.Unmarshal(data, &output); err != nil {
+		return declaredCapabilities[key]
+	}
+
+	if output.Capabilities != nil {
+		declaredCapabilities[key] = output.Capabilities
+	}
+
+	return declaredCapabilities[key]
+}
+
+// engineReadsFrozen answers whether the engine declared it reads a frozen
+// input.
+func engineReadsFrozen(command string, args []string) bool {
+	frozen, _ := engineCapabilities(command, args)["frozen"].(bool)
+
+	return frozen
+}
+
+// engineIsIncremental answers whether the engine declared that its output
+// may be reused while its recorded inputs are unchanged. Nothing is skipped
+// for an engine that did not: a generator's output depends on the generator
+// and no record holds that, so a generator runs every time.
+func engineIsIncremental(engineURI string, spec *forge.Spec) bool {
+	command, args, err := resolveEngine(engineURI, spec)
+	if err != nil {
 		return false
 	}
 
-	frozen, _ := output.Capabilities["frozen"].(bool)
+	incremental, _ := engineCapabilities(command, args)["incremental"].(bool)
 
-	return frozen
+	return incremental
 }
 
 // parseArtifacts converts MCP result to forge.Artifact slice.

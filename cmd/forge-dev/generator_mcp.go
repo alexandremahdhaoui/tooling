@@ -47,6 +47,10 @@ type MCPTemplateData struct {
 	Platforms string
 	// Frozen is whether the builder declares it reads the frozen input.
 	Frozen bool
+
+	// Incremental is whether the builder declares its output may be reused
+	// while its inputs are unchanged.
+	Incremental bool
 }
 
 // platformsLiteral renders a platform declaration as Go source.
@@ -80,6 +84,7 @@ func GenerateMCPFile(config *Config, checksum string, specTypesCtx *SpecTypesCon
 		Tools:            BuildGenericTools(config, specTypesCtx),
 		Platforms:        platformsLiteral(config.platforms()),
 		Frozen:           config.frozen(),
+		Incremental:      config.incremental(),
 	}
 
 	// Select template based on engine type

@@ -40,6 +40,15 @@ type Capabilities struct {
 	// Every build engine holds the invariant itself - a build never writes
 	// a lockfile - whether or not it declares the capability.
 	Frozen bool
+
+	// Incremental says the output of this engine may be reused when its
+	// recorded inputs are unchanged. It is what turns forge's freshness
+	// rule on for an entry: an engine that does not declare it runs every
+	// time, which is what a generator wants and what forge does by
+	// default. A compiler with a real dependency detector declares it; a
+	// generator must not, because its output depends on the generator
+	// itself and no record holds that.
+	Incremental bool
 }
 
 const (
@@ -61,7 +70,8 @@ var ErrCapabilityRefused = errors.New("capability refused")
 
 // Declaration is the capabilities as an engine answers them over
 // config-validate, so a caller learns what to send without guessing:
-// platforms as declared (host when nothing is), frozen as a bool.
+// platforms as declared (host when nothing is), frozen and incremental as
+// bools.
 func (c Capabilities) Declaration() map[string]any {
 	platforms := c.Platforms
 	if len(platforms) == 0 {
@@ -69,8 +79,9 @@ func (c Capabilities) Declaration() map[string]any {
 	}
 
 	return map[string]any{
-		"platforms": platforms,
-		"frozen":    c.Frozen,
+		"platforms":   platforms,
+		"frozen":      c.Frozen,
+		"incremental": c.Incremental,
 	}
 }
 
