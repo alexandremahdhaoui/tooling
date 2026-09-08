@@ -90,6 +90,7 @@ func handleConfigValidate(
 ) (*mcp.CallToolResult, any, error) {
 	output := ValidateMap(input.Spec)
 	output.Capabilities = Capabilities.Declaration()
+	output.Kind = "builder"
 
 	if len(input.Platforms) > 0 {
 		if err := engineframework.RefusePlatforms("generic-builder", Capabilities, input.Platforms); err != nil {

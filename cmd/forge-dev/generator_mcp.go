@@ -29,8 +29,13 @@ type MCPTemplateData struct {
 	ChecksumHeader string
 	// EngineName is the name of the engine.
 	EngineName string
-	// EngineType is the type of engine (builder, test-runner, testenv-subengine).
+	// EngineType is the contract the engine implements, or generic.
 	EngineType EngineType
+
+	// Kind is what the file declared: a contract name, or mcp-server. The
+	// engine answers it over config-validate so a caller learns what it is
+	// from the engine rather than from a key beside every use of it.
+	Kind string
 	// SpecTypesContext holds external spec types info (nil when disabled).
 	SpecTypesContext *SpecTypesContext
 	// Tools are the resolved tools of a generic engine. Empty for every other
@@ -70,6 +75,7 @@ func GenerateMCPFile(config *Config, checksum string, specTypesCtx *SpecTypesCon
 		ChecksumHeader:   ChecksumHeader(checksum),
 		EngineName:       config.Name,
 		EngineType:       config.engineType(),
+		Kind:             config.Kind,
 		SpecTypesContext: specTypesCtx,
 		Tools:            BuildGenericTools(config, specTypesCtx),
 		Platforms:        platformsLiteral(config.platforms()),

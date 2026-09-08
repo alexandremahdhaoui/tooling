@@ -36,6 +36,7 @@ func handleConfigValidate(
 	input mcptypes.ConfigValidateInput,
 ) (*mcp.CallToolResult, any, error) {
 	output := ValidateMap(input.Spec)
+	output.Kind = "dependency-detector"
 
 	if output.Valid {
 		result, artifact := mcputil.SuccessResultWithArtifact(

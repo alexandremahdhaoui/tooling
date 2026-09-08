@@ -71,6 +71,13 @@ type ConfigValidateOutput struct {
 	// The configuration is still valid, but may have suboptimal settings.
 	Warnings []ValidationWarning `json:"warnings,omitempty"`
 
+	// Kind is what this engine is, answered by the engine rather than
+	// declared beside every use of it: a contract name (builder,
+	// test-runner, testenv-subengine, dependency-detector), or mcp-server
+	// for an engine whose tools are its own. A caller that requires a
+	// contract compares this and refuses a mismatch by name.
+	Kind string `json:"kind,omitempty" jsonschema:"The contract this engine implements, or mcp-server"`
+
 	// Capabilities is what the engine declares, answered so a caller learns
 	// what it may send: `platforms` (the declared list, or host) and
 	// `frozen` (whether the engine reads a frozen input). A build engine
