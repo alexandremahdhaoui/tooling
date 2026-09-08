@@ -179,38 +179,22 @@ engines:
           #     - REGISTRY_PASSWORD    # Don't propagate sensitive credentials
           #     - SECRET_TOKEN
 
-      - # -- testenv-helm-install installs Helm charts into the Kind cluster
+      - # -- testenv-helm-install installs the charts declared here into the
+        #    cluster the entry before it stood up. Every key it takes is in
+        #    cmd/testenv-helm-install/spec.openapi.yaml and anything else is
+        #    refused by name.
         engine: "forge://testenv-helm-install"
         spec:
           charts:
-            # FluxCD-inspired comprehensive spec
             - name: podinfo-release
               sourceType: helm-repo
               url: https://stefanprodan.github.io/podinfo
               chartName: podinfo
-              # version: "6.0.0"  # Optional: specify exact version
               namespace: test-podinfo
               releaseName: test-podinfo
               createNamespace: true
               timeout: "5m"
               disableWait: false
-              # Optional lifecycle fields:
-              # forceUpgrade: false
-              # disableHooks: false
-              # testEnable: false
-              # values:
-              #   replicaCount: 2
-              #   service:
-              #     type: ClusterIP
-              # valuesFiles:
-              #   - ./custom-values.yaml
-
-          # -- Example: Template expansion using environment variables from previous sub-engines
-          # kubeconfigPath: "{{.Env.KUBECONFIG}}"  # Reference KUBECONFIG from testenv-kind
-          # charts:
-          #   - name: my-app
-          #     values:
-          #       registry: "{{.Env.TESTENV_LCR_FQDN}}"  # Reference registry FQDN from testenv-lcr
 
 # -- test defines the test stages and their configuration
 # The CLI as a first class run target. Every toolchain runnable declares

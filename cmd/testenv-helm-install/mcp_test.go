@@ -32,7 +32,7 @@ func TestChartSpec(t *testing.T) {
 	spec := ChartSpec{
 		Name:            "my-podinfo",
 		SourceType:      "helm-repo",
-		URL:             "https://stefanprodan.github.io/podinfo",
+		Url:             "https://stefanprodan.github.io/podinfo",
 		ChartName:       "podinfo",
 		Version:         "6.0.0",
 		Namespace:       "test-ns",
@@ -49,8 +49,8 @@ func TestChartSpec(t *testing.T) {
 	if spec.ChartName != "podinfo" {
 		t.Errorf("ChartName = %v, want podinfo", spec.ChartName)
 	}
-	if spec.URL != "https://stefanprodan.github.io/podinfo" {
-		t.Errorf("URL = %v, want https://stefanprodan.github.io/podinfo", spec.URL)
+	if spec.Url != "https://stefanprodan.github.io/podinfo" {
+		t.Errorf("URL = %v, want https://stefanprodan.github.io/podinfo", spec.Url)
 	}
 	if spec.Version != "6.0.0" {
 		t.Errorf("Version = %v, want 6.0.0", spec.Version)
@@ -69,6 +69,118 @@ func TestChartSpec(t *testing.T) {
 	}
 	if spec.Timeout != "10m" {
 		t.Errorf("Timeout = %v, want 10m", spec.Timeout)
+	}
+}
+
+func TestTheSchemaAcceptsTheChartsBlockForgeYamlDeclares(t *testing.T) {
+	const block = `
+charts:
+  - name: podinfo-release
+    sourceType: helm-repo
+    url: https://stefanprodan.github.io/podinfo
+    chartName: podinfo
+    namespace: test-podinfo
+    releaseName: test-podinfo
+    createNamespace: true
+    timeout: "5m"
+    disableWait: false
+`
+
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal([]byte(block), &raw); err != nil {
+		t.Fatalf("yaml.Unmarshal() error = %v", err)
+	}
+
+	spec, err := FromMap(raw)
+	if err != nil {
+		t.Fatalf("FromMap() error = %v", err)
+	}
+
+	if len(spec.Charts) != 1 {
+		t.Fatalf("Charts = %d, want 1", len(spec.Charts))
+	}
+
+	chart := spec.Charts[0]
+	if chart.Name != "podinfo-release" {
+		t.Errorf("Name = %v, want podinfo-release", chart.Name)
+	}
+	if chart.SourceType != "helm-repo" {
+		t.Errorf("SourceType = %v, want helm-repo", chart.SourceType)
+	}
+	if chart.Url != "https://stefanprodan.github.io/podinfo" {
+		t.Errorf("Url = %v, want the podinfo repository", chart.Url)
+	}
+	if chart.ChartName != "podinfo" {
+		t.Errorf("ChartName = %v, want podinfo", chart.ChartName)
+	}
+	if chart.ReleaseName != "test-podinfo" {
+		t.Errorf("ReleaseName = %v, want test-podinfo", chart.ReleaseName)
+	}
+	if !chart.CreateNamespace {
+		t.Errorf("CreateNamespace = %v, want true", chart.CreateNamespace)
+	}
+	if chart.Timeout != "5m" {
+		t.Errorf("Timeout = %v, want 5m", chart.Timeout)
+	}
+
+	if output := Validate(spec); !output.Valid {
+		t.Fatalf("Validate() errors = %v, want none", output.Errors)
+	}
+}
+
+func TestTheSchemaRefusesAChartKeyItDoesNotDeclare(t *testing.T) {
+	raw := map[string]interface{}{
+		"charts": []interface{}{
+			map[string]interface{}{
+				"name":       "podinfo-release",
+				"sourceType": "helm-repo",
+				"interval":   "10m",
+			},
+		},
+	}
+
+	_, err := FromMap(raw)
+	if err == nil {
+		t.Fatalf("FromMap() error = nil, want a refusal naming interval")
+	}
+	if !strings.Contains(err.Error(), "interval") {
+		t.Errorf("FromMap() error = %v, want it to name interval", err)
+	}
+}
+
+func TestTheSchemaRefusesASourceTypeItDoesNotDeclare(t *testing.T) {
+	raw := map[string]interface{}{
+		"charts": []interface{}{
+			map[string]interface{}{
+				"name":       "podinfo-release",
+				"sourceType": "tarball",
+			},
+		},
+	}
+
+	spec, err := FromMap(raw)
+	if err != nil {
+		t.Fatalf("FromMap() error = %v", err)
+	}
+
+	output := Validate(spec)
+	if output.Valid {
+		t.Fatalf("Validate() = valid, want a refusal naming sourceType")
+	}
+	if !strings.Contains(output.Errors[0].Field, "sourceType") {
+		t.Errorf("Validate() field = %v, want it to name sourceType", output.Errors[0].Field)
+	}
+}
+
+func TestAChartWithNoSourceIsRefusedBeforeHelmRuns(t *testing.T) {
+	spec := &Spec{Charts: []ChartSpec{{Name: "podinfo-release"}}}
+
+	output := Validate(spec)
+	if output.Valid {
+		t.Fatalf("Validate() = valid, want a refusal naming sourceType")
+	}
+	if !strings.Contains(output.Errors[0].Field, "sourceType") {
+		t.Errorf("Validate() field = %v, want it to name sourceType", output.Errors[0].Field)
 	}
 }
 
@@ -253,7 +365,7 @@ func TestBuildGitCloneCommand(t *testing.T) {
 		{
 			name: "shallow clone for branch",
 			chart: ChartSpec{
-				URL:       "https://example.com/repo",
+				Url:       "https://example.com/repo",
 				GitBranch: "main",
 			},
 			destDir:  "/tmp/dest",
@@ -262,7 +374,7 @@ func TestBuildGitCloneCommand(t *testing.T) {
 		{
 			name: "shallow clone for tag",
 			chart: ChartSpec{
-				URL:    "https://example.com/repo",
+				Url:    "https://example.com/repo",
 				GitTag: "v1.0.0",
 			},
 			destDir:  "/tmp/dest",
@@ -271,7 +383,7 @@ func TestBuildGitCloneCommand(t *testing.T) {
 		{
 			name: "full clone for commit",
 			chart: ChartSpec{
-				URL:       "https://example.com/repo",
+				Url:       "https://example.com/repo",
 				GitCommit: "abc1234",
 			},
 			destDir:  "/tmp/dest",
@@ -280,7 +392,7 @@ func TestBuildGitCloneCommand(t *testing.T) {
 		{
 			name: "full clone for semver (needs tag list)",
 			chart: ChartSpec{
-				URL:       "https://example.com/repo",
+				Url:       "https://example.com/repo",
 				GitSemVer: "^1.0.0",
 			},
 			destDir:  "/tmp/dest",
@@ -295,7 +407,7 @@ func TestBuildGitCloneCommand(t *testing.T) {
 				t.Fatalf("resolveGitRef() error: %v", err)
 			}
 
-			args := buildGitCloneCommand(tt.chart.URL, tt.destDir, ref, refType)
+			args := buildGitCloneCommand(tt.chart.Url, tt.destDir, ref, refType)
 
 			if len(args) != len(tt.wantArgs) {
 				t.Errorf("buildGitCloneCommand() args length = %d, want %d", len(args), len(tt.wantArgs))
@@ -330,7 +442,7 @@ func TestCloneGitRepository_ErrorCases(t *testing.T) {
 		{
 			name: "missing ref",
 			chart: ChartSpec{
-				URL:       "https://example.com/repo",
+				Url:       "https://example.com/repo",
 				ChartPath: "charts/app",
 			},
 			wantError: "no git reference specified",
@@ -338,7 +450,7 @@ func TestCloneGitRepository_ErrorCases(t *testing.T) {
 		{
 			name: "empty chartPath",
 			chart: ChartSpec{
-				URL:       "https://example.com/repo",
+				Url:       "https://example.com/repo",
 				GitBranch: "main",
 				ChartPath: "",
 			},
@@ -377,7 +489,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "valid git source with branch",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "https://github.com/user/repo",
+				Url:        "https://github.com/user/repo",
 				GitBranch:  "main",
 				ChartPath:  "charts/app",
 			},
@@ -387,7 +499,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "valid git source with tag",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "https://github.com/user/repo",
+				Url:        "https://github.com/user/repo",
 				GitTag:     "v1.0.0",
 				ChartPath:  "charts/app",
 			},
@@ -397,7 +509,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "valid git source with commit",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "https://github.com/user/repo",
+				Url:        "https://github.com/user/repo",
 				GitCommit:  "abc1234",
 				ChartPath:  "charts/app",
 			},
@@ -407,7 +519,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "valid git source with semver",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "https://github.com/user/repo",
+				Url:        "https://github.com/user/repo",
 				GitSemVer:  "^1.0.0",
 				ChartPath:  "charts/app",
 			},
@@ -417,7 +529,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "valid git source with ssh URL",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "git@github.com:user/repo.git",
+				Url:        "git@github.com:user/repo.git",
 				GitBranch:  "main",
 				ChartPath:  "charts/app",
 			},
@@ -437,7 +549,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "missing ChartPath",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "https://github.com/user/repo",
+				Url:        "https://github.com/user/repo",
 				GitBranch:  "main",
 			},
 			wantErr: true,
@@ -447,7 +559,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "missing git reference",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "https://github.com/user/repo",
+				Url:        "https://github.com/user/repo",
 				ChartPath:  "charts/app",
 			},
 			wantErr: true,
@@ -457,7 +569,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "invalid URL format",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "not-a-url",
+				Url:        "not-a-url",
 				GitBranch:  "main",
 				ChartPath:  "charts/app",
 			},
@@ -468,7 +580,7 @@ func TestValidateGitSource(t *testing.T) {
 			name: "chartPath with leading slash",
 			chart: ChartSpec{
 				SourceType: "git",
-				URL:        "https://github.com/user/repo",
+				Url:        "https://github.com/user/repo",
 				GitBranch:  "main",
 				ChartPath:  "/charts/app",
 			},
@@ -494,55 +606,6 @@ func TestValidateGitSource(t *testing.T) {
 
 			if err != nil {
 				t.Errorf("validateGitSource() unexpected error: %v", err)
-			}
-		})
-	}
-}
-
-func TestApplyIgnorePatterns(t *testing.T) {
-	tests := []struct {
-		name           string
-		ignorePatterns []string
-		wantErr        bool
-	}{
-		{
-			name:           "empty patterns",
-			ignorePatterns: []string{},
-			wantErr:        false,
-		},
-		{
-			name:           "nil patterns",
-			ignorePatterns: nil,
-			wantErr:        false,
-		},
-		{
-			name:           "single pattern",
-			ignorePatterns: []string{"*.log"},
-			wantErr:        false,
-		},
-		{
-			name:           "multiple patterns",
-			ignorePatterns: []string{"*.log", "tmp/", ".git/"},
-			wantErr:        false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create a temporary directory
-			repoPath := t.TempDir()
-
-			err := applyIgnorePatterns(repoPath, tt.ignorePatterns)
-
-			if tt.wantErr {
-				if err == nil {
-					t.Errorf("applyIgnorePatterns() expected error, got nil")
-				}
-				return
-			}
-
-			if err != nil {
-				t.Errorf("applyIgnorePatterns() unexpected error: %v", err)
 			}
 		})
 	}
@@ -950,7 +1013,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "valid oci source with tag",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "oci://ghcr.io/user/charts/app:1.0.0",
+				Url:        "oci://ghcr.io/user/charts/app:1.0.0",
 			},
 			wantErr: false,
 		},
@@ -958,7 +1021,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "valid oci source with digest",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "oci://ghcr.io/user/charts/app@sha256:abc123",
+				Url:        "oci://ghcr.io/user/charts/app@sha256:abc123",
 			},
 			wantErr: false,
 		},
@@ -966,7 +1029,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "valid oci source without tag (defaults to latest)",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "oci://docker.io/myuser/mychart",
+				Url:        "oci://docker.io/myuser/mychart",
 			},
 			wantErr: false,
 		},
@@ -982,7 +1045,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "invalid URL prefix (https instead of oci)",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "https://ghcr.io/user/chart",
+				Url:        "https://ghcr.io/user/chart",
 			},
 			wantErr: true,
 			errMsg:  "url must start with oci://",
@@ -991,7 +1054,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "invalid OCI URL format",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "oci://",
+				Url:        "oci://",
 			},
 			wantErr: true,
 			errMsg:  "invalid oci url",
@@ -1000,7 +1063,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "git branch set for oci source",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "oci://ghcr.io/user/chart",
+				Url:        "oci://ghcr.io/user/chart",
 				GitBranch:  "main",
 			},
 			wantErr: true,
@@ -1010,7 +1073,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "chartPath set for oci source",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "oci://ghcr.io/user/chart",
+				Url:        "oci://ghcr.io/user/chart",
 				ChartPath:  "charts/app",
 			},
 			wantErr: true,
@@ -1020,7 +1083,7 @@ func TestValidateOCISource(t *testing.T) {
 			name: "chartName set for oci source",
 			chart: ChartSpec{
 				SourceType: "oci",
-				URL:        "oci://ghcr.io/user/chart",
+				Url:        "oci://ghcr.io/user/chart",
 				ChartName:  "mychart",
 			},
 			wantErr: true,
@@ -1058,10 +1121,10 @@ func TestVerifyOCISignature(t *testing.T) {
 		expectWarning bool
 	}{
 		{
-			name: "no OCIProvider set - skip verification",
+			name: "no OciProvider set - skip verification",
 			chart: ChartSpec{
 				Name:        "test-chart",
-				OCIProvider: "",
+				OciProvider: "",
 			},
 			wantErr:       false,
 			expectWarning: false,
@@ -1070,7 +1133,7 @@ func TestVerifyOCISignature(t *testing.T) {
 			name: "cosign provider - log warning",
 			chart: ChartSpec{
 				Name:        "test-chart",
-				OCIProvider: "cosign",
+				OciProvider: "cosign",
 			},
 			wantErr:       false,
 			expectWarning: true,
@@ -1079,7 +1142,7 @@ func TestVerifyOCISignature(t *testing.T) {
 			name: "notation provider - log warning",
 			chart: ChartSpec{
 				Name:        "test-chart",
-				OCIProvider: "notation",
+				OciProvider: "notation",
 			},
 			wantErr:       false,
 			expectWarning: true,
@@ -1365,7 +1428,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "valid s3 source",
 			chart: ChartSpec{
 				SourceType:     "s3",
-				URL:            "http://localhost:9000",
+				Url:            "http://localhost:9000",
 				S3BucketName:   "charts",
 				ChartPath:      "myapp/myapp-1.0.0.tgz",
 				S3BucketRegion: "us-east-1",
@@ -1376,7 +1439,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "valid s3 source without region (defaults to us-east-1)",
 			chart: ChartSpec{
 				SourceType:   "s3",
-				URL:          "https://s3.amazonaws.com",
+				Url:          "https://s3.amazonaws.com",
 				S3BucketName: "my-charts",
 				ChartPath:    "chart.tgz",
 			},
@@ -1396,7 +1459,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "missing bucket name",
 			chart: ChartSpec{
 				SourceType: "s3",
-				URL:        "http://localhost:9000",
+				Url:        "http://localhost:9000",
 				ChartPath:  "chart.tgz",
 			},
 			wantErr: true,
@@ -1406,7 +1469,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "missing chart path",
 			chart: ChartSpec{
 				SourceType:   "s3",
-				URL:          "http://localhost:9000",
+				Url:          "http://localhost:9000",
 				S3BucketName: "charts",
 			},
 			wantErr: true,
@@ -1416,7 +1479,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "invalid URL format",
 			chart: ChartSpec{
 				SourceType:   "s3",
-				URL:          "not-a-url",
+				Url:          "not-a-url",
 				S3BucketName: "charts",
 				ChartPath:    "chart.tgz",
 			},
@@ -1427,7 +1490,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "chart path not ending with .tgz or .tar.gz",
 			chart: ChartSpec{
 				SourceType:   "s3",
-				URL:          "http://localhost:9000",
+				Url:          "http://localhost:9000",
 				S3BucketName: "charts",
 				ChartPath:    "myapp/values.yaml",
 			},
@@ -1438,7 +1501,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "git fields should not be set for s3 source",
 			chart: ChartSpec{
 				SourceType:   "s3",
-				URL:          "http://localhost:9000",
+				Url:          "http://localhost:9000",
 				S3BucketName: "charts",
 				ChartPath:    "chart.tgz",
 				GitBranch:    "main",
@@ -1450,10 +1513,10 @@ func TestValidateS3Source(t *testing.T) {
 			name: "oci fields should not be set for s3 source",
 			chart: ChartSpec{
 				SourceType:   "s3",
-				URL:          "http://localhost:9000",
+				Url:          "http://localhost:9000",
 				S3BucketName: "charts",
 				ChartPath:    "chart.tgz",
-				OCIProvider:  "cosign",
+				OciProvider:  "cosign",
 			},
 			wantErr: true,
 			errMsg:  "oci fields",
@@ -1462,7 +1525,7 @@ func TestValidateS3Source(t *testing.T) {
 			name: "chartName should not be set for s3 source",
 			chart: ChartSpec{
 				SourceType:   "s3",
-				URL:          "http://localhost:9000",
+				Url:          "http://localhost:9000",
 				S3BucketName: "charts",
 				ChartPath:    "chart.tgz",
 				ChartName:    "myapp",
@@ -2308,7 +2371,7 @@ func TestValidateLocalChartRequiresPath(t *testing.T) {
 			chart: ChartSpec{
 				Name:       "test-chart",
 				SourceType: "helm-repo",
-				URL:        "https://example.com",
+				Url:        "https://example.com",
 				ChartName:  "mychart",
 			},
 			expectError: false,

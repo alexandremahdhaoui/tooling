@@ -8,8 +8,133 @@ components:
   schemas:
     Spec:
       type: object
-      description: |
-        Configuration for testenv-helm-install.
-        The charts array contains ChartSpec objects that are parsed separately.
-        This Spec only captures top-level configuration options.
-      properties: {}
+      description: Configuration for testenv-helm-install. Every release it installs is declared here.
+      properties:
+        charts:
+          type: array
+          description: >-
+            The Helm releases to install, in order, into the cluster the entry
+            before this one stood up.
+          items:
+            $ref: '#/components/schemas/ChartSpec'
+    ChartSpec:
+      type: object
+      description: One Helm release, where its chart comes from and how it is installed.
+      required: [name, sourceType]
+      properties:
+        name:
+          type: string
+          description: Identifier for this release inside the test environment
+        releaseName:
+          type: string
+          description: Helm release name in the cluster. Defaults to name
+        namespace:
+          type: string
+          description: Namespace the release is installed into
+        sourceType:
+          type: string
+          description: Where the chart comes from
+          enum: [helm-repo, git, oci, s3, local]
+        url:
+          type: string
+          description: >-
+            Locator for the source. The repository index for helm-repo, the
+            clone url for git, the oci reference for oci, the endpoint for s3
+        path:
+          type: string
+          description: Directory holding the chart, relative to the project root, for a local source
+        chartName:
+          type: string
+          description: Name of the chart in the repository index, for a helm-repo source
+        version:
+          type: string
+          description: Version constraint passed to helm
+        chartPath:
+          type: string
+          description: >-
+            Path to the chart inside the source. A directory for git, the
+            object key of the tarball for s3
+        gitBranch:
+          type: string
+          description: Branch to check out, lowest precedence of the four git references
+        gitTag:
+          type: string
+          description: Tag to check out
+        gitCommit:
+          type: string
+          description: Commit sha to check out, highest precedence of the four git references
+        gitSemVer:
+          type: string
+          description: Semver range matched against the tags of the repository
+        ociProvider:
+          type: string
+          description: Signature verification provider for an oci source
+          enum: [cosign, notation]
+        ociLayerMediaType:
+          type: string
+          description: Media type of the layer holding the chart, for an oci source
+        s3BucketName:
+          type: string
+          description: Bucket holding the chart tarball, for an s3 source
+        s3BucketRegion:
+          type: string
+          description: Region of the bucket. Defaults to us-east-1
+        authSecretName:
+          type: string
+          description: >-
+            Secret in the release namespace holding the credentials for the
+            source. A dockerconfigjson for oci, an accessKeyID and a
+            secretAccessKey for s3
+        values:
+          type: object
+          additionalProperties: true
+          description: Helm values written inline, highest precedence of the three value sources
+        valuesFiles:
+          type: array
+          items:
+            type: string
+          description: Value files inside the chart, lowest precedence of the three value sources
+        valueReferences:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValueReference'
+          description: Values read from resources already in the cluster
+        timeout:
+          type: string
+          description: Time helm waits for one operation. Defaults to 5m
+        createNamespace:
+          type: boolean
+          description: Create the namespace when it does not exist
+        forceUpgrade:
+          type: boolean
+          description: Let helm recreate a resource it cannot patch
+        disableHooks:
+          type: boolean
+          description: Skip the hooks of the chart
+        disableWait:
+          type: boolean
+          description: Return as soon as the manifests are applied instead of waiting for readiness
+        testEnable:
+          type: boolean
+          description: Run helm test after the release is installed
+    ValueReference:
+      type: object
+      description: Values taken from a ConfigMap or a Secret that is already in the cluster.
+      required: [kind, name]
+      properties:
+        kind:
+          type: string
+          description: Resource the values are read from
+          enum: [ConfigMap, Secret]
+        name:
+          type: string
+          description: Name of the resource in the namespace of the release
+        valuesKey:
+          type: string
+          description: Key of the resource to read. Every key is merged when this is empty
+        targetPath:
+          type: string
+          description: Dot separated path the values are merged into. The root when this is empty
+        optional:
+          type: boolean
+          description: Skip the reference instead of failing when the resource is missing
