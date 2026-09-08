@@ -13,3 +13,4 @@ generate:
 # engine runs.
 capabilities:
   platforms: any
+  frozen: true

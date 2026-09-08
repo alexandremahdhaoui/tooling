@@ -1,0 +1,36 @@
+# What an entry builds is what it declares. No flag narrows or widens it:
+# forge's own `forge` entry declares linux/amd64 and linux/arm64, so a bare
+# build of it produces the cross variant beside the host binary, and a
+# flag that once selected platforms is refused by name.
+testCases:
+  - name: "forge-build-declared-platforms"
+    description: "A bare build produces every platform the entry declares"
+    steps:
+      - id: build
+        mode: cli
+        command: build
+        input:
+          _args: ["forge"]
+        expected:
+          exitCode: 0
+          stderr:
+            matches: "(Successfully built|is up to date)"
+      - command: check-file-exists
+        input:
+          path: "{{.CWD}}/build/bin/forge"
+      - command: check-file-exists
+        input:
+          path: "{{.CWD}}/build/bin/forge_linux_arm64"
+
+  - name: "forge-build-refuses-a-platforms-flag"
+    description: "A build takes no flag that carries policy"
+    steps:
+      - id: build
+        mode: cli
+        command: build
+        input:
+          _args: ["--platforms", "linux/amd64"]
+        expected:
+          exitCode: 1
+          stderr:
+            matches: "unknown flag \"--platforms\""

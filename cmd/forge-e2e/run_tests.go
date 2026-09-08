@@ -638,15 +638,6 @@ func registerAllTests(suite *TestSuite) {
 	})
 
 	suite.AddTest(Test{
-		Name:       "forge build container",
-		Category:   CategoryBuild,
-		Run:        testForgeBuildContainer,
-		Skip:       shouldSkipContainerTests(),
-		SkipReason: "CONTAINER_ENGINE not available",
-		Parallel:   true,
-	})
-
-	suite.AddTest(Test{
 		Name:     "forge build format",
 		Category: CategoryBuild,
 		Run:      testForgeBuildFormat,
@@ -828,17 +819,6 @@ func registerAllTests(suite *TestSuite) {
 	})
 }
 
-// shouldSkipContainerTests checks if container engine is available
-func shouldSkipContainerTests() bool {
-	engine := os.Getenv("CONTAINER_ENGINE")
-	if engine == "" {
-		return true
-	}
-	// Try to run docker/podman version
-	cmd := exec.Command(engine, "version")
-	return cmd.Run() != nil
-}
-
 // shouldSkipTestEnvTests checks if testenv prerequisites are available
 func shouldSkipTestEnvTests() bool {
 	kindBinary := os.Getenv("KIND_BINARY")
@@ -959,39 +939,6 @@ func testForgeVersion(ts *TestSuite) error {
 }
 
 // Phase 2: Additional Build Tests
-
-func testForgeBuildContainer(ts *TestSuite) error {
-	engine := os.Getenv("CONTAINER_ENGINE")
-	if engine == "" {
-		return fmt.Errorf("CONTAINER_ENGINE not set")
-	}
-
-	cmd := exec.Command("go", "run", "./cmd/forge", "build", "for-testing-purposes")
-	cmd.Env = os.Environ()
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("command failed: %w\nOutput: %s", err, string(output))
-	}
-
-	// Verify output contains success message (either built or up-to-date)
-	outputStr := string(output)
-	if !strings.Contains(outputStr, "Successfully built") && !strings.Contains(outputStr, "is up to date") {
-		return fmt.Errorf("expected success message in output, got: %s", outputStr)
-	}
-
-	// Verify image exists
-	checkCmd := exec.Command(engine, "images", "for-testing-purposes")
-	checkOutput, err := checkCmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("failed to check image: %w", err)
-	}
-
-	if !strings.Contains(string(checkOutput), "for-testing-purposes") {
-		return fmt.Errorf("container image not found in %s images", engine)
-	}
-
-	return nil
-}
 
 func testForgeBuildFormat(ts *TestSuite) error {
 	// This test runs the format-code artifact

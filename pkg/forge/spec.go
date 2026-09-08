@@ -60,6 +60,20 @@ type Spec struct {
 
 	// CU holds continuous-update configuration for forge-cu.
 	CU *CUConfig `json:"cu,omitempty"`
+
+	// Frozen says a build reads the recorded dependency locks and never
+	// repairs them: a stale lock fails the build instead of self-healing
+	// into bytes nobody can reproduce. Absent means true - a build is a
+	// real build unless the repo says otherwise. It reaches only the build
+	// engines that declare `capabilities.frozen` in their forge-dev.yaml;
+	// every build engine holds the invariant that a build writes no lockfile
+	// whether or not it reads this.
+	Frozen *bool `json:"frozen,omitempty"`
+}
+
+// FrozenBuild answers the repo's frozen setting, true when it declares none.
+func (s *Spec) FrozenBuild() bool {
+	return s.Frozen == nil || *s.Frozen
 }
 
 // Validate validates the Spec
@@ -93,6 +107,33 @@ func (s *Spec) Validate() error {
 		}
 	}
 
+	// A stage's needs name build entries, and an entry has one owner: two
+	// stages claiming one entry would each believe the other built it.
+	entries := map[string]bool{}
+	for _, bs := range s.Build {
+		entries[bs.Name] = true
+	}
+
+	owners := map[string]string{}
+
+	for _, ts := range s.Test {
+		for _, need := range ts.Needs {
+			if !entries[need] {
+				errs.AddErrorf("test stage %q needs %q, which no build entry declares", ts.Name, need)
+
+				continue
+			}
+
+			if owner, taken := owners[need]; taken {
+				errs.AddErrorf("build entry %q is needed by both %q and %q; an entry has one owning stage", need, owner, ts.Name)
+
+				continue
+			}
+
+			owners[need] = ts.Name
+		}
+	}
+
 	for i, rs := range s.Run {
 		if err := rs.Validate(); err != nil {
 			errs.AddErrorf("run[%d] (%s): %v", i, rs.Name, err)
@@ -108,6 +149,20 @@ func (s *Spec) Validate() error {
 	}
 
 	return errs.ErrorOrNil()
+}
+
+// OwnedBuilds maps every build entry a test stage needs to that stage. An
+// owned entry is built by its stage, or by name, never by a bare build.
+func (s *Spec) OwnedBuilds() map[string]string {
+	owners := map[string]string{}
+
+	for _, ts := range s.Test {
+		for _, need := range ts.Needs {
+			owners[need] = ts.Name
+		}
+	}
+
+	return owners
 }
 
 var errReadingProjectConfig = errors.New("error reading project config")

@@ -67,65 +67,34 @@ func appendSpecToGroups(groups []engineGroup, engine string, params map[string]a
 // This function MUST NOT write to stdout. Stdout is the JSON-RPC
 // transport in MCP mode. Progress messages go to stderr.
 
-// buildPlatforms is the os/arch list `forge build --platforms` asked for. It
-// is a filter over what entries DECLARE and nothing more: an entry builds
-// the platforms it declares, narrowed to these when they are set, and an
-// entry that declares none is a host build outside any platform selection.
-// Empty means everything, each entry for what it declares or the host.
-var buildPlatforms []string
-
 // hostPlatform is the machine this forge runs on, which is what an entry
 // that declares no platform builds for.
 func hostPlatform() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }
 
-// platformsFor answers what one entry builds this time: every platform it
-// declares - the host when it declares none - narrowed to the requested
-// subset when one was asked for. Nothing is inferred: the entry declares,
-// the flag selects, the host is the one fact the machine states.
-//
-// The flag selects among declarations only. An entry that declares no
-// platform is a host build - a repo's own tool, a test fixture, an image
-// that wants a daemon - and a platform selection is not about it, even
-// when the host happens to be one of the platforms named: a distribution
-// build names its platforms and gets exactly what declared them, never a
-// tool that travels because the runner is the same machine.
-func platformsFor(spec forge.BuildSpec, wanted []string) []string {
-	declared := spec.Platforms
-	if len(declared) == 0 {
-		if len(wanted) > 0 {
-			return nil
-		}
-
-		declared = []string{hostPlatform()}
+// platformsFor answers what one entry builds: every platform it declares,
+// the host when it declares none. Nothing narrows it and nothing widens
+// it: the entry declares, the host is the one fact the machine states.
+// There is no flag - a distribution is what the entries say it is, and an
+// entry that declares no platform is a repo's own tool that stays home.
+func platformsFor(spec forge.BuildSpec) []string {
+	if len(spec.Platforms) == 0 {
+		return []string{hostPlatform()}
 	}
 
-	if len(wanted) == 0 {
-		return declared
-	}
-
-	out := []string{}
-
-	for _, platform := range declared {
-		for _, w := range wanted {
-			if w == platform {
-				out = append(out, platform)
-
-				break
-			}
-		}
-	}
-
-	return out
+	return spec.Platforms
 }
 
-func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllResult, error) {
+func buildAll(artifactName string, forceRebuild bool) (*BuildAllResult, error) {
 	// Load forge.yaml configuration
 	config, err := loadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load forge.yaml: %w", err)
 	}
+
+	// How strictly this repo builds is declared once, in forge.yaml.
+	frozenBuild := config.FrozenBuild()
 
 	// Read artifact store
 	store, err := forge.ReadOrCreateArtifactStore(config.ArtifactStorePath)
@@ -148,25 +117,27 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 	}()
 
 	matched := 0
+	owned := config.OwnedBuilds()
 
 	for _, spec := range config.Build {
 		if artifactName != "" && spec.Name != artifactName {
 			continue
 		}
 
+		// An entry a test stage needs is that stage's to build. A bare build
+		// leaves it alone; naming it builds it.
+		if artifactName == "" {
+			if owner, ok := owned[spec.Name]; ok {
+				fmt.Fprintf(os.Stderr, "⏭  Skipping %s (built by the %s stage that needs it)\n", spec.Name, owner)
+
+				continue
+			}
+		}
+
 		matched++
 
-		// What this entry builds this time. A subset filter that leaves an
-		// entry with nothing is a skip, not an error: `--platforms linux/arm64`
-		// over a repo whose own tool declares no platform builds the tools
-		// that declared it and leaves the rest home. Only a filter that
-		// matches nothing at all is an error, below.
-		platforms := platformsFor(spec, buildPlatforms)
-		if len(platforms) == 0 {
-			fmt.Fprintf(os.Stderr, "⏭  Skipping %s (declares none of %s)\n", spec.Name, strings.Join(buildPlatforms, ", "))
-
-			continue
-		}
+		// What this entry builds: what it declares, or the host.
+		platforms := platformsFor(spec)
 
 		// Check if rebuild is needed (lazy rebuild logic), per platform: a
 		// host binary that is fresh says nothing about the arm64 one.
@@ -190,16 +161,7 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 			fmt.Fprintf(os.Stderr, "🔨 Building %s (%s)\n", spec.Name, reason)
 		}
 
-		// Normalize engine URI and warn if deprecated
-		normalizedEngine, wasDeprecated := normalizeEngineURI(spec.Engine)
-		if wasDeprecated {
-			fmt.Fprintf(os.Stderr,
-				"⚠️  DEPRECATED: %s is deprecated, use %s instead (in spec: %s)\n",
-				spec.Engine, normalizedEngine, spec.Name)
-		}
-
-		// Use the normalized engine
-		engine := normalizedEngine
+		engine := spec.Engine
 
 		// Resolve build context
 		contextDir, cleanup, err := resolveContextDir(spec.Context)
@@ -238,12 +200,6 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 	}
 
 	if len(groups) == 0 {
-		if len(buildPlatforms) > 0 && result.Skipped == 0 {
-			return nil, fmt.Errorf(
-				"no artifact declares any of the platforms %s; an artifact builds only the platforms its own build entry names",
-				strings.Join(buildPlatforms, ", "))
-		}
-
 		// Either all skipped or no artifacts to build
 		return result, nil
 	}
@@ -351,20 +307,6 @@ func buildAll(artifactName string, forceRebuild, frozenBuild bool) (*BuildAllRes
 	}
 
 	return result, nil
-}
-
-// normalizeEngineURI maps deprecated engine URIs to their current equivalents.
-// Returns the normalized URI and whether a deprecated URI was used.
-func normalizeEngineURI(uri string) (string, bool) {
-	deprecated := map[string]string{
-		"forge://build-container": "forge://container-build",
-	}
-
-	if newURI, ok := deprecated[uri]; ok {
-		return newURI, true // deprecated
-	}
-
-	return uri, false // not deprecated
 }
 
 // shouldRebuild determines if an artifact needs to be rebuilt, for every
@@ -493,6 +435,9 @@ func buildWithSingleEngine(
 	forceRebuild bool,
 	frozenBuild bool,
 ) ([]forge.Artifact, error) {
+	// Ask the engine what it declares before handing it anything optional.
+	readsFrozen := engineReadsFrozen(command, args)
+
 	// Prepare specs with injected directories and config
 	specsWithConfig := make([]map[string]any, len(specs))
 	for i, spec := range specs {
@@ -510,10 +455,12 @@ func buildWithSingleEngine(
 		// Inject force rebuild flag
 		clonedSpec["force"] = forceRebuild
 
-		// Inject the frozen flag: a real build proves the recorded lock and
-		// never repairs it, so a stale lock fails instead of self-healing
-		// into a build nobody can reproduce.
-		clonedSpec["frozen"] = frozenBuild
+		// The repo's frozen setting reaches only an engine that declared it
+		// reads one. Sent to every engine it would be silently ignored by
+		// most, and an engine that never declared it refuses it by name.
+		if readsFrozen {
+			clonedSpec["frozen"] = frozenBuild
+		}
 
 		// Inject engine-specific config if provided (from alias)
 		// For generic engines, promote spec fields to top level for backward compatibility
@@ -570,6 +517,37 @@ func buildWithSingleEngine(
 	}
 
 	return artifacts, nil
+}
+
+// engineReadsFrozen asks an engine, over its config-validate tool, whether
+// it declares the frozen capability. An engine that answers no declaration
+// - a hand-written one, a third party's - reads as declaring nothing, and
+// the caller sends it nothing it did not ask for. Asked once per engine
+// group: the declaration does not depend on the entry.
+func engineReadsFrozen(command string, args []string) bool {
+	result, err := callMCPEngine(command, args, "config-validate", map[string]any{"spec": map[string]any{}})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %s answered no capabilities (%v); frozen is not sent to it\n", command, err)
+
+		return false
+	}
+
+	data, err := json.Marshal(result)
+	if err != nil {
+		return false
+	}
+
+	var output struct {
+		Capabilities map[string]any `json:"capabilities"`
+	}
+
+	if err := json.Unmarshal(data, &output); err != nil {
+		return false
+	}
+
+	frozen, _ := output.Capabilities["frozen"].(bool)
+
+	return frozen
 }
 
 // parseArtifacts converts MCP result to forge.Artifact slice.

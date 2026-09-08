@@ -96,6 +96,24 @@ test:
     runner: "forge://go-test"
 ```
 
+## What does a stage declare about itself?
+
+Three keys say what a stage is, and nothing is inferred from its name:
+
+| Key | Meaning |
+|-----|---------|
+| `testenv:` | The stage needs an environment, created before its runner and deleted after. |
+| `manual: true` | Not a gate. `forge test-all` skips it; it runs only through `forge test run <name>`. |
+| `needs: [entries]` | What the stage needs built first. The named build entries are owned by the stage: a bare `forge build` leaves them alone and the stage builds them before creating its environment. |
+
+```yaml
+test:
+  - name: integration
+    runner: forge://go-test
+    testenv: alias://setup-integration
+    needs: [for-testing-purposes]   # the fixture image the testenv pushes
+```
+
 ## How do I get test reports?
 
 ```bash

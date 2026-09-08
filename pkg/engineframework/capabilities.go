@@ -32,6 +32,14 @@ type Capabilities struct {
 	// Platforms is the os/arch pairs this engine can build: PlatformsAny,
 	// PlatformsHost (the default), or an explicit list.
 	Platforms []string
+
+	// Frozen says the engine reads a `frozen` input: it proves the recorded
+	// dependency lock before building and never repairs it. forge sends the
+	// repo's `frozen:` setting only to an engine that declares this; an
+	// engine that does not is refused the input rather than ignoring it.
+	// Every build engine holds the invariant itself - a build never writes
+	// a lockfile - whether or not it declares the capability.
+	Frozen bool
 }
 
 const (
@@ -46,6 +54,38 @@ const (
 // ErrPlatformRefused means an engine was handed a platform it declared it
 // cannot build.
 var ErrPlatformRefused = errors.New("platform refused")
+
+// ErrCapabilityRefused means an engine was handed an input for a capability
+// it does not declare.
+var ErrCapabilityRefused = errors.New("capability refused")
+
+// Declaration is the capabilities as an engine answers them over
+// config-validate, so a caller learns what to send without guessing:
+// platforms as declared (host when nothing is), frozen as a bool.
+func (c Capabilities) Declaration() map[string]any {
+	platforms := c.Platforms
+	if len(platforms) == 0 {
+		platforms = []string{PlatformsHost}
+	}
+
+	return map[string]any{
+		"platforms": platforms,
+		"frozen":    c.Frozen,
+	}
+}
+
+// RefuseFrozen refuses a frozen input handed to an engine that never
+// declared it reads one. A caller that sends frozen to every engine would
+// have it silently ignored by most of them, which is the class of defect a
+// declaration exists to remove.
+func RefuseFrozen(engine string, caps Capabilities, frozen bool) error {
+	if frozen && !caps.Frozen {
+		return fmt.Errorf("%w: %s was handed frozen and declares no frozen capability; declare capabilities.frozen: true in its forge-dev.yaml or stop sending it",
+			ErrCapabilityRefused, engine)
+	}
+
+	return nil
+}
 
 // HostPlatform is the os/arch pair of the machine this process runs on.
 func HostPlatform() string {

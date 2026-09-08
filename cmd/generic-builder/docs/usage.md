@@ -39,6 +39,21 @@ forge build
 | `src` | No | Source path (available as template) |
 | `dest` | No | Destination path (available as template) |
 
+## What does the command find in its environment?
+
+The engine names no language, so a platform, a mode and a destination reach
+the command as plain variables and the command decides what they mean:
+
+| Variable | Value |
+|----------|-------|
+| `FORGE_PLATFORM` | The os/arch pair being built, e.g. `linux/arm64`. The command runs once per platform the entry declares. |
+| `FORGE_OS`, `FORGE_ARCH` | The two halves of `FORGE_PLATFORM`. |
+| `FORGE_FROZEN` | `true` or `false`: the repo's `frozen:` setting. A command that reads locks builds strictly against them when true and never repairs them either way. |
+| `FORGE_OUT` | Where to write what this run builds: `<dest>/<name>` for the host platform, `<dest>/<name>_<os>_<arch>` for a cross build. Absent when the entry declares no `dest`. A file left at that path is recorded as a binary for that platform. |
+
+Write to `$FORGE_OUT` rather than composing the path in shell: it is the
+one place the naming convention lives.
+
 ## How do I use template variables?
 
 Arguments support Go template syntax:

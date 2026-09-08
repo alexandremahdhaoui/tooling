@@ -19,6 +19,7 @@ package forge
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -343,4 +344,52 @@ func stringContains(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// A stage's needs name build entries, and an entry has one owner: the
+// stage that needs it builds it, a bare build leaves it alone.
+func TestAStageNeedsBuildEntriesAndOwnsThem(t *testing.T) {
+	spec := Spec{
+		Name: "x", ArtifactStorePath: ".forge/store.yaml", EnvFile: ".envrc",
+		Build: []BuildSpec{{Name: "fixture", Src: ".", Engine: "forge://container-build"}},
+		Test: []TestSpec{
+			{Name: "integration", Runner: "forge://go-test", Needs: []string{"fixture"}},
+		},
+	}
+
+	if err := spec.Validate(); err != nil {
+		t.Fatalf("a stage may need a declared entry: %v", err)
+	}
+
+	if got := spec.OwnedBuilds()["fixture"]; got != "integration" {
+		t.Fatalf("the needing stage owns the entry, got owner %q", got)
+	}
+
+	spec.Test[0].Needs = []string{"nothing-declares-this"}
+	if err := spec.Validate(); err == nil || !strings.Contains(err.Error(), "nothing-declares-this") {
+		t.Fatalf("an unknown need must be refused by name, got %v", err)
+	}
+
+	spec.Test[0].Needs = []string{"fixture"}
+	spec.Test = append(spec.Test, TestSpec{Name: "e2e", Runner: "forge://go-test", Needs: []string{"fixture"}})
+	err := spec.Validate()
+	if err == nil || !strings.Contains(err.Error(), "integration") || !strings.Contains(err.Error(), "e2e") {
+		t.Fatalf("two owners must be refused naming both stages, got %v", err)
+	}
+}
+
+// Frozen is declared once, repo-wide, and absent means true: a build is a
+// real build unless the repo says otherwise.
+func TestFrozenIsTrueUnlessTheRepoSaysOtherwise(t *testing.T) {
+	var spec Spec
+	if !spec.FrozenBuild() {
+		t.Fatal("absent must read as frozen")
+	}
+
+	off := false
+	spec.Frozen = &off
+
+	if spec.FrozenBuild() {
+		t.Fatal("frozen: false must read as not frozen")
+	}
 }

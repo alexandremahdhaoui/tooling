@@ -22,21 +22,22 @@ import (
 
 // runBuild is the CLI entry point for the build command.
 // It calls the shared buildAll function and prints human-readable output.
-func runBuild(args []string, forceRebuild, frozenBuild bool) error {
+func runBuild(args []string, forceRebuild bool) error {
 	var artifactName string
 
-	rest, platforms, err := parsePlatformsFlag(args)
-	if err != nil {
-		return err
+	for _, arg := range args {
+		// A build takes no policy on its command line: what an entry builds
+		// is declared in forge.yaml, and how strictly is declared there too.
+		if strings.HasPrefix(arg, "-") {
+			return fmt.Errorf("unknown flag %q: a build builds what forge.yaml declares; there is no flag to narrow or widen it", arg)
+		}
 	}
 
-	buildPlatforms = platforms
-
-	if len(rest) > 0 {
-		artifactName = rest[0]
+	if len(args) > 0 {
+		artifactName = args[0]
 	}
 
-	result, err := buildAll(artifactName, forceRebuild, frozenBuild)
+	result, err := buildAll(artifactName, forceRebuild)
 	if err != nil {
 		return err
 	}
@@ -62,54 +63,4 @@ func printBuildResult(result *BuildAllResult, artifactName string) {
 	} else {
 		fmt.Fprintln(os.Stderr, "No artifacts to build")
 	}
-}
-
-// parsePlatformsFlag pulls --platforms off the argv. It narrows a build to
-// these os/arch pairs, comma separated:
-//
-//	forge build --platforms linux/amd64,linux/arm64
-//
-// An entry builds every platform its build entry declares, the host when it
-// declares none; the flag selects a subset of the DECLARED platforms and
-// never widens it, so an entry that declares none of the named platforms is
-// skipped - and an entry that declares no platform at all is skipped by any
-// selection, host or not, so a repo's own tools never travel by accident.
-func parsePlatformsFlag(args []string) ([]string, []string, error) {
-	rest := make([]string, 0, len(args))
-
-	var platforms []string
-
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		value := ""
-
-		switch {
-		case arg == "--platforms":
-			if i+1 >= len(args) {
-				return nil, nil, fmt.Errorf("--platforms needs a list, e.g. --platforms linux/amd64,linux/arm64")
-			}
-
-			i++
-			value = args[i]
-		case strings.HasPrefix(arg, "--platforms="):
-			value = strings.TrimPrefix(arg, "--platforms=")
-		default:
-			rest = append(rest, arg)
-
-			continue
-		}
-
-		for _, platform := range strings.Split(value, ",") {
-			if trimmed := strings.TrimSpace(platform); trimmed != "" {
-				platforms = append(platforms, trimmed)
-			}
-		}
-
-		if len(platforms) == 0 {
-			return nil, nil, fmt.Errorf("--platforms needs a list, e.g. --platforms linux/amd64,linux/arm64")
-		}
-	}
-
-	return rest, platforms, nil
 }

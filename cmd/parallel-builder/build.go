@@ -103,8 +103,9 @@ func Build(ctx context.Context, input mcptypes.BuildInput, _ *Spec) ([]forge.Art
 			}
 
 			// Call build tool with the contract this engine received on top of
-			// what the child's own spec says.
-			resp, err := caller.CallMCP(command, args, "build", childInput(input, b.Spec))
+			// what the child's own spec says. Frozen travels only to a child
+			// that declares it reads one, exactly as forge itself decides.
+			resp, err := caller.CallMCP(command, args, "build", childInput(input, b.Spec, childReadsFrozen(caller, command, args)))
 			if err != nil {
 				results <- result{err: fmt.Errorf("[%s] build failed: %w", name, err), name: name}
 				return
@@ -160,7 +161,10 @@ func Build(ctx context.Context, input mcptypes.BuildInput, _ *Spec) ([]forge.Art
 // not set. A child that names its own platforms keeps them; one that names
 // none builds for the platforms this engine was asked for, so a parallel
 // build is one build spread over engines and not a hole in the contract.
-func childInput(input mcptypes.BuildInput, spec map[string]any) map[string]any {
+// Frozen is inherited only by a child that declares it reads one: handed
+// to any other it would be refused by name, and this engine declares
+// frozen precisely so it can hand it on to the children that do.
+func childInput(input mcptypes.BuildInput, spec map[string]any, readsFrozen bool) map[string]any {
 	out := map[string]any{}
 	for k, v := range spec {
 		out[k] = v
@@ -169,10 +173,13 @@ func childInput(input mcptypes.BuildInput, spec map[string]any) map[string]any {
 	inherited := map[string]any{
 		"platforms": input.Platforms,
 		"force":     input.Force,
-		"frozen":    input.Frozen,
 		"tmpDir":    input.TmpDir,
 		"buildDir":  input.BuildDir,
 		"rootDir":   input.RootDir,
+	}
+
+	if readsFrozen {
+		inherited["frozen"] = input.Frozen
 	}
 
 	for k, v := range inherited {
@@ -225,4 +232,31 @@ func mapToStruct(m map[string]any, v interface{}) error {
 	}
 
 	return nil
+}
+
+// childReadsFrozen asks a child engine, over config-validate, whether it
+// declares the frozen capability. A child that answers no declaration
+// reads as declaring nothing and is handed nothing it did not ask for.
+func childReadsFrozen(caller *mcpcaller.Caller, command string, args []string) bool {
+	resp, err := caller.CallMCP(command, args, "config-validate", map[string]any{"spec": map[string]any{}})
+	if err != nil {
+		return false
+	}
+
+	data, err := json.Marshal(resp)
+	if err != nil {
+		return false
+	}
+
+	var output struct {
+		Capabilities map[string]any `json:"capabilities"`
+	}
+
+	if err := json.Unmarshal(data, &output); err != nil {
+		return false
+	}
+
+	frozen, _ := output.Capabilities["frozen"].(bool)
+
+	return frozen
 }

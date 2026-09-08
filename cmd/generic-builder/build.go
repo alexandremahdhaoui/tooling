@@ -21,6 +21,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -91,6 +92,20 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.
 		platformEnv["FORGE_OS"] = goos
 		platformEnv["FORGE_ARCH"] = goarch
 
+		// The repo's frozen setting, for a command that reads locks: the
+		// engine declares the capability and the command decides what a
+		// frozen build means in its ecosystem.
+		platformEnv["FORGE_FROZEN"] = strconv.FormatBool(input.Frozen)
+
+		// Where the command writes what it builds, so the convention that
+		// the record below reads is told to the command rather than
+		// re-expressed by every forge.yaml in shell: dest/<name> for the
+		// host, dest/<name>_<os>_<arch> for a cross build. Absent when the
+		// entry declares no dest.
+		if input.Dest != "" {
+			platformEnv["FORGE_OUT"] = builtPath(input.Dest, input.Name, platform, host, goos, goarch)
+		}
+
 		execInput := cmdutil.ExecuteInput{
 			Command: command,
 			Args:    processedArgs,
@@ -143,10 +158,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.
 		// command that wrote nothing keeps the command-output record it
 		// always had.
 		if input.Dest != "" {
-			built := filepath.Join(input.Dest, input.Name)
-			if platform != host {
-				built = filepath.Join(input.Dest, fmt.Sprintf("%s_%s_%s", input.Name, goos, goarch))
-			}
+			built := builtPath(input.Dest, input.Name, platform, host, goos, goarch)
 
 			if info, err := os.Stat(built); err == nil && !info.IsDir() {
 				artifact.Location = built
@@ -183,4 +195,14 @@ func processTemplatedArgs(args []string, data mcptypes.BuildInput) ([]string, er
 	}
 
 	return result, nil
+}
+
+// builtPath is where a command is told to write, and where the record is
+// read from: one function, so the two cannot disagree.
+func builtPath(dest, name, platform, host, goos, goarch string) string {
+	if platform == host {
+		return filepath.Join(dest, name)
+	}
+
+	return filepath.Join(dest, fmt.Sprintf("%s_%s_%s", name, goos, goarch))
 }

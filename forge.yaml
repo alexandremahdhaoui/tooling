@@ -193,6 +193,10 @@ test:
   - name: integration
     runner: "forge://go-test"
     testenv: "alias://setup-integration"
+    # The fixture image the testenv pushes is this stage's to build: a bare
+    # `forge build` leaves it alone (it wants a daemon), this stage builds it
+    # before creating its environment, and nothing filters anything.
+    needs: [for-testing-purposes]
     # spec:
     #   # -- Example: Test runner environment filtering (optional)
     #   # Control which environment variables from testenv are passed to tests

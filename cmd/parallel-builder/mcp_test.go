@@ -43,7 +43,7 @@ func TestChildInputInheritsTheContract(t *testing.T) {
 		},
 	}
 
-	got := childInput(parent, map[string]any{"name": "child", "engine": "forge://go-build"})
+	got := childInput(parent, map[string]any{"name": "child", "engine": "forge://go-build"}, true)
 
 	assert.Equal(t, []string{"linux/amd64", "linux/arm64"}, got["platforms"])
 	assert.Equal(t, true, got["frozen"])
@@ -53,8 +53,21 @@ func TestChildInputInheritsTheContract(t *testing.T) {
 	assert.Equal(t, "/root", got["rootDir"])
 	assert.Equal(t, "child", got["name"])
 
-	own := childInput(parent, map[string]any{"name": "child", "platforms": []any{"linux/amd64"}})
+	own := childInput(parent, map[string]any{"name": "child", "platforms": []any{"linux/amd64"}}, true)
 	assert.Equal(t, []any{"linux/amd64"}, own["platforms"], "a child's own platforms win")
+}
+
+// A child that declares no frozen capability is handed no frozen input:
+// it would refuse one by name, and a parallel build must not turn a
+// generator into a refusal because its sibling is a compiler.
+func TestAChildThatDeclaresNoFrozenIsHandedNone(t *testing.T) {
+	parent := mcptypes.BuildInput{Platforms: []string{"linux/amd64"}, Frozen: true}
+
+	got := childInput(parent, map[string]any{"name": "child", "engine": "forge://go-gen-mocks"}, false)
+
+	_, sent := got["frozen"]
+	assert.False(t, sent, "frozen must not reach a child that never declared it")
+	assert.Equal(t, []string{"linux/amd64"}, got["platforms"])
 }
 
 func TestParseArtifacts_NilResponseIsAnError(t *testing.T) {

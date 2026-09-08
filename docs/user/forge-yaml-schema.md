@@ -67,6 +67,23 @@ Path to the artifact store YAML file where forge tracks built artifacts, test en
 artifactStorePath: .ignore.artifact-store.yaml
 ```
 
+#### `frozen` (bool, optional)
+
+Whether a build reads the recorded dependency locks strictly and never
+repairs them. Absent means `true`: a build is a real build unless the repo
+says otherwise, and a stale lock fails it instead of self-healing into bytes
+nobody can reproduce. Regenerating a lock is `forge-factory lock`, never a
+build. Every build engine holds the invariant that a build writes no
+lockfile; the setting reaches only the engines that declare
+`capabilities.frozen` in their `forge-dev.yaml` (go-build, generic-builder,
+parallel-builder), where it decides whether the lock is proved before
+compiling. There is no flag: the repo declares it once.
+
+**Example:**
+```yaml
+frozen: false   # a scratch repo whose go.sum is allowed to lag
+```
+
 #### `localContainerRegistry` (LocalContainerRegistry, optional)
 
 Configuration for the local container registry used by `forge://testenv-lcr` engine in test environments. This registry provides TLS-enabled container image storage for integration and end-to-end tests.
@@ -417,6 +434,27 @@ engine: forge://container-build
 
 # Use custom engine alias
 engine: alias://my-custom-builder
+```
+
+#### `platforms` (array of string, optional)
+
+The os/arch pairs this artifact builds for, e.g. `["linux/amd64",
+"linux/arm64"]`. Every build builds all of them, each recorded as its own
+artifact carrying its `os` and `arch`; absent means the machine forge runs
+on. Nothing narrows or widens the list - there is no flag - so the
+declaration is the whole of the policy. Declaring platforms is also what
+makes an artifact public: a release ships what carries a platform, and a
+repo's own tool that declares none stays home. The engine refuses a platform
+it cannot build, at `forge config validate` and again at build time.
+
+**Example:**
+```yaml
+build:
+  - name: forge
+    src: ./cmd/forge
+    dest: ./build/bin
+    engine: forge://go-build
+    platforms: [linux/amd64, linux/arm64]
 ```
 
 #### `spec` (map, optional)
@@ -869,6 +907,31 @@ runner: "forge://go-lint"
 
 # Execute custom commands
 runner: "forge://generic-test-runner"
+```
+
+#### `manual` (bool, optional)
+
+A stage `forge test-all` skips. It runs only by name, through
+`forge test run <name>`: a dev-machine step that a normal gate must not
+trigger.
+
+#### `needs` (array of string, optional)
+
+Build entries this stage needs built before its environment is created and
+its runner runs: a fixture image the testenv pushes, a binary the suite
+executes. An entry named here is owned by this stage - a bare `forge build`
+leaves it alone and says which stage builds it, and only `forge build <name>`
+or the owning stage builds it. That is what keeps a fixture that wants a
+daemon out of every build that never asked for it, with no flag deciding
+anything. One stage per entry; a name no build entry declares is refused.
+
+**Example:**
+```yaml
+test:
+  - name: integration
+    runner: forge://go-test
+    testenv: alias://setup-integration
+    needs: [for-testing-purposes]
 ```
 
 ### Complete TestSpec Examples

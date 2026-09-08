@@ -40,6 +40,8 @@ type MCPTemplateData struct {
 	// template pastes into the engine's Capabilities: `nil` for an engine
 	// that declares nothing, which the framework reads as host only.
 	Platforms string
+	// Frozen is whether the builder declares it reads the frozen input.
+	Frozen bool
 }
 
 // platformsLiteral renders a platform declaration as Go source.
@@ -71,6 +73,7 @@ func GenerateMCPFile(config *Config, checksum string, specTypesCtx *SpecTypesCon
 		SpecTypesContext: specTypesCtx,
 		Tools:            BuildGenericTools(config, specTypesCtx),
 		Platforms:        platformsLiteral(config.platforms()),
+		Frozen:           config.frozen(),
 	}
 
 	// Select template based on engine type

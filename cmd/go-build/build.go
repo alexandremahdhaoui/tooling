@@ -85,10 +85,12 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.
 		baseEnv = append(baseEnv, key+"="+value)
 	}
 
-	// A frozen build proves the recorded lock instead of trusting it: the
-	// module cache is checked against go.sum before anything compiles, and
-	// -mod=readonly refuses to repair go.mod. Frozen never writes - a stale
-	// lock fails the build rather than self-healing into bytes nobody can
+	// A build never writes a lockfile: -mod=readonly is unconditional, so a
+	// go.mod or go.sum that needs repair fails the build instead of being
+	// rewritten under it - regenerating a lock is `forge-factory lock`, never
+	// a build. A frozen build additionally proves the recorded lock: the
+	// module cache is checked against go.sum before anything compiles, so a
+	// stale lock fails rather than self-healing into bytes nobody can
 	// reproduce. Once per call: the lock is the same for every platform.
 	if input.Frozen {
 		verify := exec.Command("go", "mod", "verify")
@@ -132,11 +134,8 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.
 		args := []string{
 			"build",
 			"-trimpath",
+			"-mod=readonly",
 			"-o", outputPath,
-		}
-
-		if input.Frozen {
-			args = append(args, "-mod=readonly")
 		}
 
 		args = append(args, "-ldflags", buildLDFlags(cross))

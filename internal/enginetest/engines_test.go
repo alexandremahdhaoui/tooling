@@ -228,3 +228,101 @@ func TestEveryBuildEngineHoldsThePlatformContract(t *testing.T) {
 		})
 	}
 }
+
+// lockfileSpecs is what each builder needs in its spec to attempt a build
+// of a plain Go module. An engine absent here builds with an empty spec
+// and may fail; the invariant holds either way.
+var lockfileSpecs = map[string]map[string]any{
+	"generic-builder": {"command": "go", "args": []string{"build", "-o", "{{ .Dest }}/probe", "."}},
+	// A child's spec is the child's whole build input: the parent hands on
+	// platforms, force, frozen (to a child that declares it) and the
+	// directories, never the name, engine, src or dest.
+	"parallel-builder": {"builders": []any{
+		map[string]any{"name": "compile", "engine": "forge://go-build", "spec": map[string]any{
+			"name": "probe", "engine": "forge://go-build", "src": ".", "dest": "bin", "spec": map[string]any{},
+		}},
+	}},
+}
+
+// runLocalEnv lets an engine that resolves other engines (parallel-builder)
+// find them in this checkout rather than on a module proxy.
+func runLocalEnv(repoRoot string) []string {
+	return []string{"FORGE_RUN_LOCAL_ENABLED=true", "FORGE_RUN_LOCAL_BASEDIR=" + repoRoot}
+}
+
+// TestEveryBuildEngineNeverWritesALockfile is the invariant every builder
+// holds whether or not it reads a frozen input: a build never writes a
+// lockfile. Regenerating one is `forge-factory lock`, never a build.
+func TestEveryBuildEngineNeverWritesALockfile(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+
+	buildEngines := map[string]bool{
+		"go-build": true, "generic-builder": true, "container-build-simple": true, "parallel-builder": true,
+		"container-build": true, "forge-dev": true, "go-format": true, "go-gen-bpf": true,
+		"go-gen-mocks": true, "go-gen-openapi": true, "go-gen-protobuf": true,
+		"go-license-header": true, "rust-license-header": true,
+	}
+
+	for _, engine := range enginetest.AllEngines(repoRoot) {
+		if !buildEngines[engine.Name] {
+			continue
+		}
+
+		t.Run(engine.Name, func(t *testing.T) {
+			spec := lockfileSpecs[engine.Name]
+			if spec == nil {
+				spec = map[string]any{}
+			}
+
+			// The three that compile Go must succeed; the rest may refuse a
+			// plain module and are held only to leaving its lock alone.
+			mustBuild := map[string]bool{"go-build": true, "generic-builder": true, "parallel-builder": true}[engine.Name]
+
+			enginetest.TestABuildNeverWritesALockfile(t, engine, spec, runLocalEnv(repoRoot), mustBuild)
+		})
+	}
+}
+
+// TestAStaleLockfileFailsAFrozenBuild holds the engines that declare the
+// frozen capability to it: a go.sum missing one line fails the build
+// naming go.sum, and the lock is not repaired on the way to failing.
+func TestAStaleLockfileFailsAFrozenBuild(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+
+	declaresFrozen := map[string]bool{"go-build": true, "generic-builder": true, "parallel-builder": true}
+
+	for _, engine := range enginetest.AllEngines(repoRoot) {
+		if !declaresFrozen[engine.Name] {
+			continue
+		}
+
+		t.Run(engine.Name, func(t *testing.T) {
+			spec := lockfileSpecs[engine.Name]
+			if spec == nil {
+				spec = map[string]any{}
+			}
+
+			enginetest.TestAStaleLockfileFailsTheBuild(t, engine, spec, runLocalEnv(repoRoot))
+		})
+	}
+}
+
+// TestBuildersAnswerTheirFrozenDeclaration holds config-validate's answer
+// to what forge-dev.yaml declares, for one engine that reads frozen and one
+// that does not.
+func TestBuildersAnswerTheirFrozenDeclaration(t *testing.T) {
+	repoRoot := getRepoRoot(t)
+
+	want := map[string]bool{"go-build": true, "generic-builder": true, "parallel-builder": true, "go-format": false, "go-gen-mocks": false}
+
+	for _, engine := range enginetest.AllEngines(repoRoot) {
+		wantFrozen, listed := want[engine.Name]
+		if !listed {
+			continue
+		}
+
+		t.Run(engine.Name, func(t *testing.T) {
+			enginetest.TestAnEngineAnswersItsDeclaration(t, engine, wantFrozen)
+		})
+	}
+}

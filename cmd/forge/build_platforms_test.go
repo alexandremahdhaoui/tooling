@@ -17,6 +17,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
@@ -31,66 +32,31 @@ func TestAnEntryBuildsThePlatformsItDeclares(t *testing.T) {
 	public := forge.BuildSpec{Name: "forge", Platforms: []string{"linux/amd64", "linux/arm64"}}
 	own := forge.BuildSpec{Name: "docgen"}
 
-	got := platformsFor(public, nil)
+	got := platformsFor(public)
 	if len(got) != 2 || got[0] != "linux/amd64" || got[1] != "linux/arm64" {
 		t.Fatalf("a public entry builds every platform it declares, got %v", got)
 	}
 
-	got = platformsFor(own, nil)
+	got = platformsFor(own)
 	if len(got) != 1 || got[0] != hostPlatform() {
 		t.Fatalf("an entry that declares nothing builds for the host, got %v", got)
 	}
 }
 
-// The flag narrows; it never widens. Asking for a platform an entry never
-// declared builds nothing for that entry rather than guessing.
-func TestTheFlagIsASubsetOfTheDeclaration(t *testing.T) {
-	spec := forge.BuildSpec{Name: "forge", Platforms: []string{"linux/amd64", "linux/arm64"}}
-
-	got := platformsFor(spec, []string{"linux/arm64"})
-	if len(got) != 1 || got[0] != "linux/arm64" {
-		t.Fatalf("got %v, want the one declared platform asked for", got)
-	}
-
-	if got := platformsFor(spec, []string{"darwin/arm64"}); len(got) != 0 {
-		t.Fatalf("an undeclared platform must build nothing, got %v", got)
-	}
-
-	own := forge.BuildSpec{Name: "docgen"}
-	if got := platformsFor(own, []string{"linux/arm64"}); len(got) != 0 {
-		t.Fatalf("a host-only entry is left home by a filter naming another platform, got %v", got)
-	}
-
-	// And by a filter naming the host itself: the selection is over what an
-	// entry declared, and this one declared nothing. A distribution build on
-	// a linux/amd64 runner must not sweep every host-only tool - or the
-	// fixture image that wants a daemon - into the release.
-	if got := platformsFor(own, []string{hostPlatform()}); len(got) != 0 {
-		t.Fatalf("a host-only entry is outside any platform selection, got %v", got)
-	}
-}
-
-func TestThePlatformsFlagIsParsedEitherWay(t *testing.T) {
+// There is no flag. A build takes no policy on its command line: what an
+// entry builds is declared in forge.yaml, and a flag that once narrowed the
+// declaration put the policy back into argv of every pipeline that typed
+// it. An unknown flag is refused by name rather than read as an artifact.
+func TestABuildTakesNoFlagThatCarriesPolicy(t *testing.T) {
 	for _, args := range [][]string{
 		{"--platforms", "linux/amd64,linux/arm64"},
-		{"--platforms=linux/amd64,linux/arm64"},
+		{"--platforms=linux/amd64"},
+		{"--frozen"},
 	} {
-		rest, platforms, err := parsePlatformsFlag(args)
-		if err != nil {
-			t.Fatalf("%v: %v", args, err)
+		err := runBuild(args, false)
+		if err == nil || !strings.Contains(err.Error(), args[0]) {
+			t.Fatalf("%v: must be refused naming the flag, got %v", args, err)
 		}
-
-		if len(rest) != 0 {
-			t.Fatalf("%v: the flag must not survive as an artifact name: %v", args, rest)
-		}
-
-		if len(platforms) != 2 || platforms[0] != "linux/amd64" || platforms[1] != "linux/arm64" {
-			t.Fatalf("%v: got %v", args, platforms)
-		}
-	}
-
-	if _, _, err := parsePlatformsFlag([]string{"--platforms"}); err == nil {
-		t.Fatal("a flag with no list must fail loudly")
 	}
 }
 

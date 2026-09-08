@@ -19,6 +19,7 @@ package engineframework
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -138,5 +139,30 @@ func TestTheBuildHandlerRefusesAnInvalidArtifact(t *testing.T) {
 
 	if !result.IsError {
 		t.Fatal("an artifact of an unknown type must be refused")
+	}
+}
+
+// Frozen reaches only an engine that declared it reads one; handed to any
+// other it is refused by name, never ignored.
+func TestFrozenIsRefusedUnlessDeclared(t *testing.T) {
+	if err := RefuseFrozen("go-format", Capabilities{}, true); err == nil || !strings.Contains(err.Error(), "go-format") {
+		t.Fatalf("an undeclared frozen must be refused naming the engine, got %v", err)
+	}
+
+	if err := RefuseFrozen("go-format", Capabilities{}, false); err != nil {
+		t.Fatalf("frozen false is nothing to refuse, got %v", err)
+	}
+
+	if err := RefuseFrozen("go-build", Capabilities{Frozen: true}, true); err != nil {
+		t.Fatalf("a declared frozen is admitted, got %v", err)
+	}
+
+	decl := Capabilities{Platforms: []string{"any"}, Frozen: true}.Declaration()
+	if decl["frozen"] != true || !reflect.DeepEqual(decl["platforms"], []string{"any"}) {
+		t.Fatalf("the declaration must carry both, got %v", decl)
+	}
+
+	if got := (Capabilities{}).Declaration()["platforms"]; !reflect.DeepEqual(got, []string{PlatformsHost}) {
+		t.Fatalf("declaring nothing answers host, got %v", got)
 	}
 }

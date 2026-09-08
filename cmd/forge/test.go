@@ -558,6 +558,23 @@ func testDeleteReport(testSpec *forge.TestSpec, args []string) error {
 	return nil
 }
 
+// buildNeeds builds every entry a stage declares under needs, by name, so
+// an entry a bare build leaves alone is built exactly when its stage runs.
+func buildNeeds(testSpec *forge.TestSpec) error {
+	for _, need := range testSpec.Needs {
+		fmt.Fprintf(os.Stderr, "🔨 Building %s, which stage %s needs\n", need, testSpec.Name)
+
+		result, err := buildAll(need, false)
+		if err != nil {
+			return fmt.Errorf("building %s for stage %s: %w", need, testSpec.Name, err)
+		}
+
+		printBuildResult(result, need)
+	}
+
+	return nil
+}
+
 // testRun runs tests via the test runner.
 // Returns the testID of the environment that was created (if any), and any error.
 // If no environment was created, testID will be empty string.
@@ -587,6 +604,13 @@ func testRun(config *forge.Spec, testSpec *forge.TestSpec, args []string) (strin
 
 		fmt.Printf("Using existing test environment: %s\n", testID)
 	} else {
+		// What the stage needs is built before its environment exists: a
+		// testenv that pushes a fixture image needs the image assembled
+		// first, and a suite that executes a binary needs it on disk.
+		if err := buildNeeds(testSpec); err != nil {
+			return "", err
+		}
+
 		// No ENV_ID provided - auto-create if needed (existing behavior)
 		// Skip auto-creation for test-report stages (they don't need environments)
 		if testSpec.Testenv != "" && testSpec.Testenv != "noop" && !IsTestReportStage(testSpec) {

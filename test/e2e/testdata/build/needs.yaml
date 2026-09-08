@@ -1,0 +1,14 @@
+# An entry a test stage needs is that stage's to build. forge's integration
+# stage needs the for-testing-purposes image, so a bare build leaves it
+# alone and says which stage owns it; nothing filters anything.
+testCases:
+  - name: "forge-build-leaves-an-owned-entry-to-its-stage"
+    description: "A bare build skips an entry a test stage needs, naming the stage"
+    steps:
+      - id: build
+        mode: cli
+        command: build
+        expected:
+          exitCode: 0
+          stderr:
+            matches: "Skipping for-testing-purposes \\(built by the integration stage that needs it\\)"

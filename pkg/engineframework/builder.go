@@ -167,6 +167,10 @@ func makeBuildHandler(config BuilderConfig) func(context.Context, *mcp.CallToolR
 			return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v", err)), nil, nil
 		}
 
+		if err := RefuseFrozen(config.Name, config.Capabilities, input.Frozen); err != nil {
+			return mcputil.ErrorResult(fmt.Sprintf("Build failed: %v", err)), nil, nil
+		}
+
 		// Call the BuilderFunc
 		artifacts, err := config.BuildFunc(ctx, input)
 		if err != nil {

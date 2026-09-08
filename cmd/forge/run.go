@@ -99,7 +99,7 @@ func runLocalTarget(target string, extra []string) error {
 		return err
 	}
 
-	if err := runBuild([]string{buildSpec.Name}, false, false); err != nil {
+	if err := runBuild([]string{buildSpec.Name}, false); err != nil {
 		return fmt.Errorf("building %s: %w", buildSpec.Name, err)
 	}
 

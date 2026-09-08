@@ -148,6 +148,11 @@ type CapabilitiesConfig struct {
 	// Platforms is `any`, `host`, or a list of os/arch pairs. A scalar and
 	// a list both parse, so `platforms: any` reads as the word it is.
 	Platforms PlatformsConfig `yaml:"platforms,omitempty"`
+
+	// Frozen says the engine reads the `frozen` build input: it proves the
+	// recorded dependency lock before building and never repairs it. forge
+	// sends a repo's `frozen:` setting only to engines that declare this.
+	Frozen bool `yaml:"frozen,omitempty"`
 }
 
 // PlatformsConfig is a platform declaration that parses from a scalar or a
@@ -184,6 +189,11 @@ func (c *Config) platforms() []string {
 	}
 
 	return []string(c.Capabilities.Platforms)
+}
+
+// frozen is whether the engine declares it reads a frozen input.
+func (c *Config) frozen() bool {
+	return c.Capabilities != nil && c.Capabilities.Frozen
 }
 
 // RuntimeConfig declares run-time inputs of the engine's runnable.
@@ -480,9 +490,14 @@ func validateCapabilities(c *Config) []ValidationError {
 
 	platforms := c.Capabilities.Platforms
 	if len(platforms) == 0 {
+		if c.Capabilities.Frozen {
+			// frozen alone is a complete declaration: host only, frozen read.
+			return nil
+		}
+
 		return []ValidationError{{
 			Field:   "capabilities.platforms",
-			Message: "declare any, host, or a list of os/arch pairs, or drop the block for host only",
+			Message: "declare any, host, or a list of os/arch pairs, frozen: true, or drop the block for host only",
 		}}
 	}
 

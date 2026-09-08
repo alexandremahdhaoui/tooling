@@ -145,22 +145,19 @@ func main() {
 			os.Exit(1)
 		}
 	case "build":
-		// Parse force and frozen flags. Frozen makes a real build: strictly
-		// against the recorded dependency lock, never repairing it.
+		// Parse the force flag. How strictly a build treats its locks is not
+		// a flag: forge.yaml declares it once, as `frozen:`.
 		forceRebuild := false
-		frozenBuild := false
 		filteredArgs := make([]string, 0, len(cmdArgs))
 		for _, arg := range cmdArgs {
 			switch arg {
 			case "-f", "--force":
 				forceRebuild = true
-			case "--frozen":
-				frozenBuild = true
 			default:
 				filteredArgs = append(filteredArgs, arg)
 			}
 		}
-		if err := runBuild(filteredArgs, forceRebuild, frozenBuild); err != nil {
+		if err := runBuild(filteredArgs, forceRebuild); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -170,21 +167,18 @@ func main() {
 			os.Exit(1)
 		}
 	case "test-all":
-		// Parse force and frozen flags, exactly as build does.
+		// Parse the force flag, exactly as build does.
 		forceRebuild := false
-		frozenBuild := false
 		filteredArgs := make([]string, 0, len(cmdArgs))
 		for _, arg := range cmdArgs {
 			switch arg {
 			case "-f", "--force":
 				forceRebuild = true
-			case "--frozen":
-				frozenBuild = true
 			default:
 				filteredArgs = append(filteredArgs, arg)
 			}
 		}
-		if err := runTestAll(filteredArgs, forceRebuild, frozenBuild); err != nil {
+		if err := runTestAll(filteredArgs, forceRebuild); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}

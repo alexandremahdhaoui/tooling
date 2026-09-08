@@ -45,6 +45,15 @@ type TestSpec struct {
 	// A manual stage runs only through forge test run <name>.
 	// Use it for a dev machine step that a normal gate must not trigger.
 	Manual bool `json:"manual,omitempty"`
+
+	// Needs names build entries this stage needs built before its
+	// environment is created and its runner runs: a fixture image the
+	// testenv pushes, a binary the suite executes. An entry named here is
+	// OWNED by this stage: a bare `forge build` leaves it alone, and only
+	// `forge build <name>` or the owning stage builds it. That is what keeps
+	// a fixture that wants a daemon out of every build that never asked for
+	// it, with no flag deciding anything. One stage per entry.
+	Needs []string `json:"needs,omitempty"`
 }
 
 // Validate validates the TestSpec
@@ -54,6 +63,12 @@ func (ts *TestSpec) Validate() error {
 	// Validate required fields
 	if err := ValidateRequired(ts.Name, "name", "TestSpec"); err != nil {
 		errs.Add(err)
+	}
+
+	for _, need := range ts.Needs {
+		if err := ValidateRequired(need, "needs", "TestSpec"); err != nil {
+			errs.Add(err)
+		}
 	}
 
 	// Validate runner URI

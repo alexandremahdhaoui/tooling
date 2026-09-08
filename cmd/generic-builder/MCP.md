@@ -38,6 +38,14 @@ Execute a shell command and return structured output.
 }
 ```
 
+**Environment handed to the command:** `FORGE_PLATFORM`, `FORGE_OS`, `FORGE_ARCH`
+(the platform this run builds; the command runs once per declared platform),
+`FORGE_FROZEN` (`true`/`false`, the repo's `frozen:` setting - this engine
+declares the frozen capability and hands the mode to the command), and
+`FORGE_OUT` (where to write: `<dest>/<name>` for the host, `<dest>/<name>_<os>_<arch>`
+for a cross build; absent without a `dest`). A file left at `FORGE_OUT` is
+recorded as a binary for that platform.
+
 **Template Support:**
 
 Arguments support Go template syntax with these fields:

@@ -50,7 +50,7 @@ func TestGenerateMCPFile_Builder(t *testing.T) {
 		"engineframework.BuilderConfig",
 		"mcptypes.BuildInput",
 		"[]forge.Artifact",
-		"var Capabilities = engineframework.Capabilities{Platforms: nil}",
+		"var Capabilities = engineframework.Capabilities{Platforms: nil, Frozen: false}",
 		"engineframework.RefusePlatforms(\"test-builder\"",
 		"handleConfigValidate",
 		"sha256:builder123",
@@ -258,5 +258,31 @@ func TestMcpTemplateName(t *testing.T) {
 				t.Errorf("mcpTemplateName() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+// A builder that declares frozen carries it into its generated
+// Capabilities, so the framework admits the input and config-validate
+// answers the declaration. One that declares nothing carries false.
+func TestABuilderCarriesItsFrozenDeclaration(t *testing.T) {
+	config := &Config{
+		Name: "frozen-builder",
+		Kind: KindMCPServer, Profile: "builder",
+		Version:      "1.0.0",
+		Capabilities: &CapabilitiesConfig{Platforms: PlatformsConfig{"any"}, Frozen: true},
+		Generate:     GenerateConfig{PackageName: "main"},
+	}
+
+	got, err := GenerateMCPFile(config, "sha256:frozen", nil)
+	if err != nil {
+		t.Fatalf("GenerateMCPFile() error = %v", err)
+	}
+
+	if !strings.Contains(string(got), `engineframework.Capabilities{Platforms: []string{"any"}, Frozen: true}`) {
+		t.Fatalf("the frozen declaration must reach the generated Capabilities:\n%s", got)
+	}
+
+	if !strings.Contains(string(got), "output.Capabilities = Capabilities.Declaration()") {
+		t.Fatal("config-validate must answer the declaration")
 	}
 }

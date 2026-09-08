@@ -24,9 +24,11 @@ import (
 type BuildFunc func(ctx context.Context, input mcptypes.BuildInput, s *Spec) ([]forge.Artifact, error)
 
 // Capabilities is what forge-dev.yaml declares this engine can do. The
-// build tool refuses a platform outside it before the engine's own code
-// runs, and config-validate refuses it before anything builds.
-var Capabilities = engineframework.Capabilities{Platforms: nil}
+// build tool refuses a platform outside it, or a frozen input it never
+// declared, before the engine's own code runs; config-validate refuses a
+// platform before anything builds and answers the declaration so the
+// caller learns what it may send.
+var Capabilities = engineframework.Capabilities{Platforms: nil, Frozen: false}
 
 // SetupMCPServer creates and configures the MCP server with all required tools.
 // It registers build, buildBatch, and config-validate tools.
@@ -87,6 +89,7 @@ func handleConfigValidate(
 	input mcptypes.ConfigValidateInput,
 ) (*mcp.CallToolResult, any, error) {
 	output := ValidateMap(input.Spec)
+	output.Capabilities = Capabilities.Declaration()
 
 	if len(input.Platforms) > 0 {
 		if err := engineframework.RefusePlatforms("container-build", Capabilities, input.Platforms); err != nil {
