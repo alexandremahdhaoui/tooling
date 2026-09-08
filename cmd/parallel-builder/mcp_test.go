@@ -37,7 +37,6 @@ func TestChildInputInheritsTheContract(t *testing.T) {
 	parent := mcptypes.BuildInput{
 		Platforms: []string{"linux/amd64", "linux/arm64"},
 		Frozen:    true,
-		Force:     true,
 		DirectoryParams: mcptypes.DirectoryParams{
 			TmpDir: "/tmp/x", BuildDir: "/build", RootDir: "/root",
 		},
@@ -47,7 +46,8 @@ func TestChildInputInheritsTheContract(t *testing.T) {
 
 	assert.Equal(t, []string{"linux/amd64", "linux/arm64"}, got["platforms"])
 	assert.Equal(t, true, got["frozen"])
-	assert.Equal(t, true, got["force"])
+	_, force := got["force"]
+	assert.False(t, force, "there is no force: a child rebuilds on its digests, not on a flag")
 	assert.Equal(t, "/tmp/x", got["tmpDir"])
 	assert.Equal(t, "/build", got["buildDir"])
 	assert.Equal(t, "/root", got["rootDir"])

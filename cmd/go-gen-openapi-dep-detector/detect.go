@@ -17,9 +17,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"os"
-	"time"
 
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
@@ -32,17 +31,12 @@ func DetectOpenAPIDependencies(input mcptypes.DetectOpenAPIDependenciesInput) (m
 	var deps []mcptypes.Dependency
 
 	for _, specPath := range input.SpecSources {
-		// Verify file exists and get timestamp
-		info, err := os.Stat(specPath)
+		digest, err := forge.DigestFile(specPath)
 		if err != nil {
 			return mcptypes.DetectDependenciesOutput{}, fmt.Errorf("spec file not found: %s: %w", specPath, err)
 		}
 
-		deps = append(deps, mcptypes.Dependency{
-			Type:      "file",
-			FilePath:  specPath,
-			Timestamp: info.ModTime().UTC().Format(time.RFC3339),
-		})
+		deps = append(deps, mcptypes.Dependency{Path: specPath, Digest: digest})
 	}
 
 	// v1: ResolveRefs is ignored (no $ref resolution)

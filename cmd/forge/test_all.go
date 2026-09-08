@@ -32,10 +32,10 @@ import (
 // in MCP mode. All progress output goes to stderr.
 //
 // Usage: forge test-all
-func runTestAll(_ []string, forceRebuild bool) error {
+func runTestAll(_ []string) error {
 	// Step 1: Build all artifacts using shared logic
 	fmt.Fprintln(os.Stderr, "🔨 Building all artifacts...")
-	buildResult, err := buildAll("", forceRebuild)
+	buildResult, err := buildAll("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "❌ Build failed: %v\n", err)
 		return fmt.Errorf("build failed: %w", err)

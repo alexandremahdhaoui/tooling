@@ -180,16 +180,10 @@ func buildDependencies(srcPath string, srcInfo os.FileInfo) ([]forge.ArtifactDep
 		return nil, fmt.Errorf("failed to resolve absolute path for %s: %w", srcPath, err)
 	}
 
-	// Format timestamp as RFC3339 UTC
-	timestamp := srcInfo.ModTime().UTC().Format(time.RFC3339)
-
-	deps := []forge.ArtifactDependency{
-		{
-			Type:      forge.DependencyTypeFile,
-			FilePath:  absPath,
-			Timestamp: timestamp,
-		},
+	dep, err := forge.DependencyOf(absPath)
+	if err != nil {
+		return nil, err
 	}
 
-	return deps, nil
+	return []forge.ArtifactDependency{dep}, nil
 }

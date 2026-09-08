@@ -26,395 +26,228 @@ import (
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
-func TestShouldRebuild_ForceFlag(t *testing.T) {
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts:   []forge.Artifact{},
+// The freshness rule is the comparison of content digests and nothing
+// else. These cases are the whole of it: no record rebuilds; a record with
+// no dependencies rebuilds; a missing or changed dependency rebuilds; an
+// output that carries a digest and is missing or edited rebuilds; a touch
+// that changes no byte rebuilds nothing.
+
+func writeFile(t *testing.T, path, content string) {
+	t.Helper()
+
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func recorded(t *testing.T, path string) forge.ArtifactDependency {
+	t.Helper()
+
+	dep, err := forge.DependencyOf(path)
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, true)
+	return dep
+}
+
+func storeWith(artifact forge.Artifact) forge.ArtifactStore {
+	artifact.Timestamp = time.Now().UTC().Format(time.RFC3339)
+
+	return forge.ArtifactStore{Artifacts: []forge.Artifact{artifact}}
+}
+
+func binaryArtifact(t *testing.T, output string, deps ...forge.ArtifactDependency) forge.Artifact {
+	t.Helper()
+
+	digest, err := forge.DigestFile(output)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if !needsRebuild {
-		t.Error("expected rebuild when force flag is set")
-	}
-	if reason != "force flag set" {
-		t.Errorf("expected reason 'force flag set', got %q", reason)
+
+	return forge.Artifact{
+		Name: "test-artifact", Type: forge.TypeBinary, Location: output, Version: "v1",
+		Digest: digest, Dependencies: deps, DependencyDetectorEngine: "forge://go-dependency-detector",
 	}
 }
 
 func TestShouldRebuild_NoPreviousBuild(t *testing.T) {
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts:   []forge.Artifact{},
-	}
-
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, forge.ArtifactStore{})
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !needsRebuild {
-		t.Error("expected rebuild when no previous build exists")
-	}
-	if !strings.HasPrefix(reason, "no previous build") {
-		t.Errorf("expected reason 'no previous build', got %q", reason)
-	}
-}
-
-func TestShouldRebuild_ArtifactFileMissing(t *testing.T) {
-	tmpDir := t.TempDir()
-	missingFile := filepath.Join(tmpDir, "missing-artifact")
-
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts: []forge.Artifact{
-			{
-				Name:                     "test-artifact",
-				Type:                     "binary",
-				Location:                 missingFile,
-				Timestamp:                time.Now().UTC().Format(time.RFC3339),
-				Version:                  "abc123",
-				Dependencies:             []forge.ArtifactDependency{},
-				DependencyDetectorEngine: "forge://test-detector",
-			},
-		},
+		t.Fatal(err)
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !needsRebuild {
-		t.Error("expected rebuild when artifact file is missing")
-	}
-	if !strings.HasPrefix(reason, "artifact file missing") {
-		t.Errorf("expected reason 'artifact file missing', got %q", reason)
+	if !rebuild || !strings.Contains(reason, "no previous build") {
+		t.Fatalf("no record must rebuild, got %v %q", rebuild, reason)
 	}
 }
 
 func TestShouldRebuild_DependenciesNotTracked(t *testing.T) {
-	tmpDir := t.TempDir()
-	artifactFile := filepath.Join(tmpDir, "test-artifact")
+	dir := t.TempDir()
+	out := filepath.Join(dir, "bin")
+	writeFile(t, out, "binary")
 
-	// Create artifact file
-	if err := os.WriteFile(artifactFile, []byte("test"), 0o644); err != nil {
-		t.Fatalf("failed to create artifact file: %v", err)
-	}
+	store := storeWith(binaryArtifact(t, out))
 
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts: []forge.Artifact{
-			{
-				Name:                     "test-artifact",
-				Type:                     "binary",
-				Location:                 artifactFile,
-				Timestamp:                time.Now().UTC().Format(time.RFC3339),
-				Version:                  "abc123",
-				Dependencies:             nil, // No dependencies tracked
-				DependencyDetectorEngine: "",
-			},
-		},
-	}
-
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if !needsRebuild {
-		t.Error("expected rebuild when dependencies not tracked")
-	}
-	if reason != "dependencies not tracked" {
-		t.Errorf("expected reason 'dependencies not tracked', got %q", reason)
+
+	if !rebuild || reason != "dependencies not tracked" {
+		t.Fatalf("a record with no dependencies must rebuild, got %v %q", rebuild, reason)
 	}
 }
 
-func TestShouldRebuild_DependencyDetectorNotConfigured(t *testing.T) {
-	tmpDir := t.TempDir()
-	artifactFile := filepath.Join(tmpDir, "test-artifact")
-	depFile := filepath.Join(tmpDir, "dep.go")
+func TestShouldRebuild_DependencyMissing(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "bin")
+	writeFile(t, out, "binary")
 
-	// Create files
-	if err := os.WriteFile(artifactFile, []byte("test"), 0o644); err != nil {
-		t.Fatalf("failed to create artifact file: %v", err)
-	}
-	if err := os.WriteFile(depFile, []byte("package main"), 0o644); err != nil {
-		t.Fatalf("failed to create dep file: %v", err)
-	}
+	gone := filepath.Join(dir, "gone.go")
+	writeFile(t, gone, "package main")
+	dep := recorded(t, gone)
+	_ = os.Remove(gone)
 
-	depStat, _ := os.Stat(depFile)
-	depTimestamp := depStat.ModTime().UTC().Format(time.RFC3339)
+	store := storeWith(binaryArtifact(t, out, dep))
 
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts: []forge.Artifact{
-			{
-				Name:      "test-artifact",
-				Type:      "binary",
-				Location:  artifactFile,
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Version:   "abc123",
-				Dependencies: []forge.ArtifactDependency{
-					{
-						Type:      forge.DependencyTypeFile,
-						FilePath:  depFile,
-						Timestamp: depTimestamp,
-					},
-				},
-				DependencyDetectorEngine: "", // Not configured
-			},
-		},
-	}
-
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if !needsRebuild {
-		t.Error("expected rebuild when dependency detector not configured")
-	}
-	if reason != "dependency detector not configured" {
-		t.Errorf("expected reason 'dependency detector not configured', got %q", reason)
+
+	if !rebuild || !strings.Contains(reason, "missing") {
+		t.Fatalf("a missing dependency must rebuild, got %v %q", rebuild, reason)
 	}
 }
 
-func TestShouldRebuild_DependencyFileMissing(t *testing.T) {
-	tmpDir := t.TempDir()
-	artifactFile := filepath.Join(tmpDir, "test-artifact")
-	missingDep := filepath.Join(tmpDir, "missing-dep.go")
+func TestShouldRebuild_DependencyChanged(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "bin")
+	writeFile(t, out, "binary")
 
-	// Create only artifact file
-	if err := os.WriteFile(artifactFile, []byte("test"), 0o644); err != nil {
-		t.Fatalf("failed to create artifact file: %v", err)
-	}
+	src := filepath.Join(dir, "main.go")
+	writeFile(t, src, "package main")
+	dep := recorded(t, src)
+	writeFile(t, src, "package main // edited")
 
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts: []forge.Artifact{
-			{
-				Name:      "test-artifact",
-				Type:      "binary",
-				Location:  artifactFile,
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Version:   "abc123",
-				Dependencies: []forge.ArtifactDependency{
-					{
-						Type:      forge.DependencyTypeFile,
-						FilePath:  missingDep,
-						Timestamp: time.Now().UTC().Format(time.RFC3339),
-					},
-				},
-				DependencyDetectorEngine: "forge://test-detector",
-			},
-		},
-	}
+	store := storeWith(binaryArtifact(t, out, dep))
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if !needsRebuild {
-		t.Error("expected rebuild when dependency file is missing")
-	}
-	expectedReason := "dependency file " + missingDep + " missing"
-	if reason != expectedReason {
-		t.Errorf("expected reason %q, got %q", expectedReason, reason)
+
+	if !rebuild || !strings.Contains(reason, "changed") {
+		t.Fatalf("a changed dependency must rebuild, got %v %q", rebuild, reason)
 	}
 }
 
-func TestShouldRebuild_DependencyModified(t *testing.T) {
-	tmpDir := t.TempDir()
-	artifactFile := filepath.Join(tmpDir, "test-artifact")
-	depFile := filepath.Join(tmpDir, "dep.go")
+// A touch is not a change. The old rule compared modification times to the
+// second, so a fresh clone, a checkout, or a stray touch rebuilt everything
+// it had no reason to; the digest sees the same bytes and skips.
+func TestShouldRebuild_TouchWithoutEditDoesNotRebuild(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "bin")
+	writeFile(t, out, "binary")
 
-	// Create files
-	if err := os.WriteFile(artifactFile, []byte("test"), 0o644); err != nil {
-		t.Fatalf("failed to create artifact file: %v", err)
-	}
-	if err := os.WriteFile(depFile, []byte("package main"), 0o644); err != nil {
-		t.Fatalf("failed to create dep file: %v", err)
-	}
+	src := filepath.Join(dir, "main.go")
+	writeFile(t, src, "package main")
+	dep := recorded(t, src)
 
-	// Get initial timestamp
-	depStat, _ := os.Stat(depFile)
-	oldTimestamp := depStat.ModTime().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
-
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts: []forge.Artifact{
-			{
-				Name:      "test-artifact",
-				Type:      "binary",
-				Location:  artifactFile,
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Version:   "abc123",
-				Dependencies: []forge.ArtifactDependency{
-					{
-						Type:      forge.DependencyTypeFile,
-						FilePath:  depFile,
-						Timestamp: oldTimestamp, // Old timestamp - different from current
-					},
-				},
-				DependencyDetectorEngine: "forge://test-detector",
-			},
-		},
+	later := time.Now().Add(2 * time.Hour)
+	if err := os.Chtimes(src, later, later); err != nil {
+		t.Fatal(err)
 	}
 
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
+	store := storeWith(binaryArtifact(t, out, dep))
+
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if !needsRebuild {
-		t.Error("expected rebuild when dependency is modified")
-	}
-	expectedReason := "dependency " + depFile + " modified"
-	if reason != expectedReason {
-		t.Errorf("expected reason %q, got %q", expectedReason, reason)
+
+	if rebuild {
+		t.Fatalf("a touch that changes no byte must not rebuild, got %q", reason)
 	}
 }
 
-func TestShouldRebuild_AllDependenciesUnchanged(t *testing.T) {
-	tmpDir := t.TempDir()
-	artifactFile := filepath.Join(tmpDir, "test-artifact")
-	depFile1 := filepath.Join(tmpDir, "dep1.go")
-	depFile2 := filepath.Join(tmpDir, "dep2.go")
+func TestShouldRebuild_AllUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "bin")
+	writeFile(t, out, "binary")
 
-	// Create files
-	if err := os.WriteFile(artifactFile, []byte("test"), 0o644); err != nil {
-		t.Fatalf("failed to create artifact file: %v", err)
-	}
-	if err := os.WriteFile(depFile1, []byte("package main"), 0o644); err != nil {
-		t.Fatalf("failed to create dep1 file: %v", err)
-	}
-	if err := os.WriteFile(depFile2, []byte("package lib"), 0o644); err != nil {
-		t.Fatalf("failed to create dep2 file: %v", err)
-	}
+	a := filepath.Join(dir, "a.go")
+	b := filepath.Join(dir, "b.go")
+	writeFile(t, a, "package main // a")
+	writeFile(t, b, "package main // b")
 
-	// Get timestamps
-	dep1Stat, _ := os.Stat(depFile1)
-	dep1Timestamp := dep1Stat.ModTime().UTC().Format(time.RFC3339)
-	dep2Stat, _ := os.Stat(depFile2)
-	dep2Timestamp := dep2Stat.ModTime().UTC().Format(time.RFC3339)
+	store := storeWith(binaryArtifact(t, out, recorded(t, a), recorded(t, b)))
 
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts: []forge.Artifact{
-			{
-				Name:      "test-artifact",
-				Type:      "binary",
-				Location:  artifactFile,
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Version:   "abc123",
-				Dependencies: []forge.ArtifactDependency{
-					{
-						Type:      forge.DependencyTypeFile,
-						FilePath:  depFile1,
-						Timestamp: dep1Timestamp,
-					},
-					{
-						Type:      forge.DependencyTypeFile,
-						FilePath:  depFile2,
-						Timestamp: dep2Timestamp,
-					},
-					{
-						Type:            forge.DependencyTypeExternalPackage,
-						ExternalPackage: "github.com/foo/bar",
-						Semver:          "v1.2.3",
-					},
-				},
-				DependencyDetectorEngine: "forge://test-detector",
-			},
-		},
-	}
-
-	needsRebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatal(err)
 	}
-	if needsRebuild {
-		t.Errorf("expected no rebuild when all dependencies unchanged, got reason: %q", reason)
-	}
-	if reason != "" {
-		t.Errorf("expected empty reason when no rebuild needed, got %q", reason)
+
+	if rebuild {
+		t.Fatalf("unchanged inputs and output must not rebuild, got %q", reason)
 	}
 }
 
-func TestShouldRebuild_ExternalPackagesWithoutGoMod(t *testing.T) {
-	tmpDir := t.TempDir()
-	artifactFile := filepath.Join(tmpDir, "test-artifact")
-	depFile := filepath.Join(tmpDir, "main.go")
+// The output carries its digest, so an edited binary is stale by the same
+// rule as an edited source, and a deleted one likewise.
+func TestShouldRebuild_OutputEditedOrMissing(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "bin")
+	writeFile(t, out, "binary")
 
-	// Create files
-	if err := os.WriteFile(artifactFile, []byte("test"), 0o644); err != nil {
-		t.Fatalf("failed to create artifact file: %v", err)
-	}
-	if err := os.WriteFile(depFile, []byte("package main"), 0o644); err != nil {
-		t.Fatalf("failed to create dep file: %v", err)
-	}
+	src := filepath.Join(dir, "main.go")
+	writeFile(t, src, "package main")
 
-	// Get timestamp
-	depStat, _ := os.Stat(depFile)
-	depTimestamp := depStat.ModTime().UTC().Format(time.RFC3339)
+	store := storeWith(binaryArtifact(t, out, recorded(t, src)))
 
-	store := forge.ArtifactStore{
-		Version:     "1.0",
-		LastUpdated: time.Now(),
-		Artifacts: []forge.Artifact{
-			{
-				Name:      "test-artifact",
-				Type:      "binary",
-				Location:  artifactFile,
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Version:   "abc123",
-				Dependencies: []forge.ArtifactDependency{
-					{
-						Type:      forge.DependencyTypeFile,
-						FilePath:  depFile,
-						Timestamp: depTimestamp,
-					},
-					{
-						Type:            forge.DependencyTypeExternalPackage,
-						ExternalPackage: "github.com/foo/bar",
-						Semver:          "v1.2.3",
-					},
-				},
-				DependencyDetectorEngine: "forge://test-detector",
-			},
-		},
-	}
+	writeFile(t, out, "binary, edited by hand")
 
-	// Capture stderr to check for warning
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	needsRebuild, _, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store, false)
-
-	// Restore stderr
-	w.Close()
-	os.Stderr = oldStderr
-
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if needsRebuild {
-		t.Error("expected no rebuild even without go.mod tracked (dependencies unchanged)")
+		t.Fatal(err)
 	}
 
-	// Read warning from stderr
-	buf := make([]byte, 1024)
-	n, _ := r.Read(buf)
-	stderrOutput := string(buf[:n])
+	if !rebuild || !strings.Contains(reason, "changed since it was built") {
+		t.Fatalf("an edited output must rebuild, got %v %q", rebuild, reason)
+	}
 
-	if stderrOutput != "" {
-		t.Logf("Warning message (expected): %s", stderrOutput)
+	_ = os.Remove(out)
+
+	rebuild, reason, err = shouldRebuild("test-artifact", []string{hostPlatform()}, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !rebuild || !strings.Contains(reason, "missing") {
+		t.Fatalf("a missing output must rebuild, got %v %q", rebuild, reason)
+	}
+}
+
+// An artifact with no digest of its own - an image layout, a directory of
+// generated files - is judged on its dependencies alone, so its location
+// is never opened.
+func TestShouldRebuild_AnOutputWithNoDigestIsJudgedOnItsInputs(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "spec.yaml")
+	writeFile(t, src, "openapi: 3.0.0")
+
+	store := storeWith(forge.Artifact{
+		Name: "test-artifact", Type: forge.TypeContainer, Location: "file://" + filepath.Join(dir, "never-here"), Version: "v1",
+		Dependencies: []forge.ArtifactDependency{recorded(t, src)}, DependencyDetectorEngine: "forge://x",
+	})
+
+	rebuild, reason, err := shouldRebuild("test-artifact", []string{hostPlatform()}, store)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if rebuild {
+		t.Fatalf("unchanged inputs must not rebuild an artifact that carries no digest, got %q", reason)
 	}
 }

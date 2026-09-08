@@ -22,9 +22,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/gosource"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"golang.org/x/mod/modfile"
 )
@@ -60,12 +60,25 @@ func DetectDependencies(input mcptypes.DetectDependenciesInput) (mcptypes.Detect
 		return mcptypes.DetectDependenciesOutput{}, fmt.Errorf("failed to parse go.mod: %w", err)
 	}
 
-	// Get go.mod timestamp
-	goModInfo, err := os.Stat(goModPath)
+	// The manifest and the lock are the first two dependencies: an external
+	// module's version lives in them, so a bump shows as a changed digest
+	// of go.sum and no module is recorded on its own.
+	manifest, err := forge.DependencyOf(goModPath)
 	if err != nil {
-		return mcptypes.DetectDependenciesOutput{}, fmt.Errorf("failed to stat go.mod: %w", err)
+		return mcptypes.DetectDependenciesOutput{}, err
 	}
-	goModTimestamp := goModInfo.ModTime().UTC().Format(time.RFC3339)
+
+	seed := []mcptypes.Dependency{{Path: manifest.Path, Digest: manifest.Digest}}
+
+	goSumPath := filepath.Join(filepath.Dir(goModPath), "go.sum")
+	if _, err := os.Stat(goSumPath); err == nil {
+		lock, err := forge.DependencyOf(goSumPath)
+		if err != nil {
+			return mcptypes.DetectDependenciesOutput{}, err
+		}
+
+		seed = append(seed, mcptypes.Dependency{Path: lock.Path, Digest: lock.Digest})
+	}
 
 	// Step 3: Parse the Go file at input.FilePath
 	fset := token.NewFileSet()
@@ -92,15 +105,9 @@ func DetectDependencies(input mcptypes.DetectDependenciesInput) (mcptypes.Detect
 		visitedPackages: make(map[string]bool),
 		goModPath:       goModPath,
 		goModData:       goModData,
-		dependencies: []mcptypes.Dependency{
-			{
-				Type:      "file",
-				FilePath:  goModPath,
-				Timestamp: goModTimestamp,
-			},
-		},
-		moduleDir:  filepath.Dir(goModPath),
-		modulePath: goModData.Module.Mod.Path,
+		dependencies:    seed,
+		moduleDir:       filepath.Dir(goModPath),
+		modulePath:      goModData.Module.Mod.Path,
 	}
 
 	// Step 6: Record the entry package and traverse everything it imports.
@@ -152,15 +159,11 @@ func (t *dependencyTracker) processFile(filePath string) error {
 	// imports but never recorded is a file whose own edits are invisible.
 	// go.mod is already in the list, so it is not recorded twice.
 	if filePath != t.goModPath {
-		timestamp, err := getFileTimestamp(filePath)
+		digest, err := forge.DigestFile(filePath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to get timestamp for %s: %v\n", filePath, err)
+			fmt.Fprintf(os.Stderr, "Warning: failed to digest %s: %v\n", filePath, err)
 		} else {
-			t.dependencies = append(t.dependencies, mcptypes.Dependency{
-				Type:      "file",
-				FilePath:  filePath,
-				Timestamp: timestamp,
-			})
+			t.dependencies = append(t.dependencies, mcptypes.Dependency{Path: filePath, Digest: digest})
 		}
 	}
 
@@ -211,18 +214,13 @@ func (t *dependencyTracker) processFile(filePath string) error {
 				fmt.Fprintf(os.Stderr, "Warning: failed to process package %s: %v\n", importPath, err)
 			}
 		} else {
-			// External package - get version from go.mod
-			version, err := getPackageVersion(t.goModData, importPath)
-			if err != nil {
+			// An external package is recorded by nothing of its own: its
+			// version is a line in go.sum, already digested, and a module
+			// the manifest does not know is still refused here so a build
+			// that would fail says why before it runs.
+			if _, err := getPackageVersion(t.goModData, importPath); err != nil {
 				return fmt.Errorf("package %s not found in go.mod: %w", importPath, err)
 			}
-
-			// Add to dependencies
-			t.dependencies = append(t.dependencies, mcptypes.Dependency{
-				Type:            "externalPackage",
-				ExternalPackage: importPath,
-				Semver:          version,
-			})
 
 			// Mark package as visited
 			t.visitedPackages[importPath] = true
@@ -338,15 +336,6 @@ func getPackageVersion(goModData *modfile.File, pkgPath string) (string, error) 
 	}
 
 	return "", fmt.Errorf("package %s not found in go.mod", pkgPath)
-}
-
-// getFileTimestamp returns the modification timestamp of a file in RFC3339 UTC format.
-func getFileTimestamp(filePath string) (string, error) {
-	info, err := os.Stat(filePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to stat file %s: %w", filePath, err)
-	}
-	return info.ModTime().UTC().Format(time.RFC3339), nil
 }
 
 // findGoMod walks up the directory tree to find go.mod.

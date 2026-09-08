@@ -20,9 +20,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/gosource"
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 	"golang.org/x/mod/modfile"
 	"gopkg.in/yaml.v3"
@@ -186,17 +186,14 @@ func DetectMockDependencies(input mcptypes.DetectMockDependenciesInput) (mcptype
 	return mcptypes.DetectDependenciesOutput{Dependencies: deps}, nil
 }
 
-// createFileDependency creates a file dependency with timestamp.
+// createFileDependency records one file with the digest of its content.
 func createFileDependency(path string) (mcptypes.Dependency, error) {
-	info, err := os.Stat(path)
+	digest, err := forge.DigestFile(path)
 	if err != nil {
 		return mcptypes.Dependency{}, err
 	}
-	return mcptypes.Dependency{
-		Type:      "file",
-		FilePath:  path,
-		Timestamp: info.ModTime().UTC().Format(time.RFC3339),
-	}, nil
+
+	return mcptypes.Dependency{Path: path, Digest: digest}, nil
 }
 
 // ----------------------------------------------------- GO.MOD HELPERS ---------------------------------------------- //

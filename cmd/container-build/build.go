@@ -576,13 +576,7 @@ func detectDependenciesFromSpec(dependsOn []forge.DependsOnSpec, spec forge.Buil
 
 		// Step 3: Convert mcptypes.Dependency to forge.ArtifactDependency
 		for _, dep := range dependencies {
-			artifactDep := forge.ArtifactDependency{
-				Type:            dep.Type,
-				FilePath:        dep.FilePath,
-				ExternalPackage: dep.ExternalPackage,
-				Timestamp:       dep.Timestamp,
-				Semver:          dep.Semver,
-			}
+			artifactDep := forge.ArtifactDependency{Path: dep.Path, Digest: dep.Digest}
 			allDeps = append(allDeps, artifactDep)
 		}
 
@@ -611,22 +605,14 @@ func getStringField(m map[string]interface{}, keys ...string) string {
 	return ""
 }
 
-// deduplicateDependencies removes duplicate dependencies based on (Type, FilePath, ExternalPackage).
+// deduplicateDependencies keeps one record per path.
 func deduplicateDependencies(deps []forge.ArtifactDependency) []forge.ArtifactDependency {
 	seen := make(map[string]bool)
 	result := make([]forge.ArtifactDependency, 0, len(deps))
 
 	for _, dep := range deps {
-		// Create unique key based on type and identifier
-		var key string
-		if dep.Type == "file" {
-			key = fmt.Sprintf("file:%s", dep.FilePath)
-		} else {
-			key = fmt.Sprintf("external:%s", dep.ExternalPackage)
-		}
-
-		if !seen[key] {
-			seen[key] = true
+		if !seen[dep.Path] {
+			seen[dep.Path] = true
 			result = append(result, dep)
 		}
 	}

@@ -110,47 +110,12 @@ func generate(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, 
 		return nil, fmt.Errorf("computing source checksum: %w", err)
 	}
 
-	// Step 4: Check if regeneration is needed (compare checksums from existing generated files)
-	// Skip checksum comparison if force flag is set
-	// Determine where spec file is/will be located. A non-go language
-	// carries its checksum in its generated server file instead.
-	specFilePath := filepath.Join(srcDir, GeneratedSpecFile)
-	if specTypesCtx != nil {
-		specFilePath = filepath.Join(specTypesCtx.OutputDir, GeneratedSpecFile)
-	}
-	if langFile, ok := LangMainFiles[config.Language]; ok {
-		specFilePath = filepath.Join(srcDir, langFile)
-	}
-	if config.Kind == KindCLI {
-		specFilePath = filepath.Join(srcDir, GeneratedCLIFile)
-	}
-	if config.Kind == KindRestAPI {
-		specFilePath = filepath.Join(srcDir, GeneratedRESTFile)
-	}
-	if config.Kind == KindBinary || config.Generator != "" {
-		specFilePath = filepath.Join(srcDir, GeneratedRunnableFile)
-	}
-	if !input.Force {
-		existingChecksum, err := ReadChecksumFromFile(specFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("reading existing checksum: %w", err)
-		}
-
-		if ChecksumMatches(checksum, existingChecksum) {
-			log.Printf("forge-dev: checksums match, skipping regeneration for %s", config.Name)
-			// Return artifact with existing files
-			return &forge.Artifact{
-				Name:      config.Name,
-				Type:      forge.TypeGenerated,
-				Location:  srcDir,
-				Timestamp: time.Now().UTC().Format(time.RFC3339),
-				Version:   checksum,
-			}, nil
-		}
-	} else {
-		log.Printf("forge-dev: force flag set, regenerating %s", config.Name)
-	}
-
+	// Whether to regenerate is not this engine's question. forge decides
+	// from the digests recorded below - every input this cell reads and
+	// every file it wrote - and calls here only when one of them changed.
+	// The checksum this engine used to read out of its own output could
+	// not see a hand-edited body under an intact header, which is why
+	// every generated-check gate needed a flag to force it.
 	spec, types, err := loadCellTypes(config, srcDir)
 	if err != nil {
 		return nil, err
@@ -208,12 +173,19 @@ func generate(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, 
 
 		log.Printf("forge-dev: successfully generated %d files for %s", len(generatedFiles), config.Name)
 
+		dependencies, err := recordedFiles(srcDir, configPath, config.specPaths(srcDir), usagePath, generatedFiles, specTypesCtx)
+		if err != nil {
+			return nil, err
+		}
+
 		return &forge.Artifact{
-			Name:      config.Name,
-			Type:      forge.TypeGenerated,
-			Location:  srcDir,
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			Version:   checksum,
+			Name:                     input.Name,
+			Type:                     forge.TypeGenerated,
+			Location:                 srcDir,
+			Timestamp:                time.Now().UTC().Format(time.RFC3339),
+			Version:                  checksum,
+			Dependencies:             dependencies,
+			DependencyDetectorEngine: "forge://forge-dev",
 		}, nil
 	}
 
@@ -361,6 +333,14 @@ func generate(ctx context.Context, input mcptypes.BuildInput) (*forge.Artifact, 
 	if err != nil {
 		return nil, fmt.Errorf("generating spec file: %w", err)
 	}
+	// Where the spec file lives: beside the cell, or under the external
+	// spec types' output directory; a non-go language carries it in its
+	// generated main file, a cli or rest cell in its own generated file.
+	specFilePath := filepath.Join(srcDir, GeneratedSpecFile)
+	if specTypesCtx != nil {
+		specFilePath = filepath.Join(specTypesCtx.OutputDir, GeneratedSpecFile)
+	}
+
 	// Ensure output directory exists (for external spec types)
 	if specTypesCtx != nil {
 		if err := os.MkdirAll(specTypesCtx.OutputDir, 0o755); err != nil {
@@ -460,4 +440,59 @@ func generateSharedDocs(srcDir string, config *Config, types []ForgeTypeDefiniti
 	log.Printf("forge-dev: generated %s", listYAMLPath)
 
 	return nil
+}
+
+// recordedFiles is what a cell was generated from and what it wrote, each
+// with its digest: forge-dev.yaml, the spec documents, docs/usage.md, and
+// every generated file. Listing the outputs is what makes a hand-edited
+// generated file a stale artifact: its digest no longer matches, so the
+// next build regenerates it with no flag asking. A generated file that is
+// not at the cell root lives under the spec types' output directory.
+func recordedFiles(srcDir, configPath string, specPaths []string, usagePath string, generated []string, specTypesCtx *SpecTypesContext) ([]forge.ArtifactDependency, error) {
+	paths := append([]string{configPath}, specPaths...)
+	paths = append(paths, usagePath)
+
+	for _, name := range generated {
+		candidates := []string{filepath.Join(srcDir, name)}
+		if specTypesCtx != nil {
+			candidates = append(candidates, filepath.Join(specTypesCtx.OutputDir, name))
+		}
+
+		if filepath.IsAbs(name) {
+			candidates = []string{name}
+		}
+
+		for _, candidate := range candidates {
+			if _, err := os.Stat(candidate); err == nil {
+				paths = append(paths, candidate)
+
+				break
+			}
+		}
+	}
+
+	seen := map[string]bool{}
+	deps := make([]forge.ArtifactDependency, 0, len(paths))
+
+	for _, path := range paths {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			return nil, err
+		}
+
+		if seen[abs] {
+			continue
+		}
+
+		seen[abs] = true
+
+		dep, err := forge.DependencyOf(abs)
+		if err != nil {
+			return nil, err
+		}
+
+		deps = append(deps, dep)
+	}
+
+	return deps, nil
 }

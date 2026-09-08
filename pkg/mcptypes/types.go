@@ -87,7 +87,6 @@ type BuildInput struct {
 	Dest    string `json:"dest,omitempty" jsonschema:"Destination path for build output (e.g. ./build/bin)"`
 	Context string `json:"context,omitempty" jsonschema:"Resolved absolute path to build context directory"`
 	Engine  string `json:"engine" jsonschema:"Engine URI that performs the build (e.g. forge://go-build)"`
-	Force   bool   `json:"force,omitempty" jsonschema:"Force rebuild and skip dependency-based caching"`
 	Frozen  bool   `json:"frozen,omitempty" jsonschema:"Build strictly against the recorded dependency lock and never repair it; a stale lock fails the build"`
 
 	// Platforms is the os/arch pairs this call must build, one artifact
@@ -168,18 +167,13 @@ type DetectOpenAPIDependenciesInput struct {
 }
 
 // Dependency represents a single dependency detected by a dependency-detector engine.
-// This is the MCP wire format, matching ArtifactDependency from pkg/forge/artifact_store.go.
+// This is the MCP wire format, matching ArtifactDependency from pkg/forge/artifact_store.go:
+// one file, by absolute path, with the digest of its content.
 type Dependency struct {
-	// Type is either "file" or "externalPackage"
-	Type string `json:"type"`
-	// FilePath is the absolute path to file dependency (if Type=file)
-	FilePath string `json:"filePath,omitempty"`
-	// ExternalPackage is the package identifier (if Type=externalPackage, e.g., "github.com/foo/bar")
-	ExternalPackage string `json:"externalPackage,omitempty"`
-	// Timestamp is RFC3339 timestamp in UTC (if Type=file, e.g., "2025-11-23T10:00:00Z")
-	Timestamp string `json:"timestamp,omitempty"`
-	// Semver is semantic version (if Type=externalPackage, supports pseudo-versions like "v0.0.0-20231010123456-abcdef123456")
-	Semver string `json:"semver,omitempty"`
+	// Path is the absolute path of the file.
+	Path string `json:"path"`
+	// Digest is the content digest, "sha256:" and hex.
+	Digest string `json:"digest"`
 }
 
 // DetectDependenciesOutput represents the output from dependency-detector tools.

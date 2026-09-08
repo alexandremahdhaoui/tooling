@@ -23,6 +23,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
@@ -323,14 +324,10 @@ func TestGenerateWithSpecTypes(t *testing.T) {
 		}
 	})
 
-	t.Run("checksum skip works with external spec path", func(t *testing.T) {
-		// Create temp directory structure
+	t.Run("regeneration with an external spec path is deterministic and records what it wrote", func(t *testing.T) {
 		tmpDir := t.TempDir()
-
-		// Create go.mod
 		createTestGoMod(t, tmpDir, "github.com/test/project")
 
-		// Create engine directory with specTypes enabled
 		specTypesConfig := `  specTypes:
     enabled: true
     outputPath: pkg/api/v1
@@ -345,115 +342,52 @@ func TestGenerateWithSpecTypes(t *testing.T) {
 			Engine: "forge://forge-dev",
 		}
 
-		// First run
 		artifact1, err := generate(ctx, input)
 		if err != nil {
 			t.Fatalf("first generate() error: %v", err)
 		}
 
-		// Get file modification time of spec file in external path
 		specPath := filepath.Join(tmpDir, "pkg", "api", "v1", GeneratedSpecFile)
-		stat1, err := os.Stat(specPath)
+		content1, err := os.ReadFile(specPath)
 		if err != nil {
-			t.Fatalf("stat generated spec file: %v", err)
+			t.Fatalf("reading generated spec file: %v", err)
 		}
 
-		// Second run (should skip regeneration)
+		// The generator records the file it wrote outside its own directory
+		// beside what it read, so a hand edit there is stale by forge's
+		// digest rule. Nothing in the generator decides whether to run.
+		recorded := false
+		for _, dep := range artifact1.Dependencies {
+			if dep.Path == specPath {
+				recorded = true
+				want, err := forge.DigestFile(specPath)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if dep.Digest != want {
+					t.Errorf("the external spec file is recorded with digest %q, want %q", dep.Digest, want)
+				}
+			}
+		}
+		if !recorded {
+			t.Errorf("the external spec file %s is not among the recorded dependencies: %+v", specPath, artifact1.Dependencies)
+		}
+
 		artifact2, err := generate(ctx, input)
 		if err != nil {
 			t.Fatalf("second generate() error: %v", err)
 		}
 
-		// Verify same checksum
 		if artifact1.Version != artifact2.Version {
 			t.Errorf("checksums differ: %q vs %q", artifact1.Version, artifact2.Version)
 		}
 
-		// Verify file not modified (skipped)
-		stat2, err := os.Stat(specPath)
+		content2, err := os.ReadFile(specPath)
 		if err != nil {
-			t.Fatalf("stat generated spec file after second run: %v", err)
+			t.Fatalf("reading generated spec file after second run: %v", err)
 		}
-		if !stat1.ModTime().Equal(stat2.ModTime()) {
-			t.Error("spec file was modified when it should have been skipped")
-		}
-	})
-
-	t.Run("force flag regenerates with external spec path", func(t *testing.T) {
-		// Create temp directory structure
-		tmpDir := t.TempDir()
-
-		// Create go.mod
-		createTestGoMod(t, tmpDir, "github.com/test/project")
-
-		// Create engine directory with specTypes enabled
-		specTypesConfig := `  specTypes:
-    enabled: true
-    outputPath: pkg/api/v1
-    packageName: v1
-`
-		engineDir := createTestEngineDir(t, tmpDir, "force-engine", specTypesConfig)
-
-		ctx := context.Background()
-		input := mcptypes.BuildInput{
-			Name:   "force-engine",
-			Src:    engineDir,
-			Engine: "forge://forge-dev",
-		}
-
-		// First run
-		_, err := generate(ctx, input)
-		if err != nil {
-			t.Fatalf("first generate() error: %v", err)
-		}
-
-		// Get file modification time of spec file in external path
-		specPath := filepath.Join(tmpDir, "pkg", "api", "v1", GeneratedSpecFile)
-		stat1, err := os.Stat(specPath)
-		if err != nil {
-			t.Fatalf("stat generated spec file: %v", err)
-		}
-
-		// Modify the file content slightly to ensure we can detect a rewrite
-		// (in practice the mtime will change on regeneration)
-		originalContent, err := os.ReadFile(specPath)
-		if err != nil {
-			t.Fatalf("reading spec file: %v", err)
-		}
-
-		// Second run with force flag
-		inputForce := mcptypes.BuildInput{
-			Name:   "force-engine",
-			Src:    engineDir,
-			Engine: "forge://forge-dev",
-			Force:  true,
-		}
-
-		_, err = generate(ctx, inputForce)
-		if err != nil {
-			t.Fatalf("second generate() with force error: %v", err)
-		}
-
-		// Verify file was regenerated
-		stat2, err := os.Stat(specPath)
-		if err != nil {
-			t.Fatalf("stat generated spec file after force run: %v", err)
-		}
-
-		// File should have been modified OR at least not be older than the first run
-		// (mod time should be >= first run since we forced regeneration)
-		if stat2.ModTime().Before(stat1.ModTime()) {
-			t.Error("spec file should have been regenerated with force flag")
-		}
-
-		// Verify content is the same (same checksum should produce same content)
-		newContent, err := os.ReadFile(specPath)
-		if err != nil {
-			t.Fatalf("reading spec file after force: %v", err)
-		}
-
-		if string(originalContent) != string(newContent) {
-			t.Error("spec file content should be the same after forced regeneration")
+		if string(content1) != string(content2) {
+			t.Error("regenerating over unchanged inputs must write the same bytes")
 		}
 	})
 

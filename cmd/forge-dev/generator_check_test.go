@@ -68,7 +68,7 @@ func generateCell(t *testing.T, dir string, answer map[string]interface{}) error
 	withStubGenerator(t, stub)
 
 	_, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev", Force: true,
+		Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev",
 	})
 
 	return err
@@ -316,7 +316,7 @@ func TestACellWithNoGeneratorSweepsNothing(t *testing.T) {
 	writeKindFixture(t, dir, coreCellYaml())
 
 	_, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "plain-tool", Src: dir, Engine: "forge://forge-dev", Force: true,
+		Name: "plain-tool", Src: dir, Engine: "forge://forge-dev",
 	})
 	require.NoError(t, err)
 
@@ -334,7 +334,7 @@ func TestACellWithNoGeneratorSweepsNothing(t *testing.T) {
 	require.Equal(t, []string{"zz_generated_planted.go"}, recorded)
 
 	_, err = generate(context.Background(), mcptypes.BuildInput{
-		Name: "plain-tool", Src: dir, Engine: "forge://forge-dev", Force: true,
+		Name: "plain-tool", Src: dir, Engine: "forge://forge-dev",
 	})
 	require.NoError(t, err)
 

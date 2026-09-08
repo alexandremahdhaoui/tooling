@@ -172,7 +172,6 @@ func childInput(input mcptypes.BuildInput, spec map[string]any, readsFrozen bool
 
 	inherited := map[string]any{
 		"platforms": input.Platforms,
-		"force":     input.Force,
 		"tmpDir":    input.TmpDir,
 		"buildDir":  input.BuildDir,
 		"rootDir":   input.RootDir,

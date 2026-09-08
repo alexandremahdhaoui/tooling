@@ -167,6 +167,15 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.
 			return nil, fmt.Errorf("failed to create artifact: %w", err)
 		}
 
+		// The output carries its own digest, so an edited or deleted binary
+		// is a stale artifact, not a fresh one with a later date.
+		digest, err := forge.DigestFile(outputPath)
+		if err != nil {
+			return nil, err
+		}
+
+		artifact.Digest = digest
+
 		// Detect dependencies if this is a main package
 		if err := detectDependenciesForArtifact(input.Src, artifact); err != nil {
 			return nil, fmt.Errorf("failed to detect dependencies: %w", err)

@@ -557,18 +557,20 @@ Forge automatically tracks dependencies for build artifacts and skips rebuilding
 When you run `forge build`:
 
 1. **First Build**: All artifacts are built, and forge tracks their dependencies in the artifact store
-2. **Subsequent Builds**: Forge checks if dependencies have changed:
-   - **File dependencies**: Compares modification timestamps
-   - **External packages**: Checks if go.mod version changed
-   - **Skips** if no changes detected
-   - **Rebuilds** if any dependency changed
+2. **Subsequent Builds**: Forge compares the content digest of every
+   recorded dependency, and of the output when the engine recorded one,
+   with what is on disk:
+   - **Skips** when every digest matches
+   - **Rebuilds** when any recorded path is missing or its digest differs,
+     or when a digested output is missing or was edited
+   - A modification time is never read: a `touch` rebuilds nothing
 
 ### Dependency Tracking
 
 **Go Binaries (go-build):**
 - Automatically tracked when building main packages
-- Includes all local file dependencies (transitive)
-- Includes external package versions from go.mod
+- Includes every file of every local package the entry reaches (transitive)
+- Includes `go.mod` and `go.sum`, so a changed module closure rebuilds
 - No configuration required
 
 **Container Images (container-build):**
@@ -587,26 +589,27 @@ When you run `forge build`:
             funcName: main
   ```
 
-### Force Rebuild
+### Rebuilding by Hand
 
-To force rebuild all artifacts regardless of dependency state:
+There is no force flag. A build is skipped only when every recorded digest
+still matches, so an edit to any input rebuilds on its own and a hand-edited
+output rebuilds too. To rebuild anyway, delete the output:
 
 ```bash
-forge build --force
-# or
-forge build -f
+rm build/bin/my-app
+forge build my-app
 ```
 
 ### Rebuild Reasons
 
 When an artifact is rebuilt, forge shows the reason:
 
-- `force flag set` - User requested force rebuild
-- `no previous build` - First time building this artifact
-- `artifact file missing` - Built artifact was deleted
-- `dependencies not tracked` - Artifact built before lazy rebuild feature
-- `dependency file /path/to/file modified` - Local file changed
-- `dependency detector not configured` - Container without dependsOn
+- `no previous build for <platform>` - First time building this artifact for that platform
+- `dependencies not tracked` - The record carries no dependencies (nothing recorded, or a record from before digests)
+- `dependency /path/to/file missing` - A recorded input was deleted
+- `dependency /path/to/file changed` - A recorded input's content changed
+- `artifact /path missing for <platform>` - The built output was deleted
+- `artifact /path changed since it was built` - The output was edited by hand
 
 ### Performance Benefits
 
@@ -618,9 +621,11 @@ Lazy rebuild provides significant performance improvements:
 
 ### Limitations
 
-- Only tracks dependencies for Go main packages (not libraries)
+- What counts as an input is the detector's answer; an engine that records
+  no dependencies rebuilds every time
 - Container images require explicit `dependsOn` configuration
-- Artifacts built before lazy rebuild feature will always rebuild once
+- A record written before digests carries none and rebuilds once, which
+  rewrites it
 
 ## Engine Protocol
 
@@ -697,7 +702,7 @@ pinned tooling arrives through `forge-factory sync`.
 GO_BUILD_LDFLAGS="-X main.Version=v1.0.0" forge build
 ```
 
-**Lazy Rebuild:** Go binaries automatically track dependencies. Subsequent `forge build` commands will skip unchanged artifacts (use `--force` to rebuild all).
+**Lazy Rebuild:** Go binaries automatically track dependencies. Subsequent `forge build` commands skip an artifact whose recorded digests all still match.
 
 #### go-dependency-detector
 

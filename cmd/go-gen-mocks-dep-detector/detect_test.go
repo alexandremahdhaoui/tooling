@@ -22,6 +22,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
+
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
@@ -283,22 +285,19 @@ func TestDetectMockDependencies_FullFlow(t *testing.T) {
 	foundStoreGo := false
 
 	for _, dep := range output.Dependencies {
-		if dep.Type != "file" {
-			t.Errorf("expected type 'file', got %s", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("expected a content digest, got %q", dep.Digest)
 		}
-		if strings.HasSuffix(dep.FilePath, ".mockery.yaml") {
+		if strings.HasSuffix(dep.Path, ".mockery.yaml") {
 			foundConfig = true
 		}
-		if strings.HasSuffix(dep.FilePath, "go.mod") {
+		if strings.HasSuffix(dep.Path, "go.mod") {
 			foundGoMod = true
 		}
-		if strings.HasSuffix(dep.FilePath, "store.go") {
+		if strings.HasSuffix(dep.Path, "store.go") {
 			foundStoreGo = true
 		}
 		// Verify timestamp is set
-		if dep.Timestamp == "" {
-			t.Errorf("expected timestamp to be set for %s", dep.FilePath)
-		}
 	}
 
 	if !foundConfig {

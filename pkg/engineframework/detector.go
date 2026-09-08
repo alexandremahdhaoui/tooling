@@ -179,13 +179,7 @@ func CallDetector(ctx context.Context, cmd string, args []string, toolName strin
 	// Convert mcptypes.Dependency to forge.ArtifactDependency
 	artifactDeps := make([]forge.ArtifactDependency, len(output.Dependencies))
 	for i, dep := range output.Dependencies {
-		artifactDeps[i] = forge.ArtifactDependency{
-			Type:            dep.Type,
-			FilePath:        dep.FilePath,
-			ExternalPackage: dep.ExternalPackage,
-			Timestamp:       dep.Timestamp,
-			Semver:          dep.Semver,
-		}
+		artifactDeps[i] = forge.ArtifactDependency{Path: dep.Path, Digest: dep.Digest}
 	}
 
 	return artifactDeps, nil

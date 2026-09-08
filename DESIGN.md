@@ -265,22 +265,29 @@ Sub-engines run sequentially. Each propagates environment variables to the next 
 forge build <name>  /  forge test-all
   |
   v
-shouldRebuild(artifact)?
+shouldRebuild(artifact, platform)?
   |
-  +-- No previous build?              --> YES, rebuild
-  +-- Artifact file missing?           --> YES, rebuild
-  +-- --force flag?                    --> YES, rebuild
-  +-- File dependency changed (mtime)? --> YES, rebuild
-  +-- External package version changed?--> YES, rebuild
-  +-- None of the above?              --> SKIP
+  +-- No record for this platform?               --> YES, rebuild
+  +-- Record carries no dependencies?            --> YES, rebuild
+  +-- A recorded path is missing or its content
+  |   digest differs from the recorded one?      --> YES, rebuild
+  +-- The record carries an output digest and the
+  |   output is missing or its digest differs?   --> YES, rebuild
+  +-- None of the above?                         --> SKIP
 
 After build:
-  go-dependency-detector scans Go AST
-  Records file paths + mtimes, package versions
-  Stores in artifact-store.yaml
+  the engine's dependency detector records every file it read
+  (go-dependency-detector: go.mod, go.sum and every file of every
+  local package the entry reaches; a generator: what it read and what
+  it wrote) as {path, sha256}; the engine records the output's sha256
+  when it has one. Stored in artifact-store.yaml.
 ```
 
-The `--force` / `-f` flag applies to both `forge build` and `forge test-all`. It bypasses all dependency checks and rebuilds every artifact.
+The rule knows no clock, no language and no filename. A `touch` changes
+nothing; a one-byte edit changes everything; a hand-edited generated file
+is stale by the same rule as an edited source; a fresh clone that dates
+every file today is exactly as fresh as its content says. There is no
+force flag: deleting an output is how a rebuild is asked for by hand.
 
 ### Parallel Execution
 

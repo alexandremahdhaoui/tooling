@@ -38,6 +38,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
@@ -45,24 +46,19 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
-// Dependency type constants
-const (
-	DependencyTypeFile            = "file"
-	DependencyTypeExternalPackage = "externalPackage"
-)
-
-// ArtifactDependency represents a dependency tracked for an artifact
+// ArtifactDependency is one file an artifact was built from, with the
+// digest of its content at the time. Freshness is the comparison of these
+// digests and nothing else: no modification time, no filename rule, no
+// notion of what kind of file it is. An external module's version lives in
+// the lock file the detector records beside the manifest, so a bump shows
+// as a changed lock. A generator lists what it wrote as well as what it
+// read, so a hand-edited generated file is a changed digest and the
+// artifact regenerates with no flag asking it to.
 type ArtifactDependency struct {
-	// Type is either "file" or "externalPackage"
-	Type string `json:"type" yaml:"type"`
-	// FilePath is the absolute path to file dependency (if Type=file)
-	FilePath string `json:"filePath,omitempty" yaml:"filePath,omitempty"`
-	// ExternalPackage is the package identifier (if Type=externalPackage, e.g., "github.com/foo/bar")
-	ExternalPackage string `json:"externalPackage,omitempty" yaml:"externalPackage,omitempty"`
-	// Timestamp is RFC3339 timestamp in UTC (if Type=file, e.g., "2025-11-23T10:00:00Z")
-	Timestamp string `json:"timestamp,omitempty" yaml:"timestamp,omitempty"`
-	// Semver is semantic version (if Type=externalPackage, supports pseudo-versions like "v0.0.0-20231010123456-abcdef123456")
-	Semver string `json:"semver,omitempty" yaml:"semver,omitempty"`
+	// Path is the absolute path of the file.
+	Path string `json:"path" yaml:"path"`
+	// Digest is the content digest, "sha256:" and hex.
+	Digest string `json:"digest" yaml:"digest"`
 }
 
 type Artifact struct {
@@ -83,6 +79,11 @@ type Artifact struct {
 	Timestamp string `json:"timestamp" yaml:"timestamp"`
 	// Version is the hash/commit
 	Version string `json:"version" yaml:"version"`
+	// Digest is the content digest of the output at Location, when the
+	// engine has one to give: a binary carries it, so an edited or deleted
+	// binary rebuilds; an image layout or a directory of generated files
+	// carries none and is judged on its dependencies alone.
+	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
 	// Dependencies is the list of dependencies tracked for this artifact
 	Dependencies []ArtifactDependency `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
 	// DependencyDetectorEngine is the URI of the dependency detector used (optional)
@@ -209,46 +210,19 @@ type ArtifactStore struct {
 	TestReports      map[string]*TestReport      `json:"testReports,omitempty"`
 }
 
-// Validate validates the ArtifactDependency
+// Validate validates the ArtifactDependency: a path and a digest, both
+// present, the digest in the store's one algorithm.
 func (ad *ArtifactDependency) Validate() error {
 	errs := NewValidationErrors()
 
-	// Validate Type is either "file" or "externalPackage"
-	if ad.Type != DependencyTypeFile && ad.Type != DependencyTypeExternalPackage {
-		errs.AddErrorf("ArtifactDependency: type must be %q or %q, got %q", DependencyTypeFile, DependencyTypeExternalPackage, ad.Type)
+	if ad.Path == "" {
+		errs.AddErrorf("ArtifactDependency: path is required")
 	}
 
-	// Validate file dependency fields
-	if ad.Type == DependencyTypeFile {
-		if ad.FilePath == "" {
-			errs.AddErrorf("ArtifactDependency: filePath is required when type=%q", DependencyTypeFile)
-		}
-		if ad.Timestamp == "" {
-			errs.AddErrorf("ArtifactDependency: timestamp is required when type=%q", DependencyTypeFile)
-		} else {
-			// Validate timestamp is RFC3339
-			if _, err := time.Parse(time.RFC3339, ad.Timestamp); err != nil {
-				errs.AddErrorf("ArtifactDependency: timestamp must be RFC3339 format, got %q: %v", ad.Timestamp, err)
-			}
-		}
-		// Validate no mixed fields
-		if ad.ExternalPackage != "" {
-			errs.AddErrorf("ArtifactDependency: file dependency cannot have externalPackage field set")
-		}
-	}
-
-	// Validate external package dependency fields
-	if ad.Type == DependencyTypeExternalPackage {
-		if ad.ExternalPackage == "" {
-			errs.AddErrorf("ArtifactDependency: externalPackage is required when type=%q", DependencyTypeExternalPackage)
-		}
-		// Validate no mixed fields
-		if ad.FilePath != "" {
-			errs.AddErrorf("ArtifactDependency: externalPackage dependency cannot have filePath field set")
-		}
-		if ad.Timestamp != "" {
-			errs.AddErrorf("ArtifactDependency: externalPackage dependency cannot have timestamp field set")
-		}
+	if ad.Digest == "" {
+		errs.AddErrorf("ArtifactDependency: digest is required for %s", ad.Path)
+	} else if !strings.HasPrefix(ad.Digest, DigestPrefix) {
+		errs.AddErrorf("ArtifactDependency: digest for %s must start with %q, got %q", ad.Path, DigestPrefix, ad.Digest)
 	}
 
 	return errs.ErrorOrNil()
@@ -349,6 +323,7 @@ func ReadArtifactStore(path string) (ArtifactStore, error) {
 	// A record with a half-named platform is the same case.
 	kept := out.Artifacts[:0]
 	dropped := 0
+	undigested := 0
 
 	for _, artifact := range out.Artifacts {
 		if err := artifact.Type.Validate(); err != nil || (artifact.OS == "") != (artifact.Arch == "") {
@@ -357,11 +332,25 @@ func ReadArtifactStore(path string) (ArtifactStore, error) {
 			continue
 		}
 
+		// A record written before digests carries dependencies with a path
+		// and a clock, or a package and a version, and no digest. It says
+		// nothing about freshness, so it reads as "not tracked": the next
+		// build rebuilds once and rewrites it. The record itself stays, so
+		// the last build's location and version are still known.
+		if !dependenciesDigested(artifact.Dependencies) {
+			undigested++
+			artifact.Dependencies = nil
+		}
+
 		kept = append(kept, artifact)
 	}
 
 	if dropped > 0 {
 		fmt.Fprintf(os.Stderr, "forge: dropping %d artifact record(s) an older forge wrote to %s; the next build rewrites them\n", dropped, path)
+	}
+
+	if undigested > 0 {
+		fmt.Fprintf(os.Stderr, "forge: %d artifact record(s) in %s carry dependencies with no digest; they rebuild once\n", undigested, path)
 	}
 
 	out.Artifacts = kept
@@ -372,6 +361,18 @@ func ReadArtifactStore(path string) (ArtifactStore, error) {
 	}
 
 	return out, nil
+}
+
+// dependenciesDigested reports whether every dependency carries a path and a
+// digest, the only shape the freshness rule can read.
+func dependenciesDigested(deps []ArtifactDependency) bool {
+	for _, dep := range deps {
+		if dep.Path == "" || dep.Digest == "" {
+			return false
+		}
+	}
+
+	return true
 }
 
 // ReadOrCreateArtifactStore reads the artifact store from the specified path.

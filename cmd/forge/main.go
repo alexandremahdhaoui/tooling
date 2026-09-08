@@ -145,19 +145,10 @@ func main() {
 			os.Exit(1)
 		}
 	case "build":
-		// Parse the force flag. How strictly a build treats its locks is not
-		// a flag: forge.yaml declares it once, as `frozen:`.
-		forceRebuild := false
-		filteredArgs := make([]string, 0, len(cmdArgs))
-		for _, arg := range cmdArgs {
-			switch arg {
-			case "-f", "--force":
-				forceRebuild = true
-			default:
-				filteredArgs = append(filteredArgs, arg)
-			}
-		}
-		if err := runBuild(filteredArgs, forceRebuild); err != nil {
+		// No flag decides anything here: what builds is declared, how
+		// strictly is declared, and whether a build is needed is the digest
+		// of what it was built from.
+		if err := runBuild(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -167,18 +158,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "test-all":
-		// Parse the force flag, exactly as build does.
-		forceRebuild := false
-		filteredArgs := make([]string, 0, len(cmdArgs))
-		for _, arg := range cmdArgs {
-			switch arg {
-			case "-f", "--force":
-				forceRebuild = true
-			default:
-				filteredArgs = append(filteredArgs, arg)
-			}
-		}
-		if err := runTestAll(filteredArgs, forceRebuild); err != nil {
+		if err := runTestAll(cmdArgs); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -378,9 +358,9 @@ Usage:
   forge [global flags] <command> [args...]
 
 Build and test (this repo's forge.yaml):
-  build [-f|--force] [artifact]   Build every artifact, or one; lazy by default
+  build [artifact]                Build every artifact, or one; skips what its digests say is fresh
   test run <stage>                Run one test stage
-  test-all [-f|--force]           Build everything, then every stage, fail-fast
+  test-all                        Build everything, then every stage, fail-fast
   list [build|test]               Show what this repo can build and test
 
 Run:

@@ -53,7 +53,7 @@ func TestABuildTakesNoFlagThatCarriesPolicy(t *testing.T) {
 		{"--platforms=linux/amd64"},
 		{"--frozen"},
 	} {
-		err := runBuild(args, false)
+		err := runBuild(args)
 		if err == nil || !strings.Contains(err.Error(), args[0]) {
 			t.Fatalf("%v: must be refused naming the flag, got %v", args, err)
 		}
@@ -68,7 +68,7 @@ func TestFreshnessIsPerPlatform(t *testing.T) {
 		Location: "/nowhere", Timestamp: "2026-01-01T00:00:00Z",
 	}}}
 
-	rebuild, reason, err := shouldRebuild("forge", []string{"linux/amd64", "linux/arm64"}, store, false)
+	rebuild, reason, err := shouldRebuild("forge", []string{"linux/amd64", "linux/arm64"}, store)
 	if err != nil {
 		t.Fatal(err)
 	}

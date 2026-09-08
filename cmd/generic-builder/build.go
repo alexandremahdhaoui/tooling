@@ -161,10 +161,16 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.
 			built := builtPath(input.Dest, input.Name, platform, host, goos, goarch)
 
 			if info, err := os.Stat(built); err == nil && !info.IsDir() {
+				digest, err := forge.DigestFile(built)
+				if err != nil {
+					return nil, err
+				}
+
 				artifact.Location = built
 				artifact.Type = forge.TypeBinary
 				artifact.OS = goos
 				artifact.Arch = goarch
+				artifact.Digest = digest
 			}
 		}
 

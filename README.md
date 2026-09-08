@@ -124,12 +124,12 @@ See [forge-yaml-schema.md](./docs/user/forge-yaml-schema.md) for the complete fi
 # Build
 forge build                          # Build all artifacts
 forge build my-app                   # Build one artifact
-forge build --force                  # Force rebuild (skip lazy rebuild)
+# There is no force flag: a build is skipped only when every recorded input
+# and output still has the digest it was built with, so an edit rebuilds
+# and a touch does not. To rebuild anyway, delete the output.
 
 # Test
 forge test-all                       # Build + run all test stages
-forge test-all --force               # Force rebuild all artifacts, then test
-forge test-all -f                    # Short form of --force
 forge test unit run                  # Run one test stage
 forge test integration run           # Run with auto-created environment
 

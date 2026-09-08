@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
@@ -273,8 +272,8 @@ func TestBuildDependencies(t *testing.T) {
 			wantErr:   false,
 			checkDeps: func(t *testing.T, deps []forge.ArtifactDependency, dir string) {
 				for i, dep := range deps {
-					if dep.Type != forge.DependencyTypeFile {
-						t.Errorf("dependency[%d].Type = %q, want %q", i, dep.Type, forge.DependencyTypeFile)
+					if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+						t.Errorf("dependency[%d].Digest = %q, want a %s digest", i, dep.Digest, forge.DigestPrefix)
 					}
 				}
 			},
@@ -306,14 +305,14 @@ func TestBuildDependencies(t *testing.T) {
 			wantErr:   false,
 			checkDeps: func(t *testing.T, deps []forge.ArtifactDependency, dir string) {
 				for i, dep := range deps {
-					if !filepath.IsAbs(dep.FilePath) {
-						t.Errorf("dependency[%d].FilePath = %q is not absolute", i, dep.FilePath)
+					if !filepath.IsAbs(dep.Path) {
+						t.Errorf("dependency[%d].Path = %q is not absolute", i, dep.Path)
 					}
 				}
 			},
 		},
 		{
-			name: "each dependency has valid RFC3339 timestamp",
+			name: "each dependency carries the digest of its content",
 			setup: func(t *testing.T, dir string) []string {
 				files := []string{"timestamped.proto"}
 				err := os.WriteFile(filepath.Join(dir, "timestamped.proto"), []byte("syntax = \"proto3\";"), 0o644)
@@ -326,13 +325,12 @@ func TestBuildDependencies(t *testing.T) {
 			wantErr:   false,
 			checkDeps: func(t *testing.T, deps []forge.ArtifactDependency, dir string) {
 				for i, dep := range deps {
-					if dep.Timestamp == "" {
-						t.Errorf("dependency[%d].Timestamp is empty", i)
-						continue
-					}
-					_, err := time.Parse(time.RFC3339, dep.Timestamp)
+					want, err := forge.DigestFile(dep.Path)
 					if err != nil {
-						t.Errorf("dependency[%d].Timestamp = %q is not valid RFC3339: %v", i, dep.Timestamp, err)
+						t.Fatalf("digesting %s: %v", dep.Path, err)
+					}
+					if dep.Digest != want {
+						t.Errorf("dependency[%d].Digest = %q, want %q", i, dep.Digest, want)
 					}
 				}
 			},

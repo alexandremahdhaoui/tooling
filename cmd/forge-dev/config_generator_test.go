@@ -136,11 +136,11 @@ func TestTheMainGeneratorFilesSurviveASecondRunWithAConfigGenerator(t *testing.T
 	}
 
 	withTwoStubs(t, &twoStubCaller{answers: answers})
-	_, err := generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev", Force: true})
+	_, err := generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev"})
 	require.NoError(t, err)
 
 	withTwoStubs(t, &twoStubCaller{answers: answers})
-	_, err = generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev", Force: true})
+	_, err = generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev"})
 	require.NoError(t, err)
 
 	require.FileExists(t, filepath.Join(dir, "zz_generated_lib.rs"))
@@ -158,7 +158,7 @@ func TestASecondRunOfACellWithAConfigGeneratorRemovesNothing(t *testing.T) {
 	}
 
 	withTwoStubs(t, &twoStubCaller{answers: answers})
-	_, err := generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev", Force: true})
+	_, err := generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev"})
 	require.NoError(t, err)
 
 	var logged strings.Builder
@@ -168,7 +168,7 @@ func TestASecondRunOfACellWithAConfigGeneratorRemovesNothing(t *testing.T) {
 	t.Cleanup(func() { log.SetOutput(previousOutput) })
 
 	withTwoStubs(t, &twoStubCaller{answers: answers})
-	_, err = generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev", Force: true})
+	_, err = generate(context.Background(), mcptypes.BuildInput{Name: "fixture-gui", Src: dir, Engine: "forge://forge-dev"})
 	require.NoError(t, err)
 
 	require.NotContains(t, logged.String(), "removed the stale generated file")

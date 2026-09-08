@@ -16,12 +16,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/alexandremahdhaoui/forge/internal/orchestrate"
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
@@ -62,7 +62,6 @@ func appendSpecToGroups(groups []engineGroup, engine string, params map[string]a
 // Both CLI and MCP call this function.
 //
 // artifactName filters to a single artifact if non-empty.
-// forceRebuild bypasses lazy rebuild checks.
 //
 // This function MUST NOT write to stdout. Stdout is the JSON-RPC
 // transport in MCP mode. Progress messages go to stderr.
@@ -86,7 +85,7 @@ func platformsFor(spec forge.BuildSpec) []string {
 	return spec.Platforms
 }
 
-func buildAll(artifactName string, forceRebuild bool) (*BuildAllResult, error) {
+func buildAll(artifactName string) (*BuildAllResult, error) {
 	// Load forge.yaml configuration
 	config, err := loadConfig()
 	if err != nil {
@@ -141,7 +140,7 @@ func buildAll(artifactName string, forceRebuild bool) (*BuildAllResult, error) {
 
 		// Check if rebuild is needed (lazy rebuild logic), per platform: a
 		// host binary that is fresh says nothing about the arm64 one.
-		needsRebuild, reason, err := shouldRebuild(spec.Name, platforms, store, forceRebuild)
+		needsRebuild, reason, err := shouldRebuild(spec.Name, platforms, store)
 		if err != nil {
 			// If error checking rebuild status, log warning and rebuild (safe default)
 			fmt.Fprintf(os.Stderr, "Warning: failed to check rebuild status for %s: %v (will rebuild)\n", spec.Name, err)
@@ -263,7 +262,7 @@ func buildAll(artifactName string, forceRebuild bool) (*BuildAllResult, error) {
 					continue
 				}
 
-				artifacts, err = buildWithSingleEngine(command, args, specs, dirs, engineConfig, forceRebuild, frozenBuild)
+				artifacts, err = buildWithSingleEngine(command, args, specs, dirs, engineConfig, frozenBuild)
 				if err != nil {
 					result.BuildErrors = append(result.BuildErrors, fmt.Sprintf("build failed for %s: %v", engineURI, err))
 					continue
@@ -277,7 +276,7 @@ func buildAll(artifactName string, forceRebuild bool) (*BuildAllResult, error) {
 				continue
 			}
 
-			artifacts, err = buildWithSingleEngine(command, args, specs, dirs, nil, forceRebuild, frozenBuild)
+			artifacts, err = buildWithSingleEngine(command, args, specs, dirs, nil, frozenBuild)
 			if err != nil {
 				result.BuildErrors = append(result.BuildErrors, fmt.Sprintf("build failed for %s: %v", engineURI, err))
 				continue
@@ -309,17 +308,10 @@ func buildAll(artifactName string, forceRebuild bool) (*BuildAllResult, error) {
 	return result, nil
 }
 
-// shouldRebuild determines if an artifact needs to be rebuilt, for every
-// platform the entry builds this time. Returns (needsRebuild bool, reason
-// string, error). If forceRebuild is true, always returns (true, "force flag
-// set", nil). Otherwise the first platform whose record is missing or
+// shouldRebuild answers whether an artifact needs building, for every
+// platform the entry builds. The first platform whose record is missing or
 // stale decides, because one engine call builds them all.
-func shouldRebuild(artifactName string, platforms []string, store forge.ArtifactStore, forceRebuild bool) (bool, string, error) {
-	// Step 1: If forceRebuild is true, always rebuild
-	if forceRebuild {
-		return true, "force flag set", nil
-	}
-
+func shouldRebuild(artifactName string, platforms []string, store forge.ArtifactStore) (bool, string, error) {
 	for _, platform := range platforms {
 		rebuild, reason, err := platformNeedsRebuild(artifactName, platform, store)
 		if err != nil || rebuild {
@@ -327,99 +319,57 @@ func shouldRebuild(artifactName string, platforms []string, store forge.Artifact
 		}
 	}
 
-	// If all dependencies unchanged, no rebuild needed
 	return false, "", nil
 }
 
-// platformNeedsRebuild is the freshness of one artifact record: the one the
-// store holds for this name and platform, or, for an entry whose engine
-// builds nothing platform-tied - a generator, a formatter - the record it
-// holds under no platform.
+// platformNeedsRebuild is the whole of the freshness rule, and it knows no
+// language, no filename and no clock: no record, or a record with no
+// dependencies, rebuilds; any recorded path that is missing or whose
+// content digest differs rebuilds; an output that carries a digest and is
+// missing or differs rebuilds. Nothing else does. What a dependency is was
+// decided by the detector or the engine that recorded it, and a generator
+// records what it wrote beside what it read, so a hand-edited generated
+// file is stale by the same rule as an edited source.
 func platformNeedsRebuild(artifactName, platform string, store forge.ArtifactStore) (bool, string, error) {
-	// Step 2: Look up latest artifact for artifactName in store
 	artifact, err := forge.GetLatestArtifact(store, artifactName, platform)
 	if err != nil {
 		artifact, err = forge.GetLatestArtifact(store, artifactName, "")
 	}
 
 	if err != nil {
-		// Step 3: If no artifact found, rebuild
 		return true, "no previous build for " + platform, nil
 	}
 
-	// Step 4: Check if artifact location still exists on filesystem
-	if _, err := os.Stat(strings.TrimPrefix(artifact.Location, "file://")); os.IsNotExist(err) {
-		return true, "artifact file missing for " + platform, nil
-	} else if err != nil {
-		// If stat fails for other reason, assume rebuild needed
-		return true, fmt.Sprintf("cannot access artifact file: %v", err), nil
-	}
-
-	// Step 5: If artifact has no Dependencies field (nil or empty)
 	if len(artifact.Dependencies) == 0 {
 		return true, "dependencies not tracked", nil
 	}
 
-	// Step 7: If artifact has no DependencyDetectorEngine, rebuild
-	if artifact.DependencyDetectorEngine == "" {
-		return true, "dependency detector not configured", nil
-	}
-
-	// Step 6: Compare using STORED dependencies ONLY (DO NOT re-detect)
-	manifestTracked := false
 	for _, dep := range artifact.Dependencies {
-		if dep.Type == forge.DependencyTypeFile {
-			// Check if the module manifest is tracked
-			if strings.HasSuffix(dep.FilePath, "go.mod") {
-				manifestTracked = true
+		current, err := forge.DigestFile(dep.Path)
+		if err != nil {
+			if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
+				return true, fmt.Sprintf("dependency %s missing", dep.Path), nil
 			}
 
-			// Check if file still exists
-			fileInfo, err := os.Stat(dep.FilePath)
-			if os.IsNotExist(err) {
-				return true, fmt.Sprintf("dependency file %s missing", dep.FilePath), nil
-			} else if err != nil {
-				// If stat fails for other reason, assume changed (safe default)
-				return true, fmt.Sprintf("cannot access dependency file %s: %v", dep.FilePath, err), nil
-			}
-
-			// Get current timestamp and format as RFC3339 UTC
-			currentTimestamp := fileInfo.ModTime().UTC().Format(time.RFC3339)
-
-			// Parse stored timestamp
-			storedTime, err := time.Parse(time.RFC3339, dep.Timestamp)
-			if err != nil {
-				// Parse error - assume changed (safe default)
-				return true, fmt.Sprintf("dependency %s timestamp parse error", dep.FilePath), nil
-			}
-
-			// Parse current timestamp
-			currentTime, err := time.Parse(time.RFC3339, currentTimestamp)
-			if err != nil {
-				// Parse error - assume changed (safe default)
-				return true, fmt.Sprintf("dependency %s current timestamp parse error", dep.FilePath), nil
-			}
-
-			// Compare timestamps using .Equal()
-			if !currentTime.Equal(storedTime) {
-				return true, fmt.Sprintf("dependency %s modified", dep.FilePath), nil
-			}
+			return true, fmt.Sprintf("cannot read dependency %s: %v", dep.Path, err), nil
 		}
-		// External package dependencies: DO NOT re-parse the manifest
-		// External packages are considered unchanged (semver only changes if the manifest changes)
-	}
 
-	// If the manifest is NOT in file dependencies and we have external package dependencies
-	hasExternalDeps := false
-	for _, dep := range artifact.Dependencies {
-		if dep.Type == forge.DependencyTypeExternalPackage {
-			hasExternalDeps = true
-			break
+		if current != dep.Digest {
+			return true, fmt.Sprintf("dependency %s changed", dep.Path), nil
 		}
 	}
-	if hasExternalDeps && !manifestTracked {
-		// Log warning once (don't fail build)
-		fmt.Fprintf(os.Stderr, "Warning: the module manifest is not tracked as a dependency for %s, external package changes may not trigger rebuild\n", artifactName)
+
+	if artifact.Digest != "" {
+		location := strings.TrimPrefix(artifact.Location, "file://")
+
+		current, err := forge.DigestFile(location)
+		if err != nil {
+			return true, fmt.Sprintf("artifact %s missing for %s", location, platform), nil
+		}
+
+		if current != artifact.Digest {
+			return true, fmt.Sprintf("artifact %s changed since it was built", location), nil
+		}
 	}
 
 	return false, "", nil
@@ -432,7 +382,6 @@ func buildWithSingleEngine(
 	specs []map[string]any,
 	dirs *ForgeDirs,
 	engineConfig *forge.EngineConfig,
-	forceRebuild bool,
 	frozenBuild bool,
 ) ([]forge.Artifact, error) {
 	// Ask the engine what it declares before handing it anything optional.
@@ -451,9 +400,6 @@ func buildWithSingleEngine(
 		clonedSpec["tmpDir"] = dirs.TmpDir
 		clonedSpec["buildDir"] = dirs.BuildDir
 		clonedSpec["rootDir"] = dirs.RootDir
-
-		// Inject force rebuild flag
-		clonedSpec["force"] = forceRebuild
 
 		// The repo's frozen setting reaches only an engine that declared it
 		// reads one. Sent to every engine it would be silently ignored by

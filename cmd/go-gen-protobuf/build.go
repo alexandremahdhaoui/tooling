@@ -162,19 +162,12 @@ func buildDependencies(srcDir string, protoFiles []string) ([]forge.ArtifactDepe
 		}
 
 		// Get file modification time
-		info, err := os.Stat(absPath)
+		dep, err := forge.DependencyOf(absPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to stat file %s: %w", absPath, err)
+			return nil, err
 		}
 
-		// Format timestamp as RFC3339 UTC
-		timestamp := info.ModTime().UTC().Format(time.RFC3339)
-
-		deps = append(deps, forge.ArtifactDependency{
-			Type:      forge.DependencyTypeFile,
-			FilePath:  absPath,
-			Timestamp: timestamp,
-		})
+		deps = append(deps, dep)
 	}
 
 	return deps, nil

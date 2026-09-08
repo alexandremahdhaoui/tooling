@@ -564,7 +564,7 @@ func buildNeeds(testSpec *forge.TestSpec) error {
 	for _, need := range testSpec.Needs {
 		fmt.Fprintf(os.Stderr, "🔨 Building %s, which stage %s needs\n", need, testSpec.Name)
 
-		result, err := buildAll(need, false)
+		result, err := buildAll(need)
 		if err != nil {
 			return fmt.Errorf("building %s for stage %s: %w", need, testSpec.Name, err)
 		}

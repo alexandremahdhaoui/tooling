@@ -18,6 +18,7 @@ package mcptypes
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -428,69 +429,28 @@ func TestDetectDependenciesInputJSONMarshaling(t *testing.T) {
 	}
 }
 
-// TestDependencyJSONMarshaling tests Dependency JSON marshaling/unmarshaling
+// TestDependencyJSONMarshaling pins the wire shape of a dependency: a path
+// and the digest of its content, nothing else. A round trip keeps both.
 func TestDependencyJSONMarshaling(t *testing.T) {
-	tests := []struct {
-		name string
-		dep  Dependency
-	}{
-		{
-			name: "File dependency",
-			dep: Dependency{
-				Type:      "file",
-				FilePath:  "/workspace/pkg/util/helper.go",
-				Timestamp: "2025-11-23T10:00:00Z",
-			},
-		},
-		{
-			name: "External package dependency with standard semver",
-			dep: Dependency{
-				Type:            "externalPackage",
-				ExternalPackage: "github.com/foo/bar",
-				Semver:          "v1.2.3",
-			},
-		},
-		{
-			name: "External package dependency with pseudo-version",
-			dep: Dependency{
-				Type:            "externalPackage",
-				ExternalPackage: "github.com/foo/bar",
-				Semver:          "v0.0.0-20231010123456-abcdef123456",
-			},
-		},
+	dep := Dependency{
+		Path:   "/workspace/pkg/util/helper.go",
+		Digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Test marshaling
-			data, err := json.Marshal(tt.dep)
-			if err != nil {
-				t.Fatalf("Failed to marshal: %v", err)
-			}
-
-			// Test unmarshaling
-			var unmarshaled Dependency
-			if err := json.Unmarshal(data, &unmarshaled); err != nil {
-				t.Fatalf("Failed to unmarshal: %v", err)
-			}
-
-			// Compare all fields
-			if unmarshaled.Type != tt.dep.Type {
-				t.Errorf("Type mismatch: got %s, want %s", unmarshaled.Type, tt.dep.Type)
-			}
-			if unmarshaled.FilePath != tt.dep.FilePath {
-				t.Errorf("FilePath mismatch: got %s, want %s", unmarshaled.FilePath, tt.dep.FilePath)
-			}
-			if unmarshaled.ExternalPackage != tt.dep.ExternalPackage {
-				t.Errorf("ExternalPackage mismatch: got %s, want %s", unmarshaled.ExternalPackage, tt.dep.ExternalPackage)
-			}
-			if unmarshaled.Timestamp != tt.dep.Timestamp {
-				t.Errorf("Timestamp mismatch: got %s, want %s", unmarshaled.Timestamp, tt.dep.Timestamp)
-			}
-			if unmarshaled.Semver != tt.dep.Semver {
-				t.Errorf("Semver mismatch: got %s, want %s", unmarshaled.Semver, tt.dep.Semver)
-			}
-		})
+	data, err := json.Marshal(dep)
+	if err != nil {
+		t.Fatalf("Failed to marshal: %v", err)
+	}
+	for _, key := range []string{`"path"`, `"digest"`} {
+		if !strings.Contains(string(data), key) {
+			t.Errorf("marshaled dependency lacks %s: %s", key, data)
+		}
+	}
+	var unmarshaled Dependency
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("Failed to unmarshal: %v", err)
+	}
+	if unmarshaled != dep {
+		t.Errorf("round trip changed the dependency: got %+v, want %+v", unmarshaled, dep)
 	}
 }
 
@@ -498,16 +458,8 @@ func TestDependencyJSONMarshaling(t *testing.T) {
 func TestDetectDependenciesOutputJSONMarshaling(t *testing.T) {
 	output := DetectDependenciesOutput{
 		Dependencies: []Dependency{
-			{
-				Type:      "file",
-				FilePath:  "/workspace/pkg/util/helper.go",
-				Timestamp: "2025-11-23T10:00:00Z",
-			},
-			{
-				Type:            "externalPackage",
-				ExternalPackage: "github.com/foo/bar",
-				Semver:          "v1.2.3",
-			},
+			{Path: "/workspace/pkg/util/helper.go", Digest: "sha256:aa"},
+			{Path: "/workspace/go.sum", Digest: "sha256:bb"},
 		},
 	}
 
@@ -530,11 +482,8 @@ func TestDetectDependenciesOutputJSONMarshaling(t *testing.T) {
 
 	// Verify first dependency
 	if len(unmarshaled.Dependencies) > 0 {
-		if unmarshaled.Dependencies[0].Type != output.Dependencies[0].Type {
-			t.Errorf("First dependency type mismatch: got %s, want %s", unmarshaled.Dependencies[0].Type, output.Dependencies[0].Type)
-		}
-		if unmarshaled.Dependencies[0].FilePath != output.Dependencies[0].FilePath {
-			t.Errorf("First dependency filepath mismatch: got %s, want %s", unmarshaled.Dependencies[0].FilePath, output.Dependencies[0].FilePath)
+		if unmarshaled.Dependencies[0] != output.Dependencies[0] {
+			t.Errorf("First dependency mismatch: got %+v, want %+v", unmarshaled.Dependencies[0], output.Dependencies[0])
 		}
 	}
 }

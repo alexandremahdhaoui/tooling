@@ -145,7 +145,7 @@ components:
 		}
 	})
 
-	t.Run("skips regeneration when checksums match", func(t *testing.T) {
+	t.Run("regenerates to the same bytes over the same inputs", func(t *testing.T) {
 		// Create temp directory with test files
 		tmpDir := t.TempDir()
 
@@ -196,14 +196,14 @@ components:
 			t.Fatalf("first generate() error: %v", err)
 		}
 
-		// Get file modification time
 		specPath := filepath.Join(tmpDir, GeneratedSpecFile)
-		stat1, err := os.Stat(specPath)
+		bytes1, err := os.ReadFile(specPath)
 		if err != nil {
-			t.Fatalf("stat generated file: %v", err)
+			t.Fatalf("read generated file: %v", err)
 		}
 
-		// Second run (should skip regeneration)
+		// Second run writes the same bytes; forge's digest rule, not the
+		// generator, decides whether a build runs at all.
 		artifact2, err := generate(ctx, input)
 		if err != nil {
 			t.Fatalf("second generate() error: %v", err)
@@ -214,13 +214,12 @@ components:
 			t.Errorf("checksums differ: %q vs %q", artifact1.Version, artifact2.Version)
 		}
 
-		// Verify file not modified (skipped)
-		stat2, err := os.Stat(specPath)
+		bytes2, err := os.ReadFile(specPath)
 		if err != nil {
-			t.Fatalf("stat generated file after second run: %v", err)
+			t.Fatalf("read generated file after second run: %v", err)
 		}
-		if !stat1.ModTime().Equal(stat2.ModTime()) {
-			t.Error("file was modified when it should have been skipped")
+		if string(bytes1) != string(bytes2) {
+			t.Error("regenerating over unchanged inputs must write the same bytes")
 		}
 	})
 

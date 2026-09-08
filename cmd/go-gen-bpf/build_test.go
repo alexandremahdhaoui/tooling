@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
@@ -440,8 +439,8 @@ func TestBuildDependencies(t *testing.T) {
 					t.Errorf("expected 1 dependency, got %d", len(deps))
 					return
 				}
-				if deps[0].Type != forge.DependencyTypeFile {
-					t.Errorf("dependency.Type = %q, want %q", deps[0].Type, forge.DependencyTypeFile)
+				if !strings.HasPrefix(deps[0].Digest, forge.DigestPrefix) {
+					t.Errorf("dependency.Digest = %q, want a %s digest", deps[0].Digest, forge.DigestPrefix)
 				}
 			},
 		},
@@ -471,13 +470,13 @@ func TestBuildDependencies(t *testing.T) {
 					t.Errorf("expected 1 dependency, got %d", len(deps))
 					return
 				}
-				if !filepath.IsAbs(deps[0].FilePath) {
-					t.Errorf("dependency.FilePath = %q is not absolute", deps[0].FilePath)
+				if !filepath.IsAbs(deps[0].Path) {
+					t.Errorf("dependency.FilePath = %q is not absolute", deps[0].Path)
 				}
 			},
 		},
 		{
-			name: "dependency has valid RFC3339 timestamp",
+			name: "dependency carries the digest of its content",
 			setup: func(t *testing.T, dir string) (string, os.FileInfo) {
 				srcPath := filepath.Join(dir, "timestamped.c")
 				err := os.WriteFile(srcPath, []byte("// BPF program"), 0o644)
@@ -497,13 +496,12 @@ func TestBuildDependencies(t *testing.T) {
 					t.Errorf("expected 1 dependency, got %d", len(deps))
 					return
 				}
-				if deps[0].Timestamp == "" {
-					t.Errorf("dependency.Timestamp is empty")
-					return
-				}
-				_, err := time.Parse(time.RFC3339, deps[0].Timestamp)
+				want, err := forge.DigestFile(srcPath)
 				if err != nil {
-					t.Errorf("dependency.Timestamp = %q is not valid RFC3339: %v", deps[0].Timestamp, err)
+					t.Fatalf("digesting %s: %v", srcPath, err)
+				}
+				if deps[0].Digest != want {
+					t.Errorf("dependency.Digest = %q, want %q", deps[0].Digest, want)
 				}
 			},
 		},

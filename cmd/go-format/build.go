@@ -48,7 +48,7 @@ func Build(ctx context.Context, input mcptypes.BuildInput, spec *Spec) ([]forge.
 
 	// Return artifact using CreateArtifact (formatted code has no version)
 	return engineframework.One(engineframework.CreateArtifact(
-		"formatted-code",
+		input.Name,
 		forge.TypeGenerated,
 		path,
 	)), nil

@@ -162,16 +162,16 @@ func TestNonGoGenerationEmitsTheLanguageServerAndNoGoFiles(t *testing.T) {
 	}
 }
 
-func TestChecksumSkipsRegenerationForALanguageServer(t *testing.T) {
+// A language server regenerates to the same bytes over the same inputs;
+// nothing in the generator decides whether to run, forge's digests do.
+func TestRegenerationOfALanguageServerIsDeterministic(t *testing.T) {
 	dir := generateLangFixture(t, "python")
 
 	path := filepath.Join(dir, LangMainFiles["python"])
-	before, err := os.Stat(path)
+	before, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	time.Sleep(10 * time.Millisecond)
 
 	_, err = generate(context.Background(), mcptypes.BuildInput{
 		Name: "echo-engine", Src: dir, Engine: "forge://forge-dev",
@@ -180,13 +180,13 @@ func TestChecksumSkipsRegenerationForALanguageServer(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	after, err := os.Stat(path)
+	after, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !after.ModTime().Equal(before.ModTime()) {
-		t.Error("matching checksums must skip regeneration")
+	if string(after) != string(before) {
+		t.Error("regenerating over unchanged inputs must write the same bytes")
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
@@ -86,10 +87,14 @@ int minimal() {
 		t.Fatalf("FromMap() failed: %v", err)
 	}
 
-	artifact, err := Build(context.Background(), input, spec)
+	artifacts, err := Build(context.Background(), input, spec)
 	if err != nil {
 		t.Fatalf("Build() failed: %v", err)
 	}
+	if len(artifacts) != 1 {
+		t.Fatalf("Build() answered %d artifacts, want 1", len(artifacts))
+	}
+	artifact := artifacts[0]
 
 	// Verify artifact has correct name
 	if artifact.Name != "test-bpf" {
@@ -113,14 +118,11 @@ int minimal() {
 		// Check that the source file is in dependencies
 		foundSourceFile := false
 		for _, dep := range artifact.Dependencies {
-			if dep.Type != "file" {
-				t.Errorf("dependency.Type = %q, want %q", dep.Type, "file")
-			}
-			if strings.HasSuffix(dep.FilePath, "minimal.c") {
+			if strings.HasSuffix(dep.Path, "minimal.c") {
 				foundSourceFile = true
 			}
-			if dep.Timestamp == "" {
-				t.Error("dependency.Timestamp is empty")
+			if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+				t.Errorf("dependency.Digest = %q, want a content digest", dep.Digest)
 			}
 		}
 		if !foundSourceFile {
@@ -311,10 +313,14 @@ int full_options() { return 0; }
 		t.Fatalf("FromMap() failed: %v", err)
 	}
 
-	artifact, err := Build(context.Background(), input, spec)
+	artifacts, err := Build(context.Background(), input, spec)
 	if err != nil {
 		t.Fatalf("Build() failed: %v", err)
 	}
+	if len(artifacts) != 1 {
+		t.Fatalf("Build() answered %d artifacts, want 1", len(artifacts))
+	}
+	artifact := artifacts[0]
 
 	// Verify artifact
 	if artifact.Name != "test-full-options" {

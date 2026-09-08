@@ -19,7 +19,10 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
@@ -55,14 +58,11 @@ func TestDetectOpenAPIDependencies_SingleSpec(t *testing.T) {
 
 	// Verify the dependency
 	dep := output.Dependencies[0]
-	if dep.Type != "file" {
-		t.Errorf("Expected type 'file', got '%s'", dep.Type)
+	if dep.Path != specPath {
+		t.Errorf("Expected Path '%s', got '%s'", specPath, dep.Path)
 	}
-	if dep.FilePath != specPath {
-		t.Errorf("Expected FilePath '%s', got '%s'", specPath, dep.FilePath)
-	}
-	if dep.Timestamp == "" {
-		t.Error("Expected Timestamp to be non-empty")
+	if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+		t.Errorf("Expected a content digest, got %q", dep.Digest)
 	}
 }
 
@@ -102,16 +102,13 @@ func TestDetectOpenAPIDependencies_MultipleSpecs(t *testing.T) {
 	foundPetstore := false
 	foundUsers := false
 	for _, dep := range output.Dependencies {
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file', got '%s'", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest, got %q", dep.Digest)
 		}
-		if dep.Timestamp == "" {
-			t.Error("Expected Timestamp to be non-empty")
-		}
-		if dep.FilePath == petstorePath {
+		if dep.Path == petstorePath {
 			foundPetstore = true
 		}
-		if dep.FilePath == usersPath {
+		if dep.Path == usersPath {
 			foundUsers = true
 		}
 	}

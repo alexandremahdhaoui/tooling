@@ -167,7 +167,7 @@ func TestGenericEngineGeneratesAndCompiles(t *testing.T) {
 	engine := writeGenericEngine(t, root)
 
 	artifact, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev", Force: true,
+		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev",
 	})
 	if err != nil {
 		t.Fatalf("generate: %v", err)
@@ -210,7 +210,7 @@ func TestGenericEngineGeneratesOneTypeAndWrapperPerTool(t *testing.T) {
 	engine := writeGenericEngine(t, root)
 
 	if _, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev", Force: true,
+		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev",
 	}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -283,7 +283,7 @@ func TestGenericEngineRejectsAToolNamingAnUnknownSchema(t *testing.T) {
 	}
 
 	_, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev", Force: true,
+		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev",
 	})
 	if err == nil {
 		t.Fatal("generate accepted a tool naming a schema that does not exist")
@@ -301,7 +301,7 @@ func TestGenericEngineDocsUseTheConfiguredBaseURL(t *testing.T) {
 	engine := writeGenericEngine(t, root)
 
 	if _, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev", Force: true,
+		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev",
 	}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestGenericEngineWithExternalSpecTypesCompiles(t *testing.T) {
 	}
 
 	if _, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev", Force: true,
+		Name: "ci-state-git", Src: engine, Engine: "forge://forge-dev",
 	}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}

@@ -72,7 +72,7 @@ layout:
 	}
 
 	if _, err := generate(context.Background(), mcptypes.BuildInput{
-		Name: "ci-manager-dryrun", Src: engine, Engine: "forge://forge-dev", Force: true,
+		Name: "ci-manager-dryrun", Src: engine, Engine: "forge://forge-dev",
 	}); err != nil {
 		t.Fatalf("generate: %v", err)
 	}

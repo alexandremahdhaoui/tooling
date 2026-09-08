@@ -11,12 +11,11 @@ set -eu
 # seen from the other side: an unignored artifact dirties every revision, so
 # the pipeline mints a new one every run and the loop never settles.
 #
-# --force is not optional, and it is the whole reason this gate has teeth.
-# forge-dev skips regeneration when the SourceChecksum it reads OUT OF THE
-# GENERATED FILE still matches its inputs, so a hand-edited body keeps a
-# matching header and the build walks straight past it. Without --force this
-# script passes on a file somebody edited by hand, which is the case it exists
-# to catch.
+# No flag is needed. A generator records what it wrote beside what it read,
+# each with a content digest, so a hand-edited generated file is stale by
+# the same rule as an edited source and the build regenerates it on its own.
+# The gate used to pass --force because forge-dev skipped on a checksum it
+# read OUT OF THE GENERATED FILE; that skip is gone with the flag.
 #
 # The comparison is before-and-after and never the whole tree. A gate that
 # failed on any dirty file would fail on the work in progress of whoever ran
@@ -27,7 +26,7 @@ trap 'rm -rf "$work"' EXIT
 
 git status --porcelain | sort >"$work/before"
 
-forge build --force >/dev/null
+forge build >/dev/null
 
 git status --porcelain | sort >"$work/after"
 
@@ -38,7 +37,7 @@ if [ -s "$work/written" ]; then
     cat "$work/written" >&2
     echo >&2
     echo "either the generated code does not match its source - run" >&2
-    echo "'forge build --force' and commit the result - or the build writes" >&2
+    echo "'forge build' and commit the result - or the build writes" >&2
     echo "output this repo does not gitignore." >&2
     exit 1
 fi

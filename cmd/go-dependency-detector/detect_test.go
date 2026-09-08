@@ -23,7 +23,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
@@ -126,35 +127,6 @@ func TestFindGoMod(t *testing.T) {
 	}
 }
 
-// TestGetFileTimestamp tests timestamp retrieval.
-func TestGetFileTimestamp(t *testing.T) {
-	// Create a temporary file
-	tmpDir := t.TempDir()
-	testFile := filepath.Join(tmpDir, "test.go")
-
-	err := os.WriteFile(testFile, []byte("package main"), 0o644)
-	if err != nil {
-		t.Fatalf("Failed to write test file: %v", err)
-	}
-
-	timestamp, err := getFileTimestamp(testFile)
-	if err != nil {
-		t.Fatalf("Failed to get timestamp: %v", err)
-	}
-
-	// Verify timestamp format (RFC3339)
-	_, err = time.Parse(time.RFC3339, timestamp)
-	if err != nil {
-		t.Errorf("Invalid timestamp format %q: %v", timestamp, err)
-	}
-
-	// Verify timestamp is in UTC
-	if !strings.HasSuffix(timestamp, "Z") {
-		t.Errorf("Timestamp should be in UTC (ending with Z), got %q", timestamp)
-	}
-}
-
-// TestDetectDependencies_NoImports tests a function with no imports.
 func TestDetectDependencies_NoImports(t *testing.T) {
 	// Create a temporary project structure
 	tmpDir := t.TempDir()
@@ -203,11 +175,11 @@ func main() {
 	// Verify it's go.mod
 	if len(output.Dependencies) > 0 {
 		dep := output.Dependencies[0]
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file' for go.mod, got %q", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest for go.mod, got %q", dep.Digest)
 		}
-		if filepath.Base(dep.FilePath) != "go.mod" {
-			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.FilePath))
+		if filepath.Base(dep.Path) != "go.mod" {
+			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.Path))
 		}
 	}
 
@@ -219,7 +191,7 @@ func main() {
 // hasFile reports whether the dependencies carry a file with this base name.
 func hasFile(deps []mcptypes.Dependency, base string) bool {
 	for _, dep := range deps {
-		if dep.Type == "file" && filepath.Base(dep.FilePath) == base {
+		if filepath.Base(dep.Path) == base {
 			return true
 		}
 	}
@@ -281,11 +253,11 @@ func main() {
 	// Verify it's go.mod
 	if len(output.Dependencies) > 0 {
 		dep := output.Dependencies[0]
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file' for go.mod, got %q", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest for go.mod, got %q", dep.Digest)
 		}
-		if filepath.Base(dep.FilePath) != "go.mod" {
-			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.FilePath))
+		if filepath.Base(dep.Path) != "go.mod" {
+			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.Path))
 		}
 	}
 }
@@ -340,44 +312,54 @@ func main() {
 		t.Fatalf("DetectDependencies failed: %v", err)
 	}
 
-	// Should have 3 dependencies: go.mod + 2 external packages
-	if len(output.Dependencies) != 4 {
-		t.Errorf("Expected 4 dependencies (go.mod + main.go + 2 external), got %d",
-			len(output.Dependencies))
+	// go.mod and main.go, and nothing for the two external packages: their
+	// versions are lines in go.sum, recorded beside go.mod when it exists,
+	// and a module is never a record of its own.
+	if len(output.Dependencies) != 2 {
+		t.Errorf("Expected 2 dependencies (go.mod + main.go), got %d: %+v", len(output.Dependencies), output.Dependencies)
 	}
 
-	// First dependency should be go.mod
-	if len(output.Dependencies) > 0 {
-		dep := output.Dependencies[0]
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file' for go.mod, got %q", dep.Type)
-		}
-		if filepath.Base(dep.FilePath) != "go.mod" {
-			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.FilePath))
-		}
+	if len(output.Dependencies) > 0 && filepath.Base(output.Dependencies[0].Path) != "go.mod" {
+		t.Errorf("Expected go.mod first, got %s", filepath.Base(output.Dependencies[0].Path))
 	}
 
-	// Verify external package dependencies. The file entries are go.mod and
-	// the entry file, so external ones are selected by type rather than by
-	// position.
 	for _, dep := range output.Dependencies {
-		if dep.Type != "externalPackage" {
-			continue
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest for %s, got %q", dep.Path, dep.Digest)
 		}
+	}
+}
 
-		if dep.ExternalPackage == "github.com/stretchr/testify/assert" {
-			// This is a subpackage, should match parent version
-			if dep.Semver != "v1.8.4" {
-				t.Errorf("Expected version v1.8.4 for testify, got %s", dep.Semver)
-			}
-		} else if dep.ExternalPackage == "golang.org/x/mod/modfile" {
-			// This is a subpackage, should match parent version
-			if dep.Semver != "v0.30.0" {
-				t.Errorf("Expected version v0.30.0 for x/mod, got %s", dep.Semver)
-			}
-		} else {
-			t.Errorf("Unexpected package: %s", dep.ExternalPackage)
-		}
+// A lock file beside the manifest is recorded with it: that is where an
+// external module's version lives, so a bump is a changed digest here.
+func TestDetectDependencies_TheLockIsRecordedBesideTheManifest(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.mod"), []byte("module example.com/test\n\ngo 1.23\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(tmpDir, "go.sum"), []byte("example.com/dep v1.0.0 h1:abc=\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mainFile := filepath.Join(tmpDir, "main.go")
+	if err := os.WriteFile(mainFile, []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := DetectDependencies(mcptypes.DetectDependenciesInput{FilePath: mainFile, FuncName: "main"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var names []string
+	for _, dep := range output.Dependencies {
+		names = append(names, filepath.Base(dep.Path))
+	}
+
+	if strings.Join(names, ",") != "go.mod,go.sum,main.go" {
+		t.Fatalf("expected go.mod,go.sum,main.go, got %v", names)
 	}
 }
 
@@ -452,11 +434,11 @@ func main() {
 	// First dependency should be go.mod
 	if len(output.Dependencies) > 0 {
 		dep := output.Dependencies[0]
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file' for go.mod, got %q", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest for go.mod, got %q", dep.Digest)
 		}
-		if filepath.Base(dep.FilePath) != "go.mod" {
-			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.FilePath))
+		if filepath.Base(dep.Path) != "go.mod" {
+			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.Path))
 		}
 	}
 
@@ -467,16 +449,12 @@ func main() {
 	}
 
 	for _, dep := range output.Dependencies {
-		if dep.Type != "file" {
-			continue
+		if !filepath.IsAbs(dep.Path) {
+			t.Errorf("Expected absolute path, got %q", dep.Path)
 		}
 
-		if !filepath.IsAbs(dep.FilePath) {
-			t.Errorf("Expected absolute path, got %q", dep.FilePath)
-		}
-
-		if _, err := time.Parse(time.RFC3339, dep.Timestamp); err != nil {
-			t.Errorf("Invalid timestamp format for %s: %v", dep.FilePath, err)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest for %s, got %q", dep.Path, dep.Digest)
 		}
 	}
 }
@@ -571,11 +549,11 @@ func main() {
 	// First dependency should be go.mod
 	if len(output.Dependencies) > 0 {
 		dep := output.Dependencies[0]
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file' for go.mod, got %q", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest for go.mod, got %q", dep.Digest)
 		}
-		if filepath.Base(dep.FilePath) != "go.mod" {
-			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.FilePath))
+		if filepath.Base(dep.Path) != "go.mod" {
+			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.Path))
 		}
 	}
 
@@ -584,10 +562,10 @@ func main() {
 	foundC := false
 	for i := 1; i < len(output.Dependencies); i++ {
 		dep := output.Dependencies[i]
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file', got %q", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest, got %q", dep.Digest)
 		}
-		baseName := filepath.Base(dep.FilePath)
+		baseName := filepath.Base(dep.Path)
 		if baseName == "b.go" {
 			foundB = true
 		} else if baseName == "c.go" {
@@ -680,18 +658,18 @@ func B() string {
 		t.Errorf("Expected 3 dependencies (go.mod + main.go + circular handled), got %d",
 			len(output.Dependencies))
 		for i, dep := range output.Dependencies {
-			t.Logf("Dependency %d: %s", i, filepath.Base(dep.FilePath))
+			t.Logf("Dependency %d: %s", i, filepath.Base(dep.Path))
 		}
 	}
 
 	// First dependency should be go.mod
 	if len(output.Dependencies) > 0 {
 		dep := output.Dependencies[0]
-		if dep.Type != "file" {
-			t.Errorf("Expected type 'file' for go.mod, got %q", dep.Type)
+		if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+			t.Errorf("Expected a content digest for go.mod, got %q", dep.Digest)
 		}
-		if filepath.Base(dep.FilePath) != "go.mod" {
-			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.FilePath))
+		if filepath.Base(dep.Path) != "go.mod" {
+			t.Errorf("Expected go.mod, got %s", filepath.Base(dep.Path))
 		}
 	}
 
@@ -703,10 +681,10 @@ func B() string {
 	// Verify no duplicates
 	seen := make(map[string]bool)
 	for _, dep := range output.Dependencies {
-		if seen[dep.FilePath] {
-			t.Errorf("Duplicate dependency: %s", dep.FilePath)
+		if seen[dep.Path] {
+			t.Errorf("Duplicate dependency: %s", dep.Path)
 		}
-		seen[dep.FilePath] = true
+		seen[dep.Path] = true
 	}
 }
 

@@ -201,32 +201,42 @@ func NewCLIHandlers() CLIHandlers {
 	}
 }
 
-func TestTheCLIKindSkipsRegenerationOnAMatchingChecksum(t *testing.T) {
+// Regeneration is byte-deterministic: a second generate over the same
+// inputs writes the same bytes and reports the same checksum. Whether it
+// runs at all is forge's digest rule, not a skip the generator reads out
+// of its own output.
+func TestTheCLIKindRegeneratesToTheSameBytes(t *testing.T) {
 	dir := t.TempDir()
 	writeKindFixture(t, dir, cliFixtureYaml())
 
 	input := mcptypes.BuildInput{Name: "fixture-cli", Src: dir, Engine: "forge://forge-dev"}
 
-	if _, err := generate(context.Background(), input); err != nil {
-		t.Fatal(err)
-	}
-
-	before, err := os.Stat(filepath.Join(dir, GeneratedCLIFile))
+	first, err := generate(context.Background(), input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := generate(context.Background(), input); err != nil {
-		t.Fatal(err)
-	}
-
-	after, err := os.Stat(filepath.Join(dir, GeneratedCLIFile))
+	before, err := os.ReadFile(filepath.Join(dir, GeneratedCLIFile))
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if !after.ModTime().Equal(before.ModTime()) {
-		t.Error("matching checksums must skip regeneration")
+	second, err := generate(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	after, err := os.ReadFile(filepath.Join(dir, GeneratedCLIFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if string(after) != string(before) {
+		t.Error("regenerating over unchanged inputs must write the same bytes")
+	}
+
+	if first.Version != second.Version {
+		t.Errorf("checksums differ: %q vs %q", first.Version, second.Version)
 	}
 }
 

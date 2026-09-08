@@ -24,6 +24,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/alexandremahdhaoui/forge/pkg/mcptypes"
 )
 
@@ -76,10 +77,14 @@ message TestMessage {
 		t.Fatalf("FromMap() failed: %v", err)
 	}
 
-	artifact, err := Build(context.Background(), input, spec)
+	artifacts, err := Build(context.Background(), input, spec)
 	if err != nil {
 		t.Fatalf("Build() failed: %v", err)
 	}
+	if len(artifacts) != 1 {
+		t.Fatalf("Build() answered %d artifacts, want 1", len(artifacts))
+	}
+	artifact := artifacts[0]
 
 	// Verify artifact has correct name
 	if artifact.Name != "test-protobuf" {
@@ -103,14 +108,11 @@ message TestMessage {
 		// Check that the proto file is in dependencies
 		foundProtoFile := false
 		for _, dep := range artifact.Dependencies {
-			if dep.Type != "file" {
-				t.Errorf("dependency.Type = %q, want %q", dep.Type, "file")
-			}
-			if strings.HasSuffix(dep.FilePath, "test.proto") {
+			if strings.HasSuffix(dep.Path, "test.proto") {
 				foundProtoFile = true
 			}
-			if dep.Timestamp == "" {
-				t.Error("dependency.Timestamp is empty")
+			if !strings.HasPrefix(dep.Digest, forge.DigestPrefix) {
+				t.Errorf("dependency.Digest = %q, want a content digest", dep.Digest)
 			}
 		}
 		if !foundProtoFile {
@@ -194,10 +196,14 @@ service TestService {
 		t.Fatalf("FromMap() failed: %v", err)
 	}
 
-	artifact, err := Build(context.Background(), input, spec)
+	artifacts, err := Build(context.Background(), input, spec)
 	if err != nil {
 		t.Fatalf("Build() failed: %v", err)
 	}
+	if len(artifacts) != 1 {
+		t.Fatalf("Build() answered %d artifacts, want 1", len(artifacts))
+	}
+	artifact := artifacts[0]
 
 	// Verify artifact
 	if artifact.Name != "test-grpc" {
@@ -278,10 +284,14 @@ message Message2 {
 		t.Fatalf("FromMap() failed: %v", err)
 	}
 
-	artifact, err := Build(context.Background(), input, spec)
+	artifacts, err := Build(context.Background(), input, spec)
 	if err != nil {
 		t.Fatalf("Build() failed: %v", err)
 	}
+	if len(artifacts) != 1 {
+		t.Fatalf("Build() answered %d artifacts, want 1", len(artifacts))
+	}
+	artifact := artifacts[0]
 
 	// Verify both proto files are in dependencies
 	if len(artifact.Dependencies) != 2 {
