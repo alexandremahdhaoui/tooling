@@ -24,3 +24,40 @@ components:
         imagePullSecretName:
           type: string
           description: Name of the image pull secret to create
+        images:
+          type: array
+          description: >-
+            Images to push into the registry once it is up. A local:// name is
+            an image the build stage produced on this machine; anything else
+            is pulled from its registry, with basicAuth when it is private.
+          items:
+            $ref: '#/components/schemas/ImageSource'
+    ImageSource:
+      type: object
+      description: One image to push into the registry.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: Image reference, local://name:tag or registry/path:tag
+        basicAuth:
+          $ref: '#/components/schemas/BasicAuth'
+    BasicAuth:
+      type: object
+      description: Credentials for pulling a private image.
+      required: [username, password]
+      properties:
+        username:
+          $ref: '#/components/schemas/ValueFrom'
+        password:
+          $ref: '#/components/schemas/ValueFrom'
+    ValueFrom:
+      type: object
+      description: Where a credential value comes from, exactly one of the two.
+      properties:
+        envName:
+          type: string
+          description: Read the value from this environment variable
+        literal:
+          type: string
+          description: The value itself

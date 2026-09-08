@@ -33,7 +33,6 @@ import (
 
 	"github.com/alexandremahdhaoui/forge/pkg/engineframework"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 // ----------------------------------------------------- ENVS ------------------------------------------------------- //
@@ -87,42 +86,17 @@ func Create(ctx context.Context, input engineframework.CreateInput, spec *Spec) 
 	os.Stdout = os.Stderr
 	defer func() { os.Stdout = oldStdout }()
 
-	// Read forge.yaml configuration
-	config, err := forge.ReadSpec()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read forge spec: %w", err)
-	}
+	// The stage's spec is the whole configuration; the paths join it below.
+	config := configFrom(spec)
 
-	// Parse images configuration
+	// The images come off the same spec; the shape was checked by FromMap,
+	// the meaning (a local:// name, exactly one credential source) here.
 	var images []ImageSource
-	if input.Spec != nil {
-		var err error
-		images, err = parseImagesFromSpec(input.Spec)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse images: %w", err)
+	if spec != nil {
+		if err := ValidateImages(spec.Images); err != nil {
+			return nil, fmt.Errorf("invalid images configuration: %w", err)
 		}
-	}
-
-	// Override config with spec values if provided
-	if input.Spec != nil {
-		if enabled, ok := input.Spec["enabled"].(bool); ok {
-			config.LocalContainerRegistry.Enabled = enabled
-		}
-		if namespace, ok := input.Spec["namespace"].(string); ok {
-			config.LocalContainerRegistry.Namespace = namespace
-		}
-		if imagePullSecretNamespaces, ok := input.Spec["imagePullSecretNamespaces"].([]interface{}); ok {
-			namespaces := make([]string, 0, len(imagePullSecretNamespaces))
-			for _, ns := range imagePullSecretNamespaces {
-				if nsStr, ok := ns.(string); ok {
-					namespaces = append(namespaces, nsStr)
-				}
-			}
-			config.LocalContainerRegistry.ImagePullSecretNamespaces = namespaces
-		}
-		if imagePullSecretName, ok := input.Spec["imagePullSecretName"].(string); ok {
-			config.LocalContainerRegistry.ImagePullSecretName = imagePullSecretName
-		}
+		images = spec.Images
 	}
 
 	// Check if local container registry is enabled
@@ -194,7 +168,7 @@ func Create(ctx context.Context, input engineframework.CreateInput, spec *Spec) 
 	config.LocalContainerRegistry.CredentialPath = credentialPath
 
 	// Call the existing setup logic with the overridden config and dynamic port
-	if err = setupWithConfig(&config, dynamicPort); err != nil {
+	if err := setupWithConfig(config, dynamicPort); err != nil {
 		return nil, fmt.Errorf("failed to setup local container registry: %w", err)
 	}
 
@@ -334,7 +308,7 @@ func Create(ctx context.Context, input engineframework.CreateInput, spec *Spec) 
 }
 
 // Delete implements the DeleteFunc for deleting a local container registry.
-func Delete(ctx context.Context, input engineframework.DeleteInput, _ *Spec) error {
+func Delete(ctx context.Context, input engineframework.DeleteInput, spec *Spec) error {
 	log.Printf("Deleting local container registry: testID=%s", input.TestID)
 
 	// Check if registry was enabled
@@ -352,12 +326,7 @@ func Delete(ctx context.Context, input engineframework.DeleteInput, _ *Spec) err
 	}
 	portForwardersMu.Unlock()
 
-	// Read forge.yaml configuration
-	config, err := forge.ReadSpec()
-	if err != nil {
-		log.Printf("Warning: failed to read forge spec: %v", err)
-		return nil // Best-effort cleanup
-	}
+	config := configFrom(spec)
 
 	// Check if local container registry is enabled
 	if !config.LocalContainerRegistry.Enabled {
@@ -372,7 +341,7 @@ func Delete(ctx context.Context, input engineframework.DeleteInput, _ *Spec) err
 	}
 
 	// Call the existing teardown logic (best-effort)
-	if err := teardown(); err != nil {
+	if err := teardownWithConfig(config); err != nil {
 		// Log error but don't fail - best effort cleanup
 		log.Printf("Warning: failed to teardown local container registry: %v", err)
 	}
@@ -394,24 +363,10 @@ func Delete(ctx context.Context, input engineframework.DeleteInput, _ *Spec) err
 
 var errSettingLocalContainerRegistry = errors.New("error received while setting up " + Name)
 
-// setupWithConfig executes the setup logic with an optional pre-loaded config.
-// If cfg is nil, it reads the config from forge.yaml.
-// If dynamicPort > 0, it is used as the port for the container registry (NodePort, service port, etc.).
-func setupWithConfig(cfg *forge.Spec, dynamicPort int32) error {
+// setupWithConfig stands the registry up as this run's configuration says.
+func setupWithConfig(config runConfig, dynamicPort int32) error {
 	_, _ = fmt.Fprintln(os.Stdout, "Setting up "+Name)
 	ctx := context.Background()
-
-	// I. Read config
-	var config forge.Spec
-	var err error
-	if cfg != nil {
-		config = *cfg
-	} else {
-		config, err = forge.ReadSpec()
-		if err != nil {
-			return flaterrors.Join(err, errSettingLocalContainerRegistry)
-		}
-	}
 
 	if !config.LocalContainerRegistry.Enabled {
 		_, _ = fmt.Fprintln(os.Stdout, Name+" is disabled")
@@ -524,18 +479,13 @@ func setupWithConfig(cfg *forge.Spec, dynamicPort int32) error {
 
 var errTearingDownLocalContainerRegistry = errors.New("error received while tearing down " + Name)
 
-// teardown executes the main logic of the `local-container-registry teardown` command.
-// It reads the project configuration, creates a Kubernetes client, and tears down the local container registry.
-func teardown() error {
+// teardownWithConfig tears the registry down as this run's configuration
+// says: the kubeconfig came from the cluster engine's metadata, the
+// namespace from the stage's spec.
+func teardownWithConfig(config runConfig) error {
 	_, _ = fmt.Fprintln(os.Stdout, "Tearing down "+Name)
 
 	ctx := context.Background()
-
-	// I. Read project config
-	config, err := forge.ReadSpec()
-	if err != nil {
-		return flaterrors.Join(err, errTearingDownLocalContainerRegistry)
-	}
 
 	envs, err := readEnvs()
 	if err != nil {
@@ -606,7 +556,7 @@ func teardown() error {
 var errCreatingKubernetesClient = errors.New("creating kubernetes client")
 
 // createKubeClient creates a new Kubernetes client from the kubeconfig file specified in the project configuration.
-func createKubeClient(config forge.Spec) (client.Client, error) { //nolint:ireturn
+func createKubeClient(config runConfig) (client.Client, error) { //nolint:ireturn
 	b, err := os.ReadFile(config.Kindenv.KubeconfigPath)
 	if err != nil {
 		return nil, flaterrors.Join(err, errCreatingKubernetesClient)

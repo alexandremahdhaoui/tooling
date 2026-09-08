@@ -16,6 +16,7 @@ package forge
 
 import (
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
@@ -40,11 +41,6 @@ type Spec struct {
 	// Path to the artifact store. The artifact store is a yaml data structures that
 	// tracks the name, timestamp etc of all built artifacts
 	ArtifactStorePath string `json:"artifactStorePath"`
-
-	// Kindenv holds the configuration for the kindenv tool.
-	Kindenv Kindenv `json:"kindenv"`
-	// LocalContainerRegistry holds the configuration for the local-container-registry tool.
-	LocalContainerRegistry LocalContainerRegistry `json:"localContainerRegistry"`
 
 	// Build holds the build configuration
 	Build Build `json:"build"`
@@ -191,6 +187,15 @@ func ReadSpecFromPath(path string) (Spec, error) {
 		return Spec{}, errors.New("generateOpenAPI configuration is no longer supported. Please migrate to build section. See docs/migration-go-gen-openapi.md for migration instructions")
 	}
 
+	// Two engines once had first-class keys at the top of forge.yaml while
+	// every other engine is configured under the entry that names it. The
+	// keys are gone; the same settings live on the testenv entry's spec.
+	for _, retired := range []string{"kindenv", "localContainerRegistry"} {
+		if _, has := rawSpec[retired]; has {
+			return Spec{}, fmt.Errorf("%s: is not a forge.yaml key; configure the engine under the testenv entry that names it (engines[].testenv[].spec)", retired)
+		}
+	}
+
 	out := Spec{} //nolint:exhaustruct // unmarshal
 
 	if err := yaml.Unmarshal(b, &out); err != nil {
@@ -202,11 +207,6 @@ func ReadSpecFromPath(path string) (Spec, error) {
 		if out.Test[i].Testenv == "" {
 			out.Test[i].Testenv = "forge://test-report"
 		}
-	}
-
-	// Apply defaults to LocalContainerRegistry
-	if out.LocalContainerRegistry.Namespace == "" {
-		out.LocalContainerRegistry.Namespace = "testenv-lcr"
 	}
 
 	// Apply default to EnvFile

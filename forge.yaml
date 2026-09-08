@@ -6,13 +6,6 @@ envFile: .envrc
 # -- artifactStorePath is the path to the unified artifact store (moved to root level)
 artifactStorePath: .forge/artifact-store.yaml
 
-# -- localContainerRegistry configuration (root level defaults)
-localContainerRegistry:
-  enabled: false  # Disabled by default, enabled via testenv spec
-  namespace: testenv-lcr
-  credentialPath: .forge/registry-credentials.yaml
-  caCrtPath: .forge/ca.crt
-
 # -- engines defines custom engine configurations with aliases
 #
 # Parallel Engines Documentation:
@@ -90,8 +83,9 @@ engines:
       #     #   KUBECONFIG:
       #     #     priority: 0           # Override priority for specific variable
 
-      - # -- localContainerRegistry will create if enabled a container registry in the kindenv using the kubeconfig which path
-        #    is defined by {.kindenv.kubeconfigPath}.
+      - # -- testenv-lcr creates, when enabled, a container registry in the
+        #    cluster the entry before it stood up, using the kubeconfig that
+        #    entry hands over. Everything it needs is on this spec.
         engine: "forge://testenv-lcr"
         spec:
           # -- enabled defines whether the local container registry must be created or not.

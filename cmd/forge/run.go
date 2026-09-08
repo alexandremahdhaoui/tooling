@@ -299,29 +299,29 @@ func delegate(verb string, rest []string) (error, bool) {
 // companion names the binary a verb belongs to.
 type companion struct{ name, module string }
 
-// delegation answers which companion owns a verb and the argv it gets. It is
-// separate from the exec so the argv rule can be stated in a test: "cache"
-// is forge-factory's own verb under forge's name, so it travels with the
-// rest - dropping it turns "forge cache clean" into a bare
-// "forge-factory clean", which is not a command.
-func delegation(verb string, rest []string) (companion, []string, bool) {
-	factory := companion{name: "forge-factory", module: toolresolver.ForgeFactoryModule}
+// delegations is the table of verbs another binary owns, as data: the verb,
+// the companion, and what is put before the rest of argv. "cache" is
+// forge-factory's own verb under forge's name, so it travels with the rest -
+// dropping it turns "forge cache clean" into a bare "forge-factory clean",
+// which is not a command.
+var delegations = []struct {
+	verb   string
+	to     companion
+	prefix []string
+}{
+	{verb: "factory", to: companion{name: "forge-factory", module: toolresolver.ForgeFactoryModule}},
+	{verb: "cache", to: companion{name: "forge-factory", module: toolresolver.ForgeFactoryModule}, prefix: []string{"cache"}},
+	{verb: "ci", to: companion{name: "forge-ci", module: "github.com/alexandremahdhaoui/forge-ci/cmd/forge-ci"}},
+	{verb: "register", to: companion{name: "forge-register", module: "github.com/alexandremahdhaoui/forge-register/cmd/forge-register"}},
+}
 
-	switch verb {
-	case "factory":
-		return factory, rest, true
-	case "cache":
-		return factory, append([]string{"cache"}, rest...), true
-	case "ci":
-		return companion{
-			name:   "forge-ci",
-			module: "github.com/alexandremahdhaoui/forge-ci/cmd/forge-ci",
-		}, rest, true
-	case "register":
-		return companion{
-			name:   "forge-register",
-			module: "github.com/alexandremahdhaoui/forge-register/cmd/forge-register",
-		}, rest, true
+// delegation answers which companion owns a verb and the argv it gets. It is
+// separate from the exec so the argv rule can be stated in a test.
+func delegation(verb string, rest []string) (companion, []string, bool) {
+	for _, d := range delegations {
+		if d.verb == verb {
+			return d.to, append(append([]string{}, d.prefix...), rest...), true
+		}
 	}
 
 	return companion{}, nil, false

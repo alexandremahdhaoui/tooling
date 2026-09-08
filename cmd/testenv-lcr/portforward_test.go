@@ -18,8 +18,6 @@ package main
 
 import (
 	"testing"
-
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 func TestNewPortForwarder_AcceptsDynamicPort(t *testing.T) {
@@ -43,7 +41,7 @@ func TestNewPortForwarder_AcceptsDynamicPort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := forge.Spec{}
+			config := runConfig{}
 			namespace := "testenv-lcr"
 
 			pf := NewPortForwarder(config, namespace, tt.port)
@@ -84,7 +82,7 @@ func TestPortForwarder_LocalPort_ReturnsDynamicPort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := forge.Spec{}
+			config := runConfig{}
 			pf := NewPortForwarder(config, "testenv-lcr", tt.port)
 
 			got := pf.LocalPort()
@@ -120,7 +118,7 @@ func TestPortForwarder_LocalEndpoint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := forge.Spec{}
+			config := runConfig{}
 			pf := NewPortForwarder(config, "testenv-lcr", tt.port)
 
 			got := pf.LocalEndpoint()
@@ -132,7 +130,7 @@ func TestPortForwarder_LocalEndpoint(t *testing.T) {
 }
 
 func TestPortForwarder_GetPID_BeforeStart(t *testing.T) {
-	config := forge.Spec{}
+	config := runConfig{}
 	pf := NewPortForwarder(config, "testenv-lcr", 30123)
 
 	// Before Start() is called, GetPID should return 0
@@ -175,7 +173,7 @@ func TestPortForwarder_PortMapping(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config := forge.Spec{}
+			config := runConfig{}
 			pf := NewPortForwarder(config, "testenv-lcr", tt.port)
 
 			// The port forwarder uses the same port on both ends

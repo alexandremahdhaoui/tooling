@@ -19,12 +19,11 @@ import (
 	"os/exec"
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 // ----------------------------------------------------- TEARDOWN --------------------------------------------------- //
 
-func doTeardown(config forge.Spec, envs Envs) error {
+func doTeardown(config cluster, envs Envs) error {
 	cmdName := envs.KindBinary
 	args := []string{
 		"delete",
@@ -45,8 +44,8 @@ func doTeardown(config forge.Spec, envs Envs) error {
 
 	// Only remove kubeconfig file if path is set
 	// Path might be empty if cleanup is called without proper metadata
-	if config.Kindenv.KubeconfigPath != "" {
-		if err := os.Remove(config.Kindenv.KubeconfigPath); err != nil {
+	if config.KubeconfigPath != "" {
+		if err := os.Remove(config.KubeconfigPath); err != nil {
 			// Log warning but don't fail - file might already be deleted
 			// or cleanup might be called multiple times
 			if !os.IsNotExist(err) {

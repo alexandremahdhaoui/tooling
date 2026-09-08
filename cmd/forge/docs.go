@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexandremahdhaoui/forge/internal/forgepath"
 	"github.com/alexandremahdhaoui/forge/pkg/enginedocs"
 	"sigs.k8s.io/yaml"
 )
@@ -235,17 +236,16 @@ func fetchDocsStore() (*DocStore, error) {
 }
 
 // fetchEnginesStore fetches the engines registry from local file or HTTP.
-// When FORGE_RUN_LOCAL_ENABLED is set, it tries local first.
+// In run-local mode it reads the checkout's list.
 // Otherwise, it fetches from HTTP (the default for users outside the repo).
 func fetchEnginesStore() (*EnginesStore, error) {
 	var data []byte
 	var err error
 
-	// Check if we should use local mode
-	if os.Getenv("FORGE_RUN_LOCAL_ENABLED") == "true" {
+	if forgepath.RunLocal() {
 		data, err = os.ReadFile(localEnginesList)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read local engines list (FORGE_RUN_LOCAL_ENABLED=true): %w", err)
+			return nil, fmt.Errorf("failed to read local engines list in run-local mode: %w", err)
 		}
 	} else {
 		// Default: fetch from HTTP
@@ -313,11 +313,10 @@ type AggregationError struct {
 }
 
 // discoverEngineDocs finds all engine directories that have docs/list.yaml.
-// Returns (paths, nil, nil) when in local mode (FORGE_RUN_LOCAL_ENABLED=true).
+// Returns (paths, nil, nil) in run-local mode.
 // Returns (paths, enginesStore, nil) when in HTTP mode (default).
 func discoverEngineDocs() ([]string, *EnginesStore, error) {
-	// Check if local mode is enabled
-	if os.Getenv("FORGE_RUN_LOCAL_ENABLED") == "true" {
+	if forgepath.RunLocal() {
 		// LOCAL MODE: scan cmd/ directory (existing logic)
 		entries, err := os.ReadDir("cmd")
 		if err != nil {

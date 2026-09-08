@@ -161,8 +161,7 @@ func (r Resolver) Resolve(ref Ref) (Invocation, error) {
 
 	// The workspace wins: in local mode a go.work that carries the module
 	// runs the checkout, and a source dir with the command runs it in place.
-	if ref.Module != "" && os.Getenv("FORGE_RUN_LOCAL_ENABLED") == "true" &&
-		forgepath.IsWorkspaceModule(ref.Module) {
+	if ref.Module != "" && forgepath.RunLocal() && forgepath.IsWorkspaceModule(ref.Module) {
 		return Invocation{Path: "go", Args: []string{"run", ref.Module}, Source: SourceWorkspace}, nil
 	}
 

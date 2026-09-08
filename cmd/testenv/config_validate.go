@@ -312,13 +312,10 @@ func extractSubenginesFromSpec(spec map[string]interface{}) ([]forge.TestenvEngi
 	return subengines, nil
 }
 
-// getSubengineConfig determines the spec to pass to a subengine based on its engine URI.
-// The mapping is:
-//   - forge://testenv-kind        -> forgeSpec.Kindenv (converted to map)
-//   - forge://testenv-lcr         -> forgeSpec.LocalContainerRegistry (converted to map)
-//   - forge://testenv-helm-install -> subengine.spec (passed directly)
-//   - alias://...              -> resolved from forgeSpec.Engines[]
-//   - other engines            -> subengine.spec (passed directly)
+// getSubengineConfig answers the spec a subengine is validated against: the
+// spec on its own entry, for every engine alike. Two engines used to be
+// handed a top-level forge.yaml key instead, so `config validate` checked
+// data the engine never ran with while the entry's own spec went unchecked.
 func getSubengineConfig(engineURI string, subengineSpec map[string]interface{}, forgeSpec *forge.Spec) map[string]interface{} {
 	// If forgeSpec is nil, just return the subengine spec
 	if forgeSpec == nil {
@@ -326,14 +323,6 @@ func getSubengineConfig(engineURI string, subengineSpec map[string]interface{}, 
 	}
 
 	switch {
-	case engineURI == "forge://testenv-kind":
-		// Return kindenv config from forgeSpec
-		return structToMap(forgeSpec.Kindenv)
-
-	case engineURI == "forge://testenv-lcr":
-		// Return localContainerRegistry config from forgeSpec
-		return structToMap(forgeSpec.LocalContainerRegistry)
-
 	case engineURI == "forge://testenv-helm-install":
 		// Return subengine spec directly (contains helm charts config)
 		return subengineSpec
@@ -353,21 +342,6 @@ func getSubengineConfig(engineURI string, subengineSpec map[string]interface{}, 
 		// For other engines (forge://test-report, etc.), pass subengine spec directly
 		return subengineSpec
 	}
-}
-
-// structToMap converts a struct to map[string]interface{} via JSON marshal/unmarshal.
-func structToMap(v interface{}) map[string]interface{} {
-	data, err := json.Marshal(v)
-	if err != nil {
-		return nil
-	}
-
-	var result map[string]interface{}
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil
-	}
-
-	return result
 }
 
 // configValidateInputToParams converts ConfigValidateInput to map[string]any for MCP calls.

@@ -67,10 +67,10 @@ test:
 		forgeRoot = parent
 	}
 
-	// Set FORGE_RUN_LOCAL_ENABLED and FORGE_REPO_PATH so forgepath.FindForgeRepo() can locate it
+	// Set FORGE_RUN_LOCAL_ENABLED and FORGE_RUN_LOCAL_BASEDIR so forgepath.FindForgeRepo() can locate it
 	// even when we change to a different directory
 	t.Setenv("FORGE_RUN_LOCAL_ENABLED", "true")
-	t.Setenv("FORGE_REPO_PATH", forgeRoot)
+	t.Setenv("FORGE_RUN_LOCAL_BASEDIR", forgeRoot)
 
 	defer func() {
 		// Restore original working directory

@@ -36,26 +36,22 @@ CONTAINER_ENGINE=docker PREPEND_CMD=sudo go run ./cmd/local-container-registry
 
 ## Configuration
 
-The tool reads configuration from `forge.yaml`:
+The engine reads the `spec` of the testenv entry that names it:
 
 ```yaml
-localContainerRegistry:
-  enabled: true
-  credentialPath: .ignore.local-container-registry.yaml
-  caCrtPath: .ignore.ca.crt
-  namespace: local-container-registry
-  autoPushImages: true  # Automatically push images from artifact store on setup
-  imagePullSecretNamespaces:  # Automatically create image pull secrets in these namespaces
-    - default
-    - my-app
-  imagePullSecretName: local-container-registry-credentials  # Custom secret name (optional)
-
-build:
-  artifactStorePath: .ignore.artifact-store.yaml
-  specs:
-    - container:
-        name: container-build
-        file: ./containers/container-build/Containerfile
+engines:
+  - alias: setup-integration
+    type: testenv
+    testenv:
+      - engine: "forge://testenv-kind"
+      - engine: "forge://testenv-lcr"
+        spec:
+          enabled: true
+          namespace: local-container-registry
+          imagePullSecretNamespaces:  # Automatically create image pull secrets in these namespaces
+            - default
+            - my-app
+          imagePullSecretName: local-container-registry-credentials  # Custom secret name (optional)
 ```
 
 ### Environment Variables

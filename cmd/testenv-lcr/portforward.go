@@ -24,14 +24,13 @@ import (
 	"time"
 
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 var errPortForwarding = errors.New("port forwarding")
 
 // PortForwarder manages a port-forward connection to a Kubernetes service.
 type PortForwarder struct {
-	config    forge.Spec
+	config    runConfig
 	namespace string
 	port      int32 // dynamic port used on both ends (local and service)
 	cmd       *exec.Cmd
@@ -40,7 +39,7 @@ type PortForwarder struct {
 
 // NewPortForwarder creates a new port forwarder with the specified dynamic port.
 // The port is used on both the local side and the service side (e.g., 30123:30123).
-func NewPortForwarder(config forge.Spec, namespace string, port int32) *PortForwarder {
+func NewPortForwarder(config runConfig, namespace string, port int32) *PortForwarder {
 	return &PortForwarder{
 		config:    config,
 		namespace: namespace,

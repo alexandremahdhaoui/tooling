@@ -150,10 +150,10 @@ build:
 	// Run forge build test-api-v1 in temp directory
 	cmd := exec.Command(forgeExe, "build", "test-api-v1")
 	cmd.Dir = tmpDir
-	cmd.Env = append(os.Environ(), "FORGE_RUN_LOCAL_ENABLED=true", "FORGE_REPO_PATH="+forgeRepoRoot, "FORGE_DEBUG=1")
+	cmd.Env = append(os.Environ(), "FORGE_RUN_LOCAL_ENABLED=true", "FORGE_RUN_LOCAL_BASEDIR="+forgeRepoRoot, "FORGE_DEBUG=1")
 	t.Logf("Running: %s build test-api-v1", forgeExe)
 	t.Logf("In directory: %s", tmpDir)
-	t.Logf("FORGE_REPO_PATH=%s", forgeRepoRoot)
+	t.Logf("FORGE_RUN_LOCAL_BASEDIR=%s", forgeRepoRoot)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("forge build failed: %v\nOutput: %s", err, string(output))

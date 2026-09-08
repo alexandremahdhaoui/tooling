@@ -24,7 +24,7 @@ import (
 // It checks that exactly one of EnvName or Literal is set.
 // IMPORTANT: Empty string in Literal field is treated as NOT SET (validation-rules.txt requires non-empty).
 // fieldName is used for error context (e.g., "username", "password").
-func ValidateValueFrom(vf ValueFrom, fieldName string) error {
+func validateValueFrom(vf ValueFrom, fieldName string) error {
 	hasEnv := vf.EnvName != ""
 	hasLit := vf.Literal != "" // Empty string means NOT set (per validation-rules.txt line 50)
 
@@ -40,18 +40,18 @@ func ValidateValueFrom(vf ValueFrom, fieldName string) error {
 
 // ValidateBasicAuth validates a BasicAuth struct.
 // It validates both Username and Password ValueFrom fields.
-func ValidateBasicAuth(auth BasicAuth) error {
-	if err := ValidateValueFrom(auth.Username, "username"); err != nil {
+func validateBasicAuth(auth BasicAuth) error {
+	if err := validateValueFrom(auth.Username, "username"); err != nil {
 		return err
 	}
-	if err := ValidateValueFrom(auth.Password, "password"); err != nil {
+	if err := validateValueFrom(auth.Password, "password"); err != nil {
 		return err
 	}
 	return nil
 }
 
 // ValidateImageSource validates an ImageSource struct.
-func ValidateImageSource(img ImageSource) error {
+func validateImageSource(img ImageSource) error {
 	// 1. Name must not be empty
 	if img.Name == "" {
 		return fmt.Errorf("name must not be empty")
@@ -78,8 +78,8 @@ func ValidateImageSource(img ImageSource) error {
 	}
 
 	// 4. Validate BasicAuth if present
-	if img.BasicAuth != nil {
-		if err := ValidateBasicAuth(*img.BasicAuth); err != nil {
+	if hasBasicAuth(img) {
+		if err := validateBasicAuth(img.BasicAuth); err != nil {
 			return fmt.Errorf("basicAuth: %w", err)
 		}
 	}
@@ -100,7 +100,7 @@ func ValidateImages(images []ImageSource) error {
 		seen[img.Name] = true
 
 		// Validate each ImageSource
-		if err := ValidateImageSource(img); err != nil {
+		if err := validateImageSource(img); err != nil {
 			return fmt.Errorf("images[%d]: %w", i, err)
 		}
 	}

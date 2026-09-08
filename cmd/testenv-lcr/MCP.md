@@ -244,19 +244,27 @@ Called by testenv MCP server during test environment creation/deletion.
 
 ## Configuration
 
-Reads configuration from the root-level `localContainerRegistry` section in `forge.yaml`:
+Reads its configuration from the `spec` of the testenv entry that names it, and
+nothing from the top of `forge.yaml`:
 
 ```yaml
-localContainerRegistry:
-  enabled: true                                     # Required: enable/disable the registry
-  namespace: testenv-lcr                            # Optional: defaults to "testenv-lcr"
-  credentialPath: .forge/registry-credentials.yaml  # Optional: overridden by tmpDir
-  caCrtPath: .forge/ca.crt                          # Optional: overridden by tmpDir
-  imagePullSecretNamespaces:                        # Optional: list of namespaces for image pull secrets
-    - default
-    - my-app
-  imagePullSecretName: local-container-registry-credentials  # Optional: defaults to this value
+engines:
+  - alias: setup-integration
+    type: testenv
+    testenv:
+      - engine: "forge://testenv-kind"
+      - engine: "forge://testenv-lcr"
+        spec:
+          enabled: true                       # Required: enable/disable the registry
+          namespace: testenv-lcr              # Optional: defaults to "testenv-lcr"
+          imagePullSecretNamespaces:          # Optional: namespaces for image pull secrets
+            - default
+            - my-app
+          imagePullSecretName: local-container-registry-credentials  # Optional
 ```
+
+The CA certificate and the registry credentials are written under the run's
+tmpDir; the kubeconfig comes from the cluster engine before it.
 
 **Configuration Fields:**
 

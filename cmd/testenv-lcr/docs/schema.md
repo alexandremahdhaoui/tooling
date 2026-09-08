@@ -24,6 +24,12 @@
 - **Required:** No
 - **Description:** List of namespaces to create image pull secrets in
 
+### `images`
+
+- **Type:** `array of `
+- **Required:** No
+- **Description:** Images to push into the registry once it is up. A local:// name is an image the build stage produced on this machine; anything else is pulled from its registry, with basicAuth when it is private.
+
 ### `namespace`
 
 - **Type:** `string`

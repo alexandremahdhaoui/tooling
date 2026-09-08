@@ -37,8 +37,6 @@ The `forge.yaml` file defines:
 ```yaml
 name: string                              # Project name
 artifactStorePath: string                 # Artifact store path
-kindenv: Kindenv                          # Kind cluster configuration (optional)
-localContainerRegistry: LocalContainerRegistry  # Local container registry configuration (optional)
 engines: []EngineConfig                   # Engine configurations (optional)
 build: []BuildSpec                        # Build configuration
 test: []TestSpec                          # Test stages configuration
@@ -84,28 +82,12 @@ compiling. There is no flag: the repo declares it once.
 frozen: false   # a scratch repo whose go.sum is allowed to lag
 ```
 
-#### `localContainerRegistry` (LocalContainerRegistry, optional)
+#### Engines have no top-level keys
 
-Configuration for the local container registry used by `forge://testenv-lcr` engine in test environments. This registry provides TLS-enabled container image storage for integration and end-to-end tests.
-
-**Fields:**
-
-- `enabled` (boolean, optional, default: `false`) - Whether the local container registry is enabled
-- `namespace` (string, optional, default: `"testenv-lcr"`) - Kubernetes namespace where the registry will be deployed
-- `credentialPath` (string, optional) - Path to store registry credentials (overridden by tmpDir in test environments)
-- `caCrtPath` (string, optional) - Path to store CA certificate (overridden by tmpDir in test environments)
-- `autoPushImages` (boolean, optional, default: `false`) - Automatically push images from artifact store on setup
-- `imagePullSecretNamespaces` ([]string, optional) - List of namespaces where image pull secrets should be created
-- `imagePullSecretName` (string, optional, default: `"local-container-registry-credentials"`) - Name of the image pull secret
-
-**Example:**
-```yaml
-localContainerRegistry:
-  enabled: false  # Typically enabled via testenv spec, not root config
-  namespace: testenv-lcr  # Default namespace for registry deployment
-  credentialPath: .forge/registry-credentials.yaml
-  caCrtPath: .forge/ca.crt
-```
+Every engine is configured under the entry that names it. `forge://testenv-lcr`
+and `forge://testenv-kind` once had first-class keys at the top of the file
+(`localContainerRegistry`, `kindenv`); both are refused by name now, and the
+same settings live on the testenv entry's `spec`.
 
 **Usage in Test Environments:**
 

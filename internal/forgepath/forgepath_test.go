@@ -122,30 +122,29 @@ go 1.24
 	}
 }
 
-// TestFindForgeRepo_FromEnvironment tests finding forge repo via environment variable
-func TestFindForgeRepo_FromEnvironment(t *testing.T) {
-	// NOTE: Cannot use t.Parallel() with t.Setenv()
+// LocalCheckout is the one owner of run-local: off, it refuses; on with a
+// basedir, it answers that basedir and nothing else is consulted.
+func TestLocalCheckoutIsTheOneOwnerOfRunLocal(t *testing.T) {
+	t.Setenv("FORGE_RUN_LOCAL_ENABLED", "")
+	t.Setenv("FORGE_RUN_LOCAL_BASEDIR", "/nowhere")
 
-	// Create a temp forge repo
-	tmpDir := t.TempDir()
-	setupFakeForgeRepo(t, tmpDir)
-
-	// Set environment variable
-	t.Setenv("FORGE_REPO_PATH", tmpDir)
-
-	// Note: We can't easily reset the cache in tests, but this test should still work
-	// because the environment variable is checked first before using the cache
-	repoPath, err := findForgeRepoUncached()
-	if err != nil {
-		t.Fatalf("FindForgeRepo() error = %v, want nil", err)
+	if RunLocal() {
+		t.Fatal("run-local must be off until FORGE_RUN_LOCAL_ENABLED=true")
 	}
 
-	// Compare absolute paths
-	wantPath, _ := filepath.Abs(tmpDir)
-	gotPath, _ := filepath.Abs(repoPath)
+	if _, err := LocalCheckout(); err == nil {
+		t.Fatal("asking for the checkout outside run-local mode must refuse")
+	}
 
-	if gotPath != wantPath {
-		t.Errorf("FindForgeRepo() = %s, want %s", gotPath, wantPath)
+	t.Setenv("FORGE_RUN_LOCAL_ENABLED", "true")
+
+	dir, err := LocalCheckout()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if dir != "/nowhere" {
+		t.Fatalf("the basedir names the checkout, got %q", dir)
 	}
 }
 
@@ -252,23 +251,6 @@ func TestFindForgeRepo_Caching(t *testing.T) {
 
 	if path1 != path2 {
 		t.Errorf("FindForgeRepo() cache inconsistency: first call = %s, second call = %s", path1, path2)
-	}
-}
-
-// TestFindForgeRepo_ErrorWhenInvalidEnvPath tests error when FORGE_REPO_PATH points to invalid directory
-func TestFindForgeRepo_ErrorWhenInvalidEnvPath(t *testing.T) {
-	// Don't use t.Parallel() since we're setting environment variable
-
-	// Create a temp directory that is NOT a forge repo
-	tmpDir := t.TempDir()
-
-	// Set environment variable to invalid path
-	t.Setenv("FORGE_REPO_PATH", tmpDir)
-
-	// Should return error since tmpDir is not a forge repo
-	_, err := findForgeRepoUncached()
-	if err == nil {
-		t.Error("findForgeRepoUncached() with invalid FORGE_REPO_PATH should return error, got nil")
 	}
 }
 

@@ -97,11 +97,9 @@ Called by testenv MCP server during test environment creation/deletion.
 
 ## Configuration
 
-Reads from `forge.yaml`:
-```yaml
-kindenv:
-  kubeconfigPath: .forge/kubeconfig  # Ignored in MCP mode, uses tmpDir
-```
+Reads the `spec` of the testenv entry that names it (see the schema); the
+kubeconfig is always written under the run's tmpDir and handed to the entries
+after it. There is no top-level `kindenv` key.
 
 ## Implementation Details
 

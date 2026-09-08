@@ -30,7 +30,6 @@ import (
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"sigs.k8s.io/yaml"
 )
 
@@ -271,7 +270,7 @@ func pushImage(containerEngine, sourceImage, registryFQDN string) error {
 // A port-forward should already be running from createLocalContainerRegistry, so this function does NOT start a new one.
 func withRegistryAccess(
 	ctx context.Context,
-	config forge.Spec,
+	config runConfig,
 	envs Envs,
 	dynamicPort int32,
 	fn func(registryFQDNWithPort string) error,

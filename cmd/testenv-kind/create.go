@@ -49,12 +49,8 @@ func Create(ctx context.Context, input engineframework.CreateInput, spec *Spec) 
 	clusterName := fmt.Sprintf("%s-%s", config.Name, input.TestID)
 	kubeconfigPath := filepath.Join(input.TmpDir, "kubeconfig")
 
-	// Update config with cluster-specific values
-	config.Name = clusterName
-	config.Kindenv.KubeconfigPath = kubeconfigPath
-
 	// Create the kind cluster
-	if err := doSetup(config, envs); err != nil {
+	if err := doSetup(cluster{Name: clusterName, KubeconfigPath: kubeconfigPath}, envs); err != nil {
 		return nil, fmt.Errorf("failed to create kind cluster: %w", err)
 	}
 
@@ -122,11 +118,8 @@ func Delete(ctx context.Context, input engineframework.DeleteInput, _ *Spec) err
 		clusterName = fmt.Sprintf("%s-%s", config.Name, input.TestID)
 		log.Printf("Reconstructing cluster name from testID: %s", clusterName)
 	}
-	config.Name = clusterName
-	config.Kindenv.KubeconfigPath = kubeconfigPath
-
 	// Delete the kind cluster - return error on failure to prevent silent leaks
-	if err := doTeardown(config, envs); err != nil {
+	if err := doTeardown(cluster{Name: clusterName, KubeconfigPath: kubeconfigPath}, envs); err != nil {
 		return fmt.Errorf("failed to delete kind cluster %s: %w", clusterName, err)
 	}
 

@@ -26,9 +26,41 @@ import (
 )
 
 const (
-	forgeModule     = "github.com/alexandremahdhaoui/forge"
-	forgeRepoEnvVar = "FORGE_REPO_PATH"
+	forgeModule = "github.com/alexandremahdhaoui/forge"
+
+	// The two inputs run-local mode reads, and the only two. LocalCheckout
+	// is their one reader.
+	runLocalEnabledEnv = "FORGE_RUN_LOCAL_ENABLED"
+	runLocalBaseDirEnv = "FORGE_RUN_LOCAL_BASEDIR"
 )
+
+// RunLocal reports whether engines run from a forge checkout rather than
+// from a released module. It is the one place the switch is read.
+func RunLocal() bool {
+	return os.Getenv(runLocalEnabledEnv) == "true"
+}
+
+// LocalCheckout answers the forge checkout engines run from in run-local
+// mode: the directory FORGE_RUN_LOCAL_BASEDIR names, or the checkout
+// FindForgeRepo finds when it names none. It is an error to ask outside
+// run-local mode, so a caller checks RunLocal first. This is the one owner
+// of the ladder; nothing else reads the two variables.
+func LocalCheckout() (string, error) {
+	if !RunLocal() {
+		return "", fmt.Errorf("engines run from released modules; set %s=true to run them from a checkout", runLocalEnabledEnv)
+	}
+
+	if dir := os.Getenv(runLocalBaseDirEnv); dir != "" {
+		return dir, nil
+	}
+
+	dir, err := FindForgeRepo()
+	if err != nil {
+		return "", fmt.Errorf("%s=true but no forge checkout found; set %s=/path/to/forge: %w", runLocalEnabledEnv, runLocalBaseDirEnv, err)
+	}
+
+	return dir, nil
+}
 
 var (
 	// Cache for forge repository path to avoid repeated filesystem/command operations
@@ -39,9 +71,8 @@ var (
 
 // FindForgeRepo locates the forge source repository using multiple detection methods.
 // It checks in the following order:
-// 1. FORGE_REPO_PATH environment variable
-// 2. Go module cache using `go list -m -f '{{.Dir}}' github.com/alexandremahdhaoui/forge`
-// 3. Walking up from os.Executable() to find forge repository
+// 1. Go module cache using `go list -m -f '{{.Dir}}' github.com/alexandremahdhaoui/forge`
+// 2. Walking up from os.Executable() to find forge repository
 //
 // Returns the absolute path to the forge repository or an error if not found.
 func FindForgeRepo() (string, error) {
@@ -53,19 +84,7 @@ func FindForgeRepo() (string, error) {
 
 // findForgeRepoUncached performs the actual forge repository detection without caching.
 func findForgeRepoUncached() (string, error) {
-	// Method 1: Check FORGE_REPO_PATH environment variable
-	if envPath := os.Getenv(forgeRepoEnvVar); envPath != "" {
-		absPath, err := filepath.Abs(envPath)
-		if err != nil {
-			return "", fmt.Errorf("failed to resolve FORGE_REPO_PATH: %w", err)
-		}
-		if IsForgeRepo(absPath) {
-			return absPath, nil
-		}
-		return "", fmt.Errorf("FORGE_REPO_PATH points to non-forge directory: %s", absPath)
-	}
-
-	// Method 2: Use `go list` to find the module in Go's module cache
+	// Method 1: Use `go list` to find the module in Go's module cache
 	cmd := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", forgeModule)
 	output, err := cmd.Output()
 	if err == nil {
@@ -75,7 +94,7 @@ func findForgeRepoUncached() (string, error) {
 		}
 	}
 
-	// Method 3: Walk up from os.Executable() to find forge repository
+	// Method 2: Walk up from os.Executable() to find forge repository
 	execPath, err := os.Executable()
 	if err != nil {
 		return "", fmt.Errorf("failed to get executable path: %w", err)
@@ -134,13 +153,11 @@ func IsForgeRepo(dir string) bool {
 // BuildGoRunCommand constructs the command arguments for executing a forge MCP server
 // via `go run`. The returned slice is suitable for use with exec.Command("go", args...).
 //
-// Environment Variables (checked in order of preference when FORGE_RUN_LOCAL_ENABLED=true):
-// - FORGE_RUN_LOCAL_ENABLED: Set to "true" to run from local source using ./cmd/{packageName}
-// - FORGE_RUN_LOCAL_BASEDIR: Base directory for forge repo when running locally
-// - FORGE_REPO_PATH: Legacy base directory variable (for backward compatibility)
+// Run-local mode (RunLocal, LocalCheckout) decides where the source comes
+// from; this function only shapes the argv.
 //
 // Behavior:
-//   - If FORGE_RUN_LOCAL_ENABLED=true:
+//   - If run-local mode is on:
 //     → Use `go run {basedir}/cmd/{packageName}` (absolute path preserves caller's CWD)
 //   - Otherwise:
 //     → Use `go run github.com/alexandremahdhaoui/forge/cmd/{packageName}@{forgeVersion}`
@@ -162,30 +179,10 @@ func BuildGoRunCommand(packageName, forgeVersion string) ([]string, error) {
 		return nil, fmt.Errorf("forge version cannot be empty")
 	}
 
-	// Check if local development mode should be used
-	// ONLY enabled when FORGE_RUN_LOCAL_ENABLED=true
-	localEnabled := os.Getenv("FORGE_RUN_LOCAL_ENABLED")
-	useLocalMode := localEnabled == "true"
-
-	if useLocalMode {
-		// Check for base directory in order of preference:
-		// 1. FORGE_RUN_LOCAL_BASEDIR (explicit override)
-		// 2. FORGE_REPO_PATH (legacy, used by tests)
-		// 3. FindForgeRepo() - searches current dir, module cache, executable path
-		baseDir := os.Getenv("FORGE_RUN_LOCAL_BASEDIR")
-		if baseDir == "" {
-			baseDir = os.Getenv("FORGE_REPO_PATH")
-		}
-		if baseDir == "" {
-			// Try to find forge repo automatically
-			foundRepo, err := FindForgeRepo()
-			if err == nil {
-				baseDir = foundRepo
-			}
-		}
-
-		if baseDir == "" {
-			return nil, fmt.Errorf("FORGE_RUN_LOCAL_ENABLED=true but cannot find forge repository. Set FORGE_RUN_LOCAL_BASEDIR=/path/to/forge or FORGE_REPO_PATH=/path/to/forge")
+	if RunLocal() {
+		baseDir, err := LocalCheckout()
+		if err != nil {
+			return nil, err
 		}
 
 		// When the CWD is inside a Go module or workspace, use an absolute
@@ -236,7 +233,7 @@ func IsExternalModule(path string) bool {
 	if path == "" {
 		return false
 	}
-	// Local paths are not external modules (handled by FORGE_RUN_LOCAL_ENABLED)
+	// Local paths are not external modules (handled by run-local mode)
 	if strings.HasPrefix(path, "./") || strings.HasPrefix(path, "../") {
 		return false
 	}
@@ -273,7 +270,7 @@ func cwdHasModuleContext() bool {
 }
 
 func EngineCommand(packageName, forgeVersion string) (string, []string, error) {
-	if os.Getenv("FORGE_RUN_LOCAL_ENABLED") == "true" {
+	if RunLocal() {
 		return buildLocalEngine(packageName)
 	}
 
@@ -324,16 +321,9 @@ func cwdOrDot() string {
 }
 
 func buildLocalEngine(packageName string) (string, []string, error) {
-	baseDir := os.Getenv("FORGE_RUN_LOCAL_BASEDIR")
-	if baseDir == "" {
-		baseDir = os.Getenv(forgeRepoEnvVar)
-	}
-	if baseDir == "" {
-		found, err := FindForgeRepo()
-		if err != nil {
-			return "", nil, fmt.Errorf("FORGE_RUN_LOCAL_ENABLED=true but no forge repository found: %w", err)
-		}
-		baseDir = found
+	baseDir, err := LocalCheckout()
+	if err != nil {
+		return "", nil, err
 	}
 
 	bin := filepath.Join(baseDir, "build", "local-engines", packageName)

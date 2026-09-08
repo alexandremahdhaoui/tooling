@@ -67,7 +67,7 @@ func TestValidateValueFrom(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateValueFrom(tt.vf, tt.fieldName)
+			err := validateValueFrom(tt.vf, tt.fieldName)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error containing %q, got nil", tt.errMsg)
@@ -136,7 +136,7 @@ func TestValidateBasicAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateBasicAuth(tt.auth)
+			err := validateBasicAuth(tt.auth)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error containing %q, got nil", tt.errMsg)
@@ -183,7 +183,7 @@ func TestValidateImageSource(t *testing.T) {
 			name: "valid local with auth",
 			img: ImageSource{
 				Name: "local://myapp:v1",
-				BasicAuth: &BasicAuth{
+				BasicAuth: BasicAuth{
 					Username: ValueFrom{Literal: "user"},
 					Password: ValueFrom{Literal: "pass"},
 				},
@@ -194,7 +194,7 @@ func TestValidateImageSource(t *testing.T) {
 			name: "valid remote with auth",
 			img: ImageSource{
 				Name: "quay.io/example:v1",
-				BasicAuth: &BasicAuth{
+				BasicAuth: BasicAuth{
 					Username: ValueFrom{EnvName: "USER"},
 					Password: ValueFrom{EnvName: "PASS"},
 				},
@@ -241,7 +241,7 @@ func TestValidateImageSource(t *testing.T) {
 			name: "invalid basicAuth - username both set",
 			img: ImageSource{
 				Name: "local://myapp:v1",
-				BasicAuth: &BasicAuth{
+				BasicAuth: BasicAuth{
 					Username: ValueFrom{EnvName: "USER", Literal: "user"},
 					Password: ValueFrom{Literal: "pass"},
 				},
@@ -253,7 +253,7 @@ func TestValidateImageSource(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateImageSource(tt.img)
+			err := validateImageSource(tt.img)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("expected error containing %q, got nil", tt.errMsg)

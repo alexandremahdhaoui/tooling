@@ -21,7 +21,6 @@ import (
 	"path/filepath"
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 	"github.com/caarlos0/env/v11"
 )
 
@@ -77,9 +76,17 @@ func generateKindConfig(tmpDir string) (string, error) {
 	return configPath, nil
 }
 
-func doSetup(pCfg forge.Spec, envs Envs) error {
+// cluster is the one kind cluster a create or delete acts on: its name and
+// where its kubeconfig lives. Both are decided per run, never read from
+// forge.yaml.
+type cluster struct {
+	Name           string
+	KubeconfigPath string
+}
+
+func doSetup(pCfg cluster, envs Envs) error {
 	// 0. Generate Kind config file with containerd patches for TLS trust.
-	tmpDir := filepath.Dir(pCfg.Kindenv.KubeconfigPath)
+	tmpDir := filepath.Dir(pCfg.KubeconfigPath)
 	kindConfigPath, err := generateKindConfig(tmpDir)
 	if err != nil {
 		return fmt.Errorf("failed to generate kind config: %w", err)
@@ -91,7 +98,7 @@ func doSetup(pCfg forge.Spec, envs Envs) error {
 		"create",
 		"cluster",
 		"--name", pCfg.Name,
-		"--kubeconfig", pCfg.Kindenv.KubeconfigPath,
+		"--kubeconfig", pCfg.KubeconfigPath,
 		"--config", kindConfigPath,
 		"--wait", "5m",
 	}
@@ -114,7 +121,7 @@ func doSetup(pCfg forge.Spec, envs Envs) error {
 			envs.KindBinaryPrefix,
 			"chown",
 			fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
-			pCfg.Kindenv.KubeconfigPath,
+			pCfg.KubeconfigPath,
 		)
 
 		if err := util.RunCmdWithStdPipes(chownCmd); err != nil {

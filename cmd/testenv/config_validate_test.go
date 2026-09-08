@@ -314,46 +314,18 @@ func TestExtractSubenginesFromForgeSpec_NilSpec(t *testing.T) {
 // Tests for getSubengineConfig
 // -----------------------------------------------------------------------------
 
-func TestGetSubengineConfig_KindEngine(t *testing.T) {
-	forgeSpec := &forge.Spec{
-		Kindenv: forge.Kindenv{
-			KubeconfigPath: "custom-kubeconfig.yaml",
-		},
-	}
+// Every engine is validated against the spec on its own entry. testenv-kind
+// and testenv-lcr used to be handed a top-level forge.yaml key instead, so
+// what was validated was never what the engine ran with.
+func TestGetSubengineConfig_EveryEngineGetsItsOwnEntrySpec(t *testing.T) {
+	forgeSpec := &forge.Spec{Name: "x"}
+	own := map[string]interface{}{"enabled": true, "namespace": "registry-ns"}
 
-	result := getSubengineConfig("forge://testenv-kind", nil, forgeSpec)
-
-	if result == nil {
-		t.Fatal("Expected non-nil result for kind engine")
-	}
-	if result["kubeconfigPath"] != "custom-kubeconfig.yaml" {
-		t.Errorf("Expected kubeconfigPath 'custom-kubeconfig.yaml', got %v", result["kubeconfigPath"])
-	}
-}
-
-func TestGetSubengineConfig_LCREngine(t *testing.T) {
-	forgeSpec := &forge.Spec{
-		LocalContainerRegistry: forge.LocalContainerRegistry{
-			Enabled:        true,
-			CredentialPath: "creds.yaml",
-			CaCrtPath:      "ca.crt",
-			Namespace:      "registry-ns",
-		},
-	}
-
-	result := getSubengineConfig("forge://testenv-lcr", nil, forgeSpec)
-
-	if result == nil {
-		t.Fatal("Expected non-nil result for lcr engine")
-	}
-	if result["enabled"] != true {
-		t.Errorf("Expected enabled=true, got %v", result["enabled"])
-	}
-	if result["namespace"] != "registry-ns" {
-		t.Errorf("Expected namespace 'registry-ns', got %v", result["namespace"])
-	}
-	if result["caCrtPath"] != "ca.crt" {
-		t.Errorf("Expected caCrtPath 'ca.crt', got %v", result["caCrtPath"])
+	for _, uri := range []string{"forge://testenv-kind", "forge://testenv-lcr", "forge://testenv-stub"} {
+		result := getSubengineConfig(uri, own, forgeSpec)
+		if result["enabled"] != true || result["namespace"] != "registry-ns" {
+			t.Errorf("%s: expected the entry's own spec, got %v", uri, result)
+		}
 	}
 }
 
@@ -675,70 +647,6 @@ func TestAggregateResults_EngineContextPreserved(t *testing.T) {
 
 	if output.Errors[0].Engine != "forge://nested-engine" {
 		t.Errorf("Expected engine 'forge://nested-engine' to be preserved, got %s", output.Errors[0].Engine)
-	}
-}
-
-// -----------------------------------------------------------------------------
-// Tests for structToMap
-// -----------------------------------------------------------------------------
-
-func TestStructToMap(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    interface{}
-		expected map[string]interface{}
-	}{
-		{
-			name: "Kindenv struct",
-			input: forge.Kindenv{
-				KubeconfigPath: "kubeconfig.yaml",
-			},
-			expected: map[string]interface{}{
-				"kubeconfigPath": "kubeconfig.yaml",
-			},
-		},
-		{
-			name: "LocalContainerRegistry struct",
-			input: forge.LocalContainerRegistry{
-				Enabled:        true,
-				CredentialPath: "creds.yaml",
-				CaCrtPath:      "ca.crt",
-				Namespace:      "registry",
-			},
-			expected: map[string]interface{}{
-				"enabled":        true,
-				"credentialPath": "creds.yaml",
-				"caCrtPath":      "ca.crt",
-				"namespace":      "registry",
-			},
-		},
-		{
-			name:     "Empty struct",
-			input:    forge.Kindenv{},
-			expected: map[string]interface{}{},
-		},
-		{
-			name:     "Nil input",
-			input:    nil,
-			expected: nil,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := structToMap(tt.input)
-			if tt.expected == nil {
-				if result != nil {
-					t.Errorf("Expected nil, got %+v", result)
-				}
-				return
-			}
-			for k, v := range tt.expected {
-				if result[k] != v {
-					t.Errorf("Key %q: expected %v, got %v", k, v, result[k])
-				}
-			}
-		})
 	}
 }
 

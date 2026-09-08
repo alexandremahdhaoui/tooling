@@ -23,7 +23,6 @@ import (
 
 	"github.com/alexandremahdhaoui/forge/internal/util"
 	"github.com/alexandremahdhaoui/forge/pkg/flaterrors"
-	"github.com/alexandremahdhaoui/forge/pkg/forge"
 )
 
 var errProcessingImages = errors.New("processing images")
@@ -41,7 +40,7 @@ func checkLocalImageExists(containerEngine, imageName string) error {
 // pullRemoteImage pulls a remote image, optionally authenticating first.
 func pullRemoteImage(containerEngine string, img ImageSource, parsed ParsedImage) error {
 	// Authenticate if basicAuth provided
-	if img.BasicAuth != nil {
+	if hasBasicAuth(img) {
 		username, err := ResolveValueFrom(img.BasicAuth.Username, "username")
 		if err != nil {
 			return fmt.Errorf("failed to resolve username: %w", err)
@@ -88,7 +87,7 @@ func pullRemoteImage(containerEngine string, img ImageSource, parsed ParsedImage
 
 // processImages handles all image processing: pre-flight validation, pull, tag, push.
 // The dynamicPort parameter is the port that was acquired by the port lease manager and used for the NodePort service.
-func processImages(ctx context.Context, images []ImageSource, config forge.Spec, envs Envs, dynamicPort int32) error {
+func processImages(ctx context.Context, images []ImageSource, config runConfig, envs Envs, dynamicPort int32) error {
 	if len(images) == 0 {
 		return nil // No images to process
 	}
@@ -105,7 +104,7 @@ func processImages(ctx context.Context, images []ImageSource, config forge.Spec,
 		}
 
 		// Resolve all env vars to fail fast
-		if img.BasicAuth != nil {
+		if hasBasicAuth(img) {
 			if _, err := ResolveValueFrom(img.BasicAuth.Username, "username"); err != nil {
 				return flaterrors.Join(fmt.Errorf("image %q: %w", img.Name, err), errProcessingImages)
 			}

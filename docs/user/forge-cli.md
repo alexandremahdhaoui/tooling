@@ -1072,7 +1072,6 @@ Forge respects several environment variables:
 |----------|-------------|---------|---------|
 | `FORGE_RUN_LOCAL_ENABLED` | Forced override: build engines from a forge checkout instead of resolving them | unset | `FORGE_RUN_LOCAL_ENABLED=true forge build` |
 | `FORGE_RUN_LOCAL_BASEDIR` | The forge checkout the override builds from | Auto-detected if in forge repo | `FORGE_RUN_LOCAL_BASEDIR=/path/to/forge forge build` |
-| `FORGE_REPO_PATH` | Legacy variable for forge repository location | None | `FORGE_REPO_PATH=/path/to/forge forge build` |
 
 **Workspace mode (no variable needed):**
 - When the `go.work` above the current directory lists `github.com/alexandremahdhaoui/forge`, engines run using `go run github.com/alexandremahdhaoui/forge/cmd/<tool>` with no version, from the caller's directory
